@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Carousel Studio
 
-## Getting Started
+Micro-SaaS para geração de carrosséis virais para Instagram com IA.
 
-First, run the development server:
+**Stack:** Next.js 14 · TypeScript · Tailwind · shadcn/ui · Claude AI · Gemini Image · Meta Graph API
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## O que é
+
+Plataforma que transforma tendências em carrosséis prontos para publicar no Instagram em 1 clique — com o DNA, tom e estilo do expert configurado.
+
+**Fluxo completo:**
+```
+Trend discovery (EXA)
+  → Análise viral (score, hook sugerido, ganho da audiência)
+    → Geração de texto (Claude AI — 10 slides no estilo do expert)
+      → Editor inline (bold, italic, destaque, aprovar por slide)
+        → Geração de imagens (Gemini — expert como figurante ao fundo)
+          → Publicação automática (Meta Graph API)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Status
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### ✅ Implementado
+- Layout com sidebar completa (DNA Expert, Fotos, Perfil, Tokens, Templates, Dashboard, Gerar)
+- Topic Discovery — temas trending com análise de viralidade, hook, ganho e ângulos alternativos
+- Modo voz — Web Speech API em português
+- Carousel Preview — thumbnails dos 10 slides, editor inline
+- Formatação: `*negrito*` · `_itálico_` · `{destaque}`
+- Aprovação slide a slide antes de gerar imagens
+- API route `/api/generate/content` (mock)
 
-## Learn More
+### 🔜 Próximo (ver ROADMAP.md)
+- Conectar content-engine.js — geração real via Claude AI
+- Busca de trends via EXA API
+- Geração de imagens via Gemini
+- Publicação direta no Instagram
+- Autenticação e multi-expert
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Arquitetura
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+carousel-studio/              ← este repo (frontend + API routes)
+  app/
+    generate/                 ← página principal de geração
+    expert/dna|photos|audience← configuração do expert
+    dashboard/                ← histórico e métricas
+    tokens/                   ← chaves de API
+    templates/                ← templates reutilizáveis
+    api/generate/content/     ← POST → chama content-engine
+  components/
+    generate/
+      topic-card.tsx          ← card de análise viral
+      carousel-preview.tsx    ← editor de slides
+    sidebar.tsx
 
-## Deploy on Vercel
+aios/squads/traffic/          ← repo AIOS (motor de geração)
+  scripts/lib/
+    content-engine.js         ← Claude SDK → 10 slides no DNA do expert
+    image-generator.js        ← Gemini → imagens por slide
+    tweet-card-renderer.js    ← Playwright → PNG dos cards
+    instagram-autopost.js     ← Meta Graph API → publicação
+  experts/
+    juan-carlos/
+      profile.yaml            ← DNA do expert (tom, estilo, CTAs)
+      style-guide.md          ← guia de escrita
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Configuração local
+
+```bash
+git clone https://github.com/JuanCPLeite/carousel-studio
+cd carousel-studio
+npm install
+npm run dev   # → http://localhost:8080
+```
+
+---
+
+## Modelo de negócio
+
+| Plano | Preço | Limites |
+|-------|-------|---------|
+| Free | R$ 0 | 3 carrosséis/mês · 1 expert |
+| Pro | R$ 97/mês | Ilimitado · 3 experts · agendamento |
+| Agency | R$ 297/mês | Ilimitado · 10 experts · multi-conta IG |
