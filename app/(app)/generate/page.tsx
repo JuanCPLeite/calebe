@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { TopicCard, type Topic } from '@/components/generate/topic-card'
-import { CarouselPreview, type Slide } from '@/components/generate/carousel-preview'
+import { CarouselPreview, type Slide, type ExpertInfo } from '@/components/generate/carousel-preview'
 import { Sparkles, Mic, TrendingUp, Search, Globe, Loader2, ArrowLeft, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 
 // Mock trending topics — será substituído pela API EXA
 const MOCK_TOPICS: Topic[] = [
@@ -81,7 +82,14 @@ const MOCK_TOPICS: Topic[] = [
 type Mode = 'topics' | 'search' | 'explore'
 type Stage = 'discovery' | 'generating' | 'editing'
 
+const DEFAULT_EXPERT: ExpertInfo = {
+  displayName: 'Expert',
+  handle: '@expert',
+  highlightColor: '#9B59FF',
+}
+
 export default function GeneratePage() {
+  const supabase = createClient()
   const [mode, setMode] = useState<Mode>('topics')
   const [searchQuery, setSearchQuery] = useState('')
   const [stage, setStage] = useState<Stage>('discovery')
@@ -95,6 +103,30 @@ export default function GeneratePage() {
   const [customTopic, setCustomTopic] = useState('')
   const [publishing, setPublishing] = useState(false)
   const [publishedUrl, setPublishedUrl] = useState('')
+  const [expert, setExpert] = useState<ExpertInfo>(DEFAULT_EXPERT)
+
+  // Carrega expert do Supabase
+  useEffect(() => {
+    async function loadExpert() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase
+        .from('experts')
+        .select('display_name, handle, highlight_color')
+        .eq('user_id', user.id)
+        .single()
+
+      if (data) {
+        setExpert({
+          displayName: data.display_name || DEFAULT_EXPERT.displayName,
+          handle: data.handle || DEFAULT_EXPERT.handle,
+          highlightColor: data.highlight_color || DEFAULT_EXPERT.highlightColor,
+        })
+      }
+    }
+    loadExpert()
+  }, [])
 
   async function handleGenerate(topic: Topic, hook: string) {
     setSelectedTopic(topic.title)
@@ -273,6 +305,7 @@ export default function GeneratePage() {
           <CarouselPreview
             slides={slides}
             caption={caption}
+            expert={expert}
             onSlidesChange={setSlides}
             onGenerateImages={handleGenerateImages}
             generatingImages={generatingImages}

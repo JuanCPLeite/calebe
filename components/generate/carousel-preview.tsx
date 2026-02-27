@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Bold, Italic, RotateCcw, Check, ImageIcon, Loader2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { FrankCard } from './frank-card'
 
 export interface Slide {
   num: number
@@ -16,24 +17,21 @@ export interface Slide {
   approved?: boolean
 }
 
+export interface ExpertInfo {
+  displayName: string
+  handle: string
+  highlightColor: string
+  avatarUrl?: string
+}
+
 interface CarouselPreviewProps {
   slides: Slide[]
   caption: string
+  expert: ExpertInfo
   onSlidesChange: (slides: Slide[]) => void
   onGenerateImages: () => void
   generatingImages: boolean
   imageProgress: Record<number, 'loading' | 'done' | 'error'>
-}
-
-const TYPE_COLORS: Record<string, string> = {
-  hook: 'from-violet-900/40 to-zinc-900',
-  problem: 'from-red-900/30 to-zinc-900',
-  content: 'from-blue-900/30 to-zinc-900',
-  cta: 'from-green-900/30 to-zinc-900',
-  benefit: 'from-amber-900/30 to-zinc-900',
-  comparison: 'from-cyan-900/30 to-zinc-900',
-  proof: 'from-emerald-900/30 to-zinc-900',
-  'cta-final': 'from-violet-900/50 to-zinc-900',
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -47,15 +45,15 @@ const TYPE_LABELS: Record<string, string> = {
   'cta-final': 'CTA Final',
 }
 
-// Renderiza *negrito* e {destaque} como HTML
-function renderText(text: string) {
-  return text
-    .replace(/\*([^*]+)\*/g, '<strong>$1</strong>')
-    .replace(/\{([^}]+)\}/g, '<span class="text-violet-400 font-semibold">$1</span>')
-    .replace(/\n/g, '<br/>')
-}
-
-export function CarouselPreview({ slides, caption, onSlidesChange, onGenerateImages, generatingImages, imageProgress }: CarouselPreviewProps) {
+export function CarouselPreview({
+  slides,
+  caption,
+  expert,
+  onSlidesChange,
+  onGenerateImages,
+  generatingImages,
+  imageProgress,
+}: CarouselPreviewProps) {
   const [activeSlide, setActiveSlide] = useState(0)
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState('')
@@ -108,7 +106,7 @@ export function CarouselPreview({ slides, caption, onSlidesChange, onGenerateIma
 
   return (
     <div className="flex gap-6 h-full">
-      {/* Thumbnail strip */}
+      {/* ── Thumbnail strip ────────────────────────────── */}
       <div className="flex flex-col gap-2 w-16 flex-shrink-0 overflow-y-auto py-1">
         {slides.map((s, i) => {
           const imgState = getImageState(s.num)
@@ -117,18 +115,24 @@ export function CarouselPreview({ slides, caption, onSlidesChange, onGenerateIma
               key={i}
               onClick={() => { setActiveSlide(i); setEditing(false) }}
               className={cn(
-                'relative w-14 h-20 rounded-lg border text-xs font-bold flex items-center justify-center flex-shrink-0 transition-all overflow-hidden',
+                'relative w-14 rounded-lg border text-xs font-bold flex items-center justify-center flex-shrink-0 transition-all overflow-hidden bg-white',
                 i === activeSlide
                   ? 'border-violet-500 ring-1 ring-violet-500'
-                  : 'border-zinc-700 hover:border-zinc-500',
-                `bg-gradient-to-b ${TYPE_COLORS[s.type] || 'from-zinc-800 to-zinc-900'}`
+                  : 'border-zinc-200 hover:border-zinc-400',
               )}
+              style={{ aspectRatio: '4/5' }}
             >
               {s.imagePath ? (
-                <img src={s.imagePath} alt="" className="absolute inset-0 w-full h-full object-cover opacity-50" />
+                <img src={s.imagePath} alt="" className="absolute inset-0 w-full h-full object-cover opacity-60" />
               ) : null}
-              <span className="text-zinc-400 relative z-10">{s.num}</span>
-              {/* Status badges */}
+              <span
+                className="relative z-10 text-[10px] font-bold"
+                style={{ color: s.imagePath ? '#fff' : '#888' }}
+              >
+                {s.num}
+              </span>
+
+              {/* Badges de status */}
               {s.approved && (
                 <div className="absolute top-0.5 right-0.5 w-3 h-3 rounded-full bg-green-500 flex items-center justify-center z-10">
                   <Check className="w-2 h-2 text-white" />
@@ -136,11 +140,8 @@ export function CarouselPreview({ slides, caption, onSlidesChange, onGenerateIma
               )}
               {imgState === 'loading' && (
                 <div className="absolute bottom-0.5 right-0.5 z-10">
-                  <Loader2 className="w-2.5 h-2.5 text-violet-400 animate-spin" />
+                  <Loader2 className="w-2.5 h-2.5 text-violet-500 animate-spin" />
                 </div>
-              )}
-              {imgState === 'done' && !s.imagePath && (
-                <div className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-violet-500 z-10" />
               )}
               {imgState === 'error' && (
                 <div className="absolute bottom-0.5 right-0.5 z-10">
@@ -152,12 +153,14 @@ export function CarouselPreview({ slides, caption, onSlidesChange, onGenerateIma
         })}
       </div>
 
-      {/* Main editor */}
-      <div className="flex-1 flex flex-col gap-4">
-        {/* Slide header */}
+      {/* ── Editor principal ───────────────────────────── */}
+      <div className="flex-1 flex flex-col gap-3 min-w-0">
+        {/* Cabeçalho do slide */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-zinc-300">Slide {slide.num}/{slides.length}</span>
+            <span className="text-sm font-medium text-zinc-300">
+              Slide {slide.num}/{slides.length}
+            </span>
             <Badge variant="outline" className="text-xs border-zinc-700 text-zinc-400">
               {TYPE_LABELS[slide.type] || slide.type}
             </Badge>
@@ -169,104 +172,91 @@ export function CarouselPreview({ slides, caption, onSlidesChange, onGenerateIma
           </div>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" className="text-zinc-400 h-7 px-2"
-              onClick={() => setActiveSlide(Math.max(0, activeSlide - 1))} disabled={activeSlide === 0}>
+              onClick={() => { setActiveSlide(Math.max(0, activeSlide - 1)); setEditing(false) }}
+              disabled={activeSlide === 0}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
             <Button variant="ghost" size="sm" className="text-zinc-400 h-7 px-2"
-              onClick={() => setActiveSlide(Math.min(slides.length - 1, activeSlide + 1))} disabled={activeSlide === slides.length - 1}>
+              onClick={() => { setActiveSlide(Math.min(slides.length - 1, activeSlide + 1)); setEditing(false) }}
+              disabled={activeSlide === slides.length - 1}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
         </div>
 
-        {/* Card preview */}
+        {/* Card preview — estilo Frank */}
         <div
-          className={cn(
-            'relative rounded-xl border border-zinc-700 overflow-hidden cursor-pointer',
-            `bg-gradient-to-b ${TYPE_COLORS[slide.type] || 'from-zinc-800 to-zinc-900'}`
-          )}
-          style={{ aspectRatio: '4/5', maxHeight: '420px' }}
+          className="cursor-pointer shadow-lg"
+          style={{ maxWidth: '320px' }}
           onClick={!editing ? startEdit : undefined}
         >
-          {/* Mock card layout */}
-          <div className="absolute inset-0 flex flex-col p-4">
-            {/* Header */}
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">JC</div>
-              <div>
-                <p className="text-xs font-semibold text-zinc-100 leading-none">Juan Carlos</p>
-                <p className="text-xs text-zinc-500 leading-none mt-0.5">@juancarlos.ai</p>
+          {editing ? (
+            /* Modo edição — textarea dark sobre o card */
+            <div
+              className="rounded-xl overflow-hidden bg-zinc-900 border border-zinc-700"
+              style={{ aspectRatio: '4/5' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="h-full flex flex-col p-3 gap-2">
+                {/* Toolbar de formatação */}
+                <div className="flex items-center gap-1 bg-zinc-800 rounded-lg px-2 py-1 flex-shrink-0">
+                  <button
+                    onClick={() => applyFormat('bold')}
+                    className="p-1 rounded hover:bg-zinc-700 text-zinc-300"
+                    title="Negrito (*texto*)"
+                  >
+                    <Bold className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => applyFormat('italic')}
+                    className="p-1 rounded hover:bg-zinc-700 text-zinc-300"
+                    title="Itálico (_texto_)"
+                  >
+                    <Italic className="w-3 h-3" />
+                  </button>
+                  <span className="text-[10px] text-zinc-600 px-1">
+                    *negrito* &nbsp; _itálico_ &nbsp; {'{'}destaque{'}'}
+                  </span>
+                </div>
+                <Textarea
+                  id="slide-editor"
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  className="flex-1 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 resize-none leading-relaxed font-mono"
+                />
               </div>
             </div>
+          ) : (
+            /* Preview do card estilo Frank */
+            <div className="relative group">
+              <FrankCard
+                text={slide.text}
+                imagePath={slide.imagePath}
+                authorName={expert.displayName}
+                authorHandle={expert.handle}
+                avatarUrl={expert.avatarUrl}
+                highlightColor={expert.highlightColor}
+              />
 
-            {/* Text */}
-            <div className="flex-1 overflow-hidden">
-              {editing ? (
-                <div className="space-y-2 h-full flex flex-col" onClick={e => e.stopPropagation()}>
-                  <div className="flex items-center gap-1 bg-zinc-800/80 rounded-lg p-1">
-                    <button onClick={() => applyFormat('bold')} className="p-1 rounded hover:bg-zinc-700 text-zinc-300">
-                      <Bold className="w-3 h-3" />
-                    </button>
-                    <button onClick={() => applyFormat('italic')} className="p-1 rounded hover:bg-zinc-700 text-zinc-300">
-                      <Italic className="w-3 h-3" />
-                    </button>
-                    <span className="text-xs text-zinc-600 px-1">| *negrito* &nbsp; _itálico_ &nbsp; {'{'}destaque{'}'}</span>
-                  </div>
-                  <Textarea
-                    id="slide-editor"
-                    value={editText}
-                    onChange={e => setEditText(e.target.value)}
-                    className="flex-1 text-xs bg-zinc-900/80 border-zinc-700 text-zinc-100 resize-none leading-relaxed"
-                  />
+              {/* Overlay hover */}
+              <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
+                <span className="text-xs bg-black/70 text-white px-2 py-1 rounded-full">
+                  Clique para editar
+                </span>
+              </div>
+
+              {/* Loading overlay para imagem */}
+              {getImageState(slide.num) === 'loading' && (
+                <div className="absolute bottom-3 left-3 right-3 rounded-lg bg-white/80 flex items-center justify-center gap-2 py-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
+                  <span className="text-xs text-violet-600 font-medium">gerando imagem...</span>
                 </div>
-              ) : (
-                <div
-                  className="text-xs text-zinc-100 leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: renderText(slide.text) }}
-                />
               )}
-            </div>
-
-            {/* Image area */}
-            {(() => {
-              const imgState = getImageState(slide.num)
-              return (
-                <div className={cn(
-                  'mt-3 rounded-lg flex items-center justify-center flex-shrink-0',
-                  slide.imagePath ? 'overflow-hidden' : 'bg-zinc-800/60 border border-zinc-700/50 border-dashed'
-                )}
-                  style={{ height: '90px' }}>
-                  {slide.imagePath ? (
-                    <img src={slide.imagePath} alt="" className="w-full h-full object-cover" />
-                  ) : imgState === 'loading' ? (
-                    <div className="flex flex-col items-center gap-1 text-zinc-500">
-                      <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
-                      <span className="text-xs text-violet-400">gerando...</span>
-                    </div>
-                  ) : imgState === 'error' ? (
-                    <div className="flex flex-col items-center gap-1 text-red-500">
-                      <AlertCircle className="w-4 h-4" />
-                      <span className="text-xs">erro na imagem</span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-1 text-zinc-600">
-                      <ImageIcon className="w-4 h-4" />
-                      <span className="text-xs">imagem aqui</span>
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
-          </div>
-
-          {!editing && (
-            <div className="absolute inset-0 bg-zinc-100/0 hover:bg-zinc-100/5 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
-              <span className="text-xs bg-zinc-900/80 px-2 py-1 rounded-full text-zinc-300">Clique para editar</span>
             </div>
           )}
         </div>
 
-        {/* Actions */}
+        {/* Ações */}
         <div className="flex items-center gap-2">
           {editing ? (
             <>
@@ -279,10 +269,20 @@ export function CarouselPreview({ slides, caption, onSlidesChange, onGenerateIma
             </>
           ) : (
             <>
-              <Button size="sm" variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 flex-1" onClick={startEdit}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 flex-1"
+                onClick={startEdit}
+              >
                 Editar texto
               </Button>
-              <Button size="sm" variant="ghost" className="text-zinc-400 border border-zinc-700 hover:bg-zinc-800" onClick={() => {}}>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-zinc-400 border border-zinc-700 hover:bg-zinc-800"
+                onClick={() => {}}
+              >
                 <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Regerar
               </Button>
               {!slide.approved && (
@@ -294,17 +294,21 @@ export function CarouselPreview({ slides, caption, onSlidesChange, onGenerateIma
           )}
         </div>
 
-        {/* Progress */}
+        {/* Progress dots */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-zinc-500">Aprovados:</span>
           <div className="flex gap-1">
             {slides.map((s, i) => (
               <button
                 key={i}
-                onClick={() => setActiveSlide(i)}
+                onClick={() => { setActiveSlide(i); setEditing(false) }}
                 className={cn(
                   'w-5 h-5 rounded text-xs font-medium transition-colors',
-                  s.approved ? 'bg-green-600 text-white' : i === activeSlide ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-500'
+                  s.approved
+                    ? 'bg-green-600 text-white'
+                    : i === activeSlide
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-zinc-800 text-zinc-500'
                 )}
               >
                 {s.num}
@@ -313,7 +317,7 @@ export function CarouselPreview({ slides, caption, onSlidesChange, onGenerateIma
           </div>
         </div>
 
-        {/* Generate images button */}
+        {/* Botão gerar imagens */}
         <Button
           className={cn(
             'w-full',
@@ -328,12 +332,15 @@ export function CarouselPreview({ slides, caption, onSlidesChange, onGenerateIma
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Gerando imagens...</>
           ) : (
             <><ImageIcon className="w-4 h-4 mr-2" />
-              {allApproved ? '⚡ Gerar Imagens' : `Gerar Imagens (${slides.filter(s => s.approved).length}/${slides.length} aprovados)`}
+              {allApproved
+                ? '⚡ Gerar Imagens'
+                : `Gerar Imagens (${slides.filter(s => s.approved).length}/${slides.length} aprovados)`
+              }
             </>
           )}
         </Button>
 
-        {/* Caption section (aparece após gerar imagens) */}
+        {/* Legenda */}
         {imagesGenerated && caption && (
           <div className="border border-zinc-700 rounded-xl p-3 space-y-2">
             <button
