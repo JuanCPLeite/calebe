@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { Bold, Italic, RotateCcw, Check, ImageIcon, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Bold, Italic, RotateCcw, Check, ImageIcon, Loader2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export interface Slide {
@@ -18,9 +18,11 @@ export interface Slide {
 
 interface CarouselPreviewProps {
   slides: Slide[]
+  caption: string
   onSlidesChange: (slides: Slide[]) => void
   onGenerateImages: () => void
   generatingImages: boolean
+  imageProgress: Record<number, 'loading' | 'done' | 'error'>
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -53,15 +55,17 @@ function renderText(text: string) {
     .replace(/\n/g, '<br/>')
 }
 
-export function CarouselPreview({ slides, onSlidesChange, onGenerateImages, generatingImages }: CarouselPreviewProps) {
+export function CarouselPreview({ slides, caption, onSlidesChange, onGenerateImages, generatingImages, imageProgress }: CarouselPreviewProps) {
   const [activeSlide, setActiveSlide] = useState(0)
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState('')
+  const [showCaption, setShowCaption] = useState(false)
 
   const slide = slides[activeSlide]
   if (!slide) return null
 
   const allApproved = slides.every(s => s.approved)
+  const imagesGenerated = slides.every(s => imageProgress[s.num] === 'done')
 
   function startEdit() {
     setEditText(slide.text)
@@ -94,30 +98,58 @@ export function CarouselPreview({ slides, onSlidesChange, onGenerateImages, gene
     setEditText(editText.slice(0, s) + wrapped + editText.slice(e))
   }
 
+  function getImageState(slideNum: number) {
+    const prog = imageProgress[slideNum]
+    if (prog === 'loading') return 'loading'
+    if (prog === 'done') return 'done'
+    if (prog === 'error') return 'error'
+    return 'idle'
+  }
+
   return (
     <div className="flex gap-6 h-full">
       {/* Thumbnail strip */}
       <div className="flex flex-col gap-2 w-16 flex-shrink-0 overflow-y-auto py-1">
-        {slides.map((s, i) => (
-          <button
-            key={i}
-            onClick={() => { setActiveSlide(i); setEditing(false) }}
-            className={cn(
-              'relative w-14 h-20 rounded-lg border text-xs font-bold flex items-center justify-center flex-shrink-0 transition-all overflow-hidden',
-              i === activeSlide
-                ? 'border-violet-500 ring-1 ring-violet-500'
-                : 'border-zinc-700 hover:border-zinc-500',
-              `bg-gradient-to-b ${TYPE_COLORS[s.type] || 'from-zinc-800 to-zinc-900'}`
-            )}
-          >
-            <span className="text-zinc-400">{s.num}</span>
-            {s.approved && (
-              <div className="absolute top-0.5 right-0.5 w-3 h-3 rounded-full bg-green-500 flex items-center justify-center">
-                <Check className="w-2 h-2 text-white" />
-              </div>
-            )}
-          </button>
-        ))}
+        {slides.map((s, i) => {
+          const imgState = getImageState(s.num)
+          return (
+            <button
+              key={i}
+              onClick={() => { setActiveSlide(i); setEditing(false) }}
+              className={cn(
+                'relative w-14 h-20 rounded-lg border text-xs font-bold flex items-center justify-center flex-shrink-0 transition-all overflow-hidden',
+                i === activeSlide
+                  ? 'border-violet-500 ring-1 ring-violet-500'
+                  : 'border-zinc-700 hover:border-zinc-500',
+                `bg-gradient-to-b ${TYPE_COLORS[s.type] || 'from-zinc-800 to-zinc-900'}`
+              )}
+            >
+              {s.imagePath ? (
+                <img src={s.imagePath} alt="" className="absolute inset-0 w-full h-full object-cover opacity-50" />
+              ) : null}
+              <span className="text-zinc-400 relative z-10">{s.num}</span>
+              {/* Status badges */}
+              {s.approved && (
+                <div className="absolute top-0.5 right-0.5 w-3 h-3 rounded-full bg-green-500 flex items-center justify-center z-10">
+                  <Check className="w-2 h-2 text-white" />
+                </div>
+              )}
+              {imgState === 'loading' && (
+                <div className="absolute bottom-0.5 right-0.5 z-10">
+                  <Loader2 className="w-2.5 h-2.5 text-violet-400 animate-spin" />
+                </div>
+              )}
+              {imgState === 'done' && !s.imagePath && (
+                <div className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-violet-500 z-10" />
+              )}
+              {imgState === 'error' && (
+                <div className="absolute bottom-0.5 right-0.5 z-10">
+                  <AlertCircle className="w-2.5 h-2.5 text-red-400" />
+                </div>
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* Main editor */}
@@ -125,7 +157,7 @@ export function CarouselPreview({ slides, onSlidesChange, onGenerateImages, gene
         {/* Slide header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-zinc-300">Slide {slide.num}/10</span>
+            <span className="text-sm font-medium text-zinc-300">Slide {slide.num}/{slides.length}</span>
             <Badge variant="outline" className="text-xs border-zinc-700 text-zinc-400">
               {TYPE_LABELS[slide.type] || slide.type}
             </Badge>
@@ -195,26 +227,36 @@ export function CarouselPreview({ slides, onSlidesChange, onGenerateImages, gene
               )}
             </div>
 
-            {/* Image placeholder */}
-            <div className={cn(
-              'mt-3 rounded-lg flex items-center justify-center flex-shrink-0',
-              slide.imagePath ? 'overflow-hidden' : 'bg-zinc-800/60 border border-zinc-700/50 border-dashed'
-            )}
-              style={{ height: '90px' }}>
-              {slide.imagePath ? (
-                <img src={slide.imagePath} alt="" className="w-full h-full object-cover" />
-              ) : generatingImages ? (
-                <div className="flex flex-col items-center gap-1 text-zinc-500">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="text-xs">gerando...</span>
+            {/* Image area */}
+            {(() => {
+              const imgState = getImageState(slide.num)
+              return (
+                <div className={cn(
+                  'mt-3 rounded-lg flex items-center justify-center flex-shrink-0',
+                  slide.imagePath ? 'overflow-hidden' : 'bg-zinc-800/60 border border-zinc-700/50 border-dashed'
+                )}
+                  style={{ height: '90px' }}>
+                  {slide.imagePath ? (
+                    <img src={slide.imagePath} alt="" className="w-full h-full object-cover" />
+                  ) : imgState === 'loading' ? (
+                    <div className="flex flex-col items-center gap-1 text-zinc-500">
+                      <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
+                      <span className="text-xs text-violet-400">gerando...</span>
+                    </div>
+                  ) : imgState === 'error' ? (
+                    <div className="flex flex-col items-center gap-1 text-red-500">
+                      <AlertCircle className="w-4 h-4" />
+                      <span className="text-xs">erro na imagem</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-zinc-600">
+                      <ImageIcon className="w-4 h-4" />
+                      <span className="text-xs">imagem aqui</span>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="flex flex-col items-center gap-1 text-zinc-600">
-                  <ImageIcon className="w-4 h-4" />
-                  <span className="text-xs">imagem aqui</span>
-                </div>
-              )}
-            </div>
+              )
+            })()}
           </div>
 
           {!editing && (
@@ -286,10 +328,26 @@ export function CarouselPreview({ slides, onSlidesChange, onGenerateImages, gene
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Gerando imagens...</>
           ) : (
             <><ImageIcon className="w-4 h-4 mr-2" />
-              {allApproved ? '⚡ Gerar Imagens' : `Gerar Imagens (${slides.filter(s => s.approved).length}/10 aprovados)`}
+              {allApproved ? '⚡ Gerar Imagens' : `Gerar Imagens (${slides.filter(s => s.approved).length}/${slides.length} aprovados)`}
             </>
           )}
         </Button>
+
+        {/* Caption section (aparece após gerar imagens) */}
+        {imagesGenerated && caption && (
+          <div className="border border-zinc-700 rounded-xl p-3 space-y-2">
+            <button
+              onClick={() => setShowCaption(v => !v)}
+              className="flex items-center justify-between w-full text-xs font-medium text-zinc-400 hover:text-zinc-200"
+            >
+              <span>Legenda do post</span>
+              <span className="text-zinc-600">{showCaption ? '▲' : '▼'}</span>
+            </button>
+            {showCaption && (
+              <p className="text-xs text-zinc-400 leading-relaxed whitespace-pre-wrap">{caption}</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

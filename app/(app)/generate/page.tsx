@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { TopicCard, type Topic } from '@/components/generate/topic-card'
 import { CarouselPreview, type Slide } from '@/components/generate/carousel-preview'
-import { Sparkles, Mic, TrendingUp, Search, Globe, Loader2, ArrowLeft } from 'lucide-react'
+import { Sparkles, Mic, TrendingUp, Search, Globe, Loader2, ArrowLeft, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // Mock trending topics — será substituído pela API EXA
@@ -88,14 +88,21 @@ export default function GeneratePage() {
   const [generating, setGenerating] = useState(false)
   const [generatingImages, setGeneratingImages] = useState(false)
   const [slides, setSlides] = useState<Slide[]>([])
+  const [caption, setCaption] = useState('')
+  const [imageProgress, setImageProgress] = useState<Record<number, 'loading' | 'done' | 'error'>>({})
   const [selectedTopic, setSelectedTopic] = useState<string>('')
   const [voiceActive, setVoiceActive] = useState(false)
   const [customTopic, setCustomTopic] = useState('')
+  const [publishing, setPublishing] = useState(false)
+  const [publishedUrl, setPublishedUrl] = useState('')
 
   async function handleGenerate(topic: Topic, hook: string) {
     setSelectedTopic(topic.title)
     setGenerating(true)
     setStage('generating')
+    setImageProgress({})
+    setCaption('')
+    setPublishedUrl('')
 
     try {
       const res = await fetch('/api/generate/content', {
@@ -104,7 +111,9 @@ export default function GeneratePage() {
         body: JSON.stringify({ topic: topic.title, hook }),
       })
       const data = await res.json()
+      if (data.error) throw new Error(data.error)
       setSlides(data.slides.map((s: Slide) => ({ ...s, approved: false })))
+      setCaption(data.caption || '')
       setStage('editing')
     } catch (err) {
       console.error(err)
@@ -148,9 +157,82 @@ export default function GeneratePage() {
 
   async function handleGenerateImages() {
     setGeneratingImages(true)
-    await new Promise(r => setTimeout(r, 3000)) // placeholder — vai chamar /api/generate/images
+    const updatedSlides = [...slides]
+
+    for (const slide of slides) {
+      if (!slide.imagePrompt) continue
+
+      // Marca como loading
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
+
+      try {
+        const res = await fetch('/api/generate/images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slideNum: slide.num, imagePrompt: slide.imagePrompt }),
+        })
+        const data = await res.json()
+        if (data.error) throw new Error(data.error)
+
+        // Atualiza slide com a imagem gerada (dataUrl)
+        const idx = updatedSlides.findIndex(s => s.num === slide.num)
+        if (idx !== -1) {
+          updatedSlides[idx] = { ...updatedSlides[idx], imagePath: data.dataUrl }
+          setSlides([...updatedSlides])
+        }
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
+      } catch (err) {
+        console.error(`Erro ao gerar imagem slide ${slide.num}:`, err)
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'error' }))
+      }
+    }
+
     setGeneratingImages(false)
   }
+
+  async function handlePublish() {
+    const slidesWithImages = slides.filter(s => s.imagePath)
+    if (slidesWithImages.length === 0) {
+      alert('Gere as imagens primeiro antes de publicar.')
+      return
+    }
+    if (!caption) {
+      alert('Legenda não encontrada.')
+      return
+    }
+
+    setPublishing(true)
+    try {
+      // 1. Salva imagens no disco e obtém URLs públicas
+      const sessionId = `carousel-${Date.now()}`
+      const saveRes = await fetch('/api/save-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slides: slidesWithImages.map(s => ({ num: s.num, dataUrl: s.imagePath })),
+          sessionId,
+        }),
+      })
+      const saveData = await saveRes.json()
+      if (saveData.error) throw new Error(saveData.error)
+
+      // 2. Publica no Instagram com URLs públicas
+      const publishRes = await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrls: saveData.urls, caption }),
+      })
+      const publishData = await publishRes.json()
+      if (publishData.error) throw new Error(publishData.error)
+      setPublishedUrl(publishData.url)
+    } catch (err: any) {
+      alert(`Erro ao publicar: ${err.message}`)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const imagesReady = slides.length > 0 && slides.every(s => imageProgress[s.num] === 'done')
 
   // ── Tela de edição ─────────────────────────────────────────────────────────
   if (stage === 'editing') {
@@ -161,16 +243,40 @@ export default function GeneratePage() {
             <ArrowLeft className="w-4 h-4 mr-1.5" /> Voltar
           </Button>
           <h1 className="text-sm font-medium text-zinc-300 flex-1 truncate">{selectedTopic}</h1>
-          <Button size="sm" className="bg-violet-600 hover:bg-violet-500 text-white">
-            Publicar no Instagram
-          </Button>
+
+          {publishedUrl ? (
+            <a href={publishedUrl} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" className="bg-green-600 hover:bg-green-500 text-white">
+                ✓ Ver no Instagram
+              </Button>
+            </a>
+          ) : (
+            <Button
+              size="sm"
+              className={cn(
+                'text-white',
+                imagesReady ? 'bg-violet-600 hover:bg-violet-500' : 'bg-zinc-700 cursor-not-allowed'
+              )}
+              onClick={handlePublish}
+              disabled={!imagesReady || publishing}
+            >
+              {publishing ? (
+                <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Publicando...</>
+              ) : (
+                <><Send className="w-3.5 h-3.5 mr-1.5" /> Publicar no Instagram</>
+              )}
+            </Button>
+          )}
         </div>
+
         <div className="flex-1 p-6 overflow-y-auto">
           <CarouselPreview
             slides={slides}
+            caption={caption}
             onSlidesChange={setSlides}
             onGenerateImages={handleGenerateImages}
             generatingImages={generatingImages}
+            imageProgress={imageProgress}
           />
         </div>
       </div>
