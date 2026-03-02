@@ -25,11 +25,16 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isPublicPath =
-    request.nextUrl.pathname.startsWith('/login') ||
-    request.nextUrl.pathname.startsWith('/auth/callback')
+  const { pathname } = request.nextUrl
 
-  if (!user && !isPublicPath) {
+  const isPublicPath =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/auth/callback')
+
+  // Rotas de API retornam 401 por conta própria — não redirecionar para /login
+  const isApiRoute = pathname.startsWith('/api/')
+
+  if (!user && !isPublicPath && !isApiRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

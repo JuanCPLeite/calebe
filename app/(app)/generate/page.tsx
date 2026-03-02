@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Topic } from '@/components/generate/topic-card'
 import { CarouselPreview, type Slide, type ExpertInfo } from '@/components/generate/carousel-preview'
-import { Sparkles, Mic, Loader2, ArrowLeft, Send } from 'lucide-react'
+import { Sparkles, Mic, Loader2, ArrowLeft, Send, AlertCircle, Key } from 'lucide-react'
 import { TopicDiscovery } from '@/components/generate/topic-discovery'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+import Link from 'next/link'
 
 type Stage = 'discovery' | 'generating' | 'editing'
 
@@ -34,59 +35,74 @@ export default function GeneratePage() {
   const [expert, setExpert]               = useState<ExpertInfo>(DEFAULT_EXPERT)
   const [niche, setNiche]                 = useState('seu nicho')
   const [imageHeightPercent, setImageHeightPercent] = useState(45)
+  const [generateError, setGenerateError] = useState('')
+  const [missingTokens, setMissingTokens] = useState<string[]>([])
 
-  // Carrega expert do Supabase (nome, handle, highlight, avatar, nicho)
+  // Carrega expert + verifica tokens essenciais
   useEffect(() => {
-    async function loadExpert() {
+    async function loadExpertAndTokens() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
+      // Carrega expert
       const { data: exp } = await supabase
         .from('experts')
         .select('display_name, handle, highlight_color, niche, id')
         .eq('user_id', user.id)
         .single()
 
-      if (!exp) return
+      if (exp) {
+        setNiche(exp.niche || 'seu nicho')
 
-      setNiche(exp.niche || 'seu nicho')
+        let avatarUrl: string | undefined
+        try {
+          const { data: expFull } = await supabase
+            .from('experts')
+            .select('avatar_url')
+            .eq('user_id', user.id)
+            .single()
+          avatarUrl = (expFull as any)?.avatar_url || undefined
+        } catch { /* coluna ainda não existe */ }
 
-      // avatar_url: query separada com fallback (coluna pode não existir ainda na DB)
-      let avatarUrl: string | undefined
-      try {
-        const { data: expFull } = await supabase
-          .from('experts')
-          .select('avatar_url')
-          .eq('user_id', user.id)
-          .single()
-        avatarUrl = (expFull as any)?.avatar_url || undefined
-      } catch { /* coluna ainda não existe — ignorar */ }
+        if (!avatarUrl && exp.id) {
+          const { data: photos } = await supabase
+            .from('expert_photos')
+            .select('storage_path')
+            .eq('expert_id', exp.id)
+            .order('order_index', { ascending: true })
+            .limit(1)
 
-      // Fallback: primeira foto do bucket de referências
-      if (!avatarUrl && exp.id) {
-        const { data: photos } = await supabase
-          .from('expert_photos')
-          .select('storage_path')
-          .eq('expert_id', exp.id)
-          .order('order_index', { ascending: true })
-          .limit(1)
-
-        if (photos?.[0]?.storage_path) {
-          const { data: signed } = await supabase.storage
-            .from('expert-photos')
-            .createSignedUrl(photos[0].storage_path, 3600)
-          avatarUrl = signed?.signedUrl || undefined
+          if (photos?.[0]?.storage_path) {
+            const { data: signed } = await supabase.storage
+              .from('expert-photos')
+              .createSignedUrl(photos[0].storage_path, 3600)
+            avatarUrl = signed?.signedUrl || undefined
+          }
         }
+
+        setExpert({
+          displayName:    exp.display_name || DEFAULT_EXPERT.displayName,
+          handle:         exp.handle       || DEFAULT_EXPERT.handle,
+          highlightColor: exp.highlight_color || DEFAULT_EXPERT.highlightColor,
+          avatarUrl,
+        })
       }
 
-      setExpert({
-        displayName:    exp.display_name || DEFAULT_EXPERT.displayName,
-        handle:         exp.handle       || DEFAULT_EXPERT.handle,
-        highlightColor: exp.highlight_color || DEFAULT_EXPERT.highlightColor,
-        avatarUrl,
-      })
+      // Verifica tokens essenciais
+      const { data: tokens } = await supabase
+        .from('user_tokens')
+        .select('provider')
+        .eq('user_id', user.id)
+        .in('provider', ['anthropic', 'google'])
+
+      const configured = new Set((tokens || []).map((t: { provider: string }) => t.provider))
+      const missing: string[] = []
+      if (!configured.has('anthropic')) missing.push('Anthropic (Claude)')
+      if (!configured.has('google'))    missing.push('Google Gemini')
+      setMissingTokens(missing)
     }
-    loadExpert()
+
+    loadExpertAndTokens()
   }, [])
 
   // ── Geração de conteúdo ──────────────────────────────────────────────────
@@ -94,6 +110,7 @@ export default function GeneratePage() {
     setSelectedTopic(topic.title)
     setGenerating(true)
     setStage('generating')
+    setGenerateError('')
     setImageProgress({})
     setCaption('')
     setPublishedUrl('')
@@ -109,8 +126,9 @@ export default function GeneratePage() {
       setSlides(data.slides.map((s: Slide) => ({ ...s, approved: false })))
       setCaption(data.caption || '')
       setStage('editing')
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      setGenerateError(err.message || 'Erro ao gerar carrossel.')
       setStage('discovery')
     } finally {
       setGenerating(false)
@@ -154,7 +172,6 @@ export default function GeneratePage() {
     setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
 
     try {
-      // Passo 1: Gera imagem via Gemini
       const imageRes = await fetch('/api/generate/images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -163,7 +180,6 @@ export default function GeneratePage() {
       const imageData = await imageRes.json()
       if (imageData.error) throw new Error(imageData.error)
 
-      // Passo 2: Renderiza card completo via Playwright
       const imageBase64 = imageData.dataUrl.replace(/^data:[^;]+;base64,/, '')
       const cardRes = await fetch('/api/render/card', {
         method: 'POST',
@@ -191,7 +207,6 @@ export default function GeneratePage() {
     }
   }
 
-  // ── Gera imagens para todos os slides (sequencial) ───────────────────────
   async function handleGenerateImages() {
     setGeneratingImages(true)
     for (const slide of slides) {
@@ -200,7 +215,6 @@ export default function GeneratePage() {
     setGeneratingImages(false)
   }
 
-  // ── Regenera a imagem de um slide específico ─────────────────────────────
   async function handleRegenerateSlide(slideNum: number) {
     const slide = slides.find(s => s.num === slideNum)
     if (!slide) return
@@ -251,7 +265,6 @@ export default function GeneratePage() {
   if (stage === 'editing') {
     return (
       <div className="flex flex-col h-full">
-        {/* Header */}
         <div className="flex items-center gap-3 px-6 py-3 border-b border-zinc-800 flex-shrink-0">
           <Button
             variant="ghost" size="sm"
@@ -287,7 +300,6 @@ export default function GeneratePage() {
           )}
         </div>
 
-        {/* Editor — ocupa o restante da tela com scroll interno */}
         <div className="flex-1 min-h-0 overflow-y-auto p-5">
           <CarouselPreview
             slides={slides}
@@ -306,7 +318,7 @@ export default function GeneratePage() {
     )
   }
 
-  // ── Tela de geração em andamento ──────────────────────────────────────────
+  // ── Gerando ──────────────────────────────────────────────────────────────
   if (stage === 'generating') {
     return (
       <div className="flex items-center justify-center h-full">
@@ -330,6 +342,41 @@ export default function GeneratePage() {
         <h1 className="text-xl font-semibold text-zinc-100">Gerar Carrossel</h1>
         <p className="text-sm text-zinc-500 mt-1">Escolha um tema viral ou escreva o seu próprio</p>
       </div>
+
+      {/* Banner: tokens faltando */}
+      {missingTokens.length > 0 && (
+        <div className="flex items-start gap-3 bg-amber-950/30 border border-amber-700/40 rounded-xl px-4 py-3">
+          <Key className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-xs text-amber-200 font-medium mb-0.5">
+              Configure suas chaves de API para gerar carrosséis
+            </p>
+            <p className="text-xs text-amber-400/80">
+              Faltando: <strong>{missingTokens.join(', ')}</strong>.{' '}
+              <Link href="/tokens" className="underline underline-offset-2 hover:text-amber-200">
+                Configurar em Tokens & APIs →
+              </Link>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Banner: erro da última geração */}
+      {generateError && (
+        <div className="flex items-start gap-3 bg-red-950/30 border border-red-700/40 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-xs text-red-200 font-medium mb-0.5">Erro ao gerar carrossel</p>
+            <p className="text-xs text-red-400/80">{generateError}</p>
+          </div>
+          <button
+            onClick={() => setGenerateError('')}
+            className="text-red-600 hover:text-red-400 text-xs"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Input livre + voz */}
       <div className="flex gap-2">
@@ -363,7 +410,7 @@ export default function GeneratePage() {
         </Button>
       </div>
 
-      {/* Discovery — trending / busca / explorar com EXA */}
+      {/* Topic Discovery */}
       <TopicDiscovery niche={niche} onSelect={handleGenerate} />
     </div>
   )
