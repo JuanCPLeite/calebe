@@ -5,11 +5,37 @@ import { Eye, EyeOff, Save, CheckCircle2, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 const TOKEN_FIELDS = [
-  { provider: 'anthropic', label: 'Anthropic (Claude)', placeholder: 'sk-ant-...' },
-  { provider: 'google', label: 'Google Gemini', placeholder: 'AIzaSy...' },
-  { provider: 'meta_token', label: 'Meta Graph API Token', placeholder: 'EAAp...' },
-  { provider: 'meta_account_id', label: 'Meta Account ID (Instagram)', placeholder: '17841...' },
-  { provider: 'exa', label: 'EXA Search', placeholder: 'exa_...' },
+  {
+    provider: 'anthropic',
+    label: 'Anthropic (Claude)',
+    placeholder: 'sk-ant-...',
+    hint: 'Obrigatório — gera o conteúdo dos slides e faz a busca de tópicos trending.',
+  },
+  {
+    provider: 'google',
+    label: 'Google Gemini',
+    placeholder: 'AIzaSy...',
+    hint: 'Obrigatório — gera as imagens de cada slide via Gemini.',
+  },
+  {
+    provider: 'meta_token',
+    label: 'Meta Graph API Token',
+    placeholder: 'EAAp...',
+    hint: 'Necessário para publicar carrosséis direto no Instagram.',
+  },
+  {
+    provider: 'meta_account_id',
+    label: 'Meta Account ID (Instagram)',
+    placeholder: '17841...',
+    hint: 'ID numérico da sua conta de negócios no Instagram.',
+  },
+  {
+    provider: 'exa',
+    label: 'EXA Search',
+    placeholder: 'exa_...',
+    hint: 'Opcional — busca neural avançada para tópicos trending. Sem ela, o Claude já faz a busca.',
+    optional: true,
+  },
 ]
 
 export default function TokensPage() {
@@ -64,17 +90,25 @@ export default function TokensPage() {
       </div>
 
       <div className="space-y-4">
-        {TOKEN_FIELDS.map(({ provider, label, placeholder }) => {
+        {TOKEN_FIELDS.map(({ provider, label, placeholder, hint, optional }) => {
           const filled = !!(values[provider]?.trim())
           return (
             <div key={provider} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-zinc-200">{label}</label>
-                <div className={`flex items-center gap-1.5 text-xs ${filled ? 'text-green-400' : 'text-zinc-500'}`}>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-zinc-200">{label}</label>
+                  {optional && (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-500">
+                      opcional
+                    </span>
+                  )}
+                </div>
+                <div className={`flex items-center gap-1.5 text-xs ${filled ? 'text-green-400' : optional ? 'text-zinc-600' : 'text-zinc-500'}`}>
                   {filled ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                  {filled ? 'Configurado' : 'Pendente'}
+                  {filled ? 'Configurado' : optional ? 'Não configurado' : 'Pendente'}
                 </div>
               </div>
+              {hint && <p className="text-xs text-zinc-500 mb-2.5">{hint}</p>}
               <div className="relative">
                 <input
                   type={show[provider] ? 'text' : 'password'}

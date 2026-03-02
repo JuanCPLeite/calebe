@@ -6,29 +6,39 @@ export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
     const { slideNum, imagePrompt } = await req.json()
     if (!imagePrompt) return NextResponse.json({ error: 'imagePrompt obrigatório' }, { status: 400 })
 
-    // Busca token Google do DB (fallback: env)
-    let googleKey = process.env.GOOGLE_API_KEY
-    if (user) {
-      const { data: tokenRow } = await supabase
-        .from('user_tokens')
-        .select('value')
-        .eq('user_id', user.id)
-        .eq('provider', 'google')
-        .single()
-      if (tokenRow?.value) googleKey = tokenRow.value
-    }
+    // Chave Google: somente do banco do usuário
+    const { data: tokenRow } = await supabase
+      .from('user_tokens')
+      .select('value')
+      .eq('user_id', user.id)
+      .eq('provider', 'google')
+      .single()
 
-    // Carrega foto de referência do expert do Supabase Storage
+    const googleKey = tokenRow?.value
+    if (!googleKey) return NextResponse.json(
+      { error: 'Chave Google Gemini não configurada. Acesse Tokens & APIs.' },
+      { status: 400 }
+    )
+
+    // Carrega foto de referência do expert (2 queries separadas, sem N+1)
     let expertPhotoBase64: string | undefined
-    if (user) {
+
+    const { data: expert } = await supabase
+      .from('experts')
+      .select('id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (expert?.id) {
       const { data: photos } = await supabase
         .from('expert_photos')
         .select('storage_path')
-        .eq('expert_id', (await supabase.from('experts').select('id').eq('user_id', user.id).single()).data?.id)
+        .eq('expert_id', expert.id)
         .order('order_index', { ascending: true })
         .limit(1)
 

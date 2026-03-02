@@ -3,83 +3,13 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { TopicCard, type Topic } from '@/components/generate/topic-card'
+import type { Topic } from '@/components/generate/topic-card'
 import { CarouselPreview, type Slide, type ExpertInfo } from '@/components/generate/carousel-preview'
-import { Sparkles, Mic, TrendingUp, Search, Globe, Loader2, ArrowLeft, Send } from 'lucide-react'
+import { Sparkles, Mic, Loader2, ArrowLeft, Send } from 'lucide-react'
+import { TopicDiscovery } from '@/components/generate/topic-discovery'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
-// Mock trending topics — será substituído pela API EXA
-const MOCK_TOPICS: Topic[] = [
-  {
-    id: '1',
-    title: 'IA que responde WhatsApp por você',
-    viralScore: 82,
-    growth: '+520%',
-    postsToday: 201,
-    avgEngagement: '4.2%',
-    hook: 'Seu WhatsApp pode responder clientes enquanto você dorme — e custa menos de R$ 50/mês.',
-    gain: 'Empresários vão saber exatamente como montar um atendimento automático sem contratar ninguém.',
-    angle: 'Custo oculto',
-    altAngles: [
-      { label: 'Medo de perder', hook: 'Seu concorrente já automatizou o WhatsApp. Você ainda não sabe.' },
-      { label: 'Revelação técnica', hook: '5 passos para o WhatsApp responder por você — sem programar nada.' },
-    ],
-  },
-  {
-    id: '2',
-    title: 'n8n vs Make: qual usar em 2026',
-    viralScore: 71,
-    growth: '+180%',
-    postsToday: 89,
-    avgEngagement: '3.8%',
-    hook: 'Errei gastando R$ 1.200 no Make antes de descobrir o n8n. Vou te poupar esse erro.',
-    gain: 'Profissionais vão escolher a ferramenta certa para o seu nível e economizar tempo e dinheiro.',
-    angle: 'Erro pessoal',
-    altAngles: [
-      { label: 'Comparação direta', hook: 'n8n e Make fazem a mesma coisa. A diferença está em quem paga a conta.' },
-    ],
-  },
-  {
-    id: '3',
-    title: 'ChatGPT Canvas está eliminando designers',
-    viralScore: 68,
-    growth: '+340%',
-    postsToday: 127,
-    avgEngagement: '5.1%',
-    hook: 'Rasguei um contrato de R$ 3.000/mês com designer depois de testar o Canvas por 1 semana.',
-    gain: 'Donos de negócio vão saber como produzir material visual profissional sem agência ou freelancer.',
-    angle: 'Choque de custo',
-    altAngles: [
-      { label: 'Tutorial prático', hook: '3 tipos de material que o ChatGPT Canvas faz em 10 minutos.' },
-    ],
-  },
-  {
-    id: '4',
-    title: 'Agente IA para e-commerce que vende no automático',
-    viralScore: 61,
-    growth: '+95%',
-    postsToday: 74,
-    avgEngagement: '3.5%',
-    hook: 'Minha loja vende sem eu estar online. O agente de IA cuida de tudo — da pergunta ao pagamento.',
-    gain: 'Lojistas vão entender como configurar um agente que opera 24/7 sem intervenção humana.',
-    angle: 'Resultado real',
-  },
-  {
-    id: '5',
-    title: 'Automação que se paga em menos de 30 dias',
-    viralScore: 54,
-    growth: '+72%',
-    postsToday: 58,
-    avgEngagement: '3.2%',
-    hook: 'Em 11 dias o sistema pagou o próprio custo. Hoje é puro lucro operacional.',
-    gain: 'Empreendedores vão calcular o ROI real de automações e saber por onde começar.',
-    angle: 'ROI rápido',
-  },
-]
-
-type Mode = 'topics' | 'search' | 'explore'
 type Stage = 'discovery' | 'generating' | 'editing'
 
 const DEFAULT_EXPERT: ExpertInfo = {
@@ -90,44 +20,76 @@ const DEFAULT_EXPERT: ExpertInfo = {
 
 export default function GeneratePage() {
   const supabase = createClient()
-  const [mode, setMode] = useState<Mode>('topics')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [stage, setStage] = useState<Stage>('discovery')
-  const [generating, setGenerating] = useState(false)
+  const [stage, setStage]                 = useState<Stage>('discovery')
+  const [generating, setGenerating]       = useState(false)
   const [generatingImages, setGeneratingImages] = useState(false)
-  const [slides, setSlides] = useState<Slide[]>([])
-  const [caption, setCaption] = useState('')
+  const [slides, setSlides]               = useState<Slide[]>([])
+  const [caption, setCaption]             = useState('')
   const [imageProgress, setImageProgress] = useState<Record<number, 'loading' | 'done' | 'error'>>({})
   const [selectedTopic, setSelectedTopic] = useState<string>('')
-  const [voiceActive, setVoiceActive] = useState(false)
-  const [customTopic, setCustomTopic] = useState('')
-  const [publishing, setPublishing] = useState(false)
-  const [publishedUrl, setPublishedUrl] = useState('')
-  const [expert, setExpert] = useState<ExpertInfo>(DEFAULT_EXPERT)
+  const [voiceActive, setVoiceActive]     = useState(false)
+  const [customTopic, setCustomTopic]     = useState('')
+  const [publishing, setPublishing]       = useState(false)
+  const [publishedUrl, setPublishedUrl]   = useState('')
+  const [expert, setExpert]               = useState<ExpertInfo>(DEFAULT_EXPERT)
+  const [niche, setNiche]                 = useState('seu nicho')
+  const [imageHeightPercent, setImageHeightPercent] = useState(45)
 
-  // Carrega expert do Supabase
+  // Carrega expert do Supabase (nome, handle, highlight, avatar, nicho)
   useEffect(() => {
     async function loadExpert() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data } = await supabase
+      const { data: exp } = await supabase
         .from('experts')
-        .select('display_name, handle, highlight_color')
+        .select('display_name, handle, highlight_color, niche, id')
         .eq('user_id', user.id)
         .single()
 
-      if (data) {
-        setExpert({
-          displayName: data.display_name || DEFAULT_EXPERT.displayName,
-          handle: data.handle || DEFAULT_EXPERT.handle,
-          highlightColor: data.highlight_color || DEFAULT_EXPERT.highlightColor,
-        })
+      if (!exp) return
+
+      setNiche(exp.niche || 'seu nicho')
+
+      // avatar_url: query separada com fallback (coluna pode não existir ainda na DB)
+      let avatarUrl: string | undefined
+      try {
+        const { data: expFull } = await supabase
+          .from('experts')
+          .select('avatar_url')
+          .eq('user_id', user.id)
+          .single()
+        avatarUrl = (expFull as any)?.avatar_url || undefined
+      } catch { /* coluna ainda não existe — ignorar */ }
+
+      // Fallback: primeira foto do bucket de referências
+      if (!avatarUrl && exp.id) {
+        const { data: photos } = await supabase
+          .from('expert_photos')
+          .select('storage_path')
+          .eq('expert_id', exp.id)
+          .order('order_index', { ascending: true })
+          .limit(1)
+
+        if (photos?.[0]?.storage_path) {
+          const { data: signed } = await supabase.storage
+            .from('expert-photos')
+            .createSignedUrl(photos[0].storage_path, 3600)
+          avatarUrl = signed?.signedUrl || undefined
+        }
       }
+
+      setExpert({
+        displayName:    exp.display_name || DEFAULT_EXPERT.displayName,
+        handle:         exp.handle       || DEFAULT_EXPERT.handle,
+        highlightColor: exp.highlight_color || DEFAULT_EXPERT.highlightColor,
+        avatarUrl,
+      })
     }
     loadExpert()
   }, [])
 
+  // ── Geração de conteúdo ──────────────────────────────────────────────────
   async function handleGenerate(topic: Topic, hook: string) {
     setSelectedTopic(topic.title)
     setGenerating(true)
@@ -174,81 +136,100 @@ export default function GeneratePage() {
   function handleVoice() {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) { alert('Seu navegador não suporta reconhecimento de voz.'); return }
-
     const recognition = new SpeechRecognition()
     recognition.lang = 'pt-BR'
     recognition.onstart = () => setVoiceActive(true)
-    recognition.onend = () => setVoiceActive(false)
+    recognition.onend   = () => setVoiceActive(false)
     recognition.onresult = (e: any) => {
       const transcript = e.results[0][0].transcript
       setCustomTopic(transcript)
-      setMode('search')
     }
     recognition.start()
   }
 
+  // ── Gera imagem + card de UM slide ──────────────────────────────────────
+  async function generateOneSlide(slide: Slide): Promise<void> {
+    if (!slide.imagePrompt) return
+
+    setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
+
+    try {
+      // Passo 1: Gera imagem via Gemini
+      const imageRes = await fetch('/api/generate/images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slideNum: slide.num, imagePrompt: slide.imagePrompt }),
+      })
+      const imageData = await imageRes.json()
+      if (imageData.error) throw new Error(imageData.error)
+
+      // Passo 2: Renderiza card completo via Playwright
+      const imageBase64 = imageData.dataUrl.replace(/^data:[^;]+;base64,/, '')
+      const cardRes = await fetch('/api/render/card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text:               slide.text,
+          imageBase64,
+          format:             'portrait',
+          showHeader:         true,
+          imageHeightPercent,
+        }),
+      })
+      const cardData = await cardRes.json()
+      if (cardData.error) throw new Error(cardData.error)
+
+      setSlides(prev => prev.map(s =>
+        s.num === slide.num
+          ? { ...s, imagePath: imageData.dataUrl, cardPath: `data:image/png;base64,${cardData.cardBase64}` }
+          : s
+      ))
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
+    } catch (err) {
+      console.error(`Erro slide ${slide.num}:`, err)
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'error' }))
+    }
+  }
+
+  // ── Gera imagens para todos os slides (sequencial) ───────────────────────
   async function handleGenerateImages() {
     setGeneratingImages(true)
-    const updatedSlides = [...slides]
-
     for (const slide of slides) {
-      if (!slide.imagePrompt) continue
-
-      // Marca como loading
-      setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
-
-      try {
-        const res = await fetch('/api/generate/images', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ slideNum: slide.num, imagePrompt: slide.imagePrompt }),
-        })
-        const data = await res.json()
-        if (data.error) throw new Error(data.error)
-
-        // Atualiza slide com a imagem gerada (dataUrl)
-        const idx = updatedSlides.findIndex(s => s.num === slide.num)
-        if (idx !== -1) {
-          updatedSlides[idx] = { ...updatedSlides[idx], imagePath: data.dataUrl }
-          setSlides([...updatedSlides])
-        }
-        setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
-      } catch (err) {
-        console.error(`Erro ao gerar imagem slide ${slide.num}:`, err)
-        setImageProgress(prev => ({ ...prev, [slide.num]: 'error' }))
-      }
+      await generateOneSlide(slide)
     }
-
     setGeneratingImages(false)
   }
 
+  // ── Regenera a imagem de um slide específico ─────────────────────────────
+  async function handleRegenerateSlide(slideNum: number) {
+    const slide = slides.find(s => s.num === slideNum)
+    if (!slide) return
+    await generateOneSlide(slide)
+  }
+
+  // ── Publicação ───────────────────────────────────────────────────────────
   async function handlePublish() {
-    const slidesWithImages = slides.filter(s => s.imagePath)
-    if (slidesWithImages.length === 0) {
+    const slidesToPublish = slides.filter(s => s.cardPath || s.imagePath)
+    if (slidesToPublish.length === 0) {
       alert('Gere as imagens primeiro antes de publicar.')
       return
     }
-    if (!caption) {
-      alert('Legenda não encontrada.')
-      return
-    }
+    if (!caption) { alert('Legenda não encontrada.'); return }
 
     setPublishing(true)
     try {
-      // 1. Salva imagens no disco e obtém URLs públicas
       const sessionId = `carousel-${Date.now()}`
       const saveRes = await fetch('/api/save-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          slides: slidesWithImages.map(s => ({ num: s.num, dataUrl: s.imagePath })),
+          slides: slidesToPublish.map(s => ({ num: s.num, dataUrl: s.cardPath || s.imagePath })),
           sessionId,
         }),
       })
       const saveData = await saveRes.json()
       if (saveData.error) throw new Error(saveData.error)
 
-      // 2. Publica no Instagram com URLs públicas
       const publishRes = await fetch('/api/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -266,19 +247,24 @@ export default function GeneratePage() {
 
   const imagesReady = slides.length > 0 && slides.every(s => imageProgress[s.num] === 'done')
 
-  // ── Tela de edição ─────────────────────────────────────────────────────────
+  // ── Tela de edição ───────────────────────────────────────────────────────
   if (stage === 'editing') {
     return (
       <div className="flex flex-col h-full">
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-zinc-800">
-          <Button variant="ghost" size="sm" className="text-zinc-400" onClick={() => setStage('discovery')}>
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-zinc-800 flex-shrink-0">
+          <Button
+            variant="ghost" size="sm"
+            className="text-zinc-400 hover:text-zinc-200"
+            onClick={() => setStage('discovery')}
+          >
             <ArrowLeft className="w-4 h-4 mr-1.5" /> Voltar
           </Button>
           <h1 className="text-sm font-medium text-zinc-300 flex-1 truncate">{selectedTopic}</h1>
 
           {publishedUrl ? (
             <a href={publishedUrl} target="_blank" rel="noopener noreferrer">
-              <Button size="sm" className="bg-green-600 hover:bg-green-500 text-white">
+              <Button size="sm" className="bg-green-600 hover:bg-green-500 text-white gap-1.5">
                 ✓ Ver no Instagram
               </Button>
             </a>
@@ -286,22 +272,23 @@ export default function GeneratePage() {
             <Button
               size="sm"
               className={cn(
-                'text-white',
-                imagesReady ? 'bg-violet-600 hover:bg-violet-500' : 'bg-zinc-700 cursor-not-allowed'
+                'gap-1.5 text-white',
+                imagesReady ? 'bg-violet-600 hover:bg-violet-500' : 'bg-zinc-700 opacity-50 cursor-not-allowed'
               )}
               onClick={handlePublish}
               disabled={!imagesReady || publishing}
             >
               {publishing ? (
-                <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Publicando...</>
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Publicando...</>
               ) : (
-                <><Send className="w-3.5 h-3.5 mr-1.5" /> Publicar no Instagram</>
+                <><Send className="w-3.5 h-3.5" /> Publicar no Instagram</>
               )}
             </Button>
           )}
         </div>
 
-        <div className="flex-1 p-6 overflow-y-auto">
+        {/* Editor — ocupa o restante da tela com scroll interno */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-5">
           <CarouselPreview
             slides={slides}
             caption={caption}
@@ -310,13 +297,16 @@ export default function GeneratePage() {
             onGenerateImages={handleGenerateImages}
             generatingImages={generatingImages}
             imageProgress={imageProgress}
+            imageHeightPercent={imageHeightPercent}
+            onImageHeightPercentChange={setImageHeightPercent}
+            onRegenerateSlide={handleRegenerateSlide}
           />
         </div>
       </div>
     )
   }
 
-  // ── Tela de geração em andamento ───────────────────────────────────────────
+  // ── Tela de geração em andamento ──────────────────────────────────────────
   if (stage === 'generating') {
     return (
       <div className="flex items-center justify-center h-full">
@@ -333,10 +323,9 @@ export default function GeneratePage() {
     )
   }
 
-  // ── Discovery ──────────────────────────────────────────────────────────────
+  // ── Discovery ─────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
-      {/* Header */}
+    <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-zinc-100">Gerar Carrossel</h1>
         <p className="text-sm text-zinc-500 mt-1">Escolha um tema viral ou escreva o seu próprio</p>
@@ -350,13 +339,16 @@ export default function GeneratePage() {
             onChange={e => setCustomTopic(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleGenerateFromCustom()}
             placeholder="Digite ou fale um tema..."
-            className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600 pr-10"
+            className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
           />
         </div>
         <Button
           variant="outline"
           size="icon"
-          className={cn('border-zinc-700', voiceActive ? 'bg-red-500/20 border-red-500 text-red-400' : 'text-zinc-400 hover:bg-zinc-800')}
+          className={cn(
+            'border-zinc-700',
+            voiceActive ? 'bg-red-500/20 border-red-500 text-red-400' : 'text-zinc-400 hover:bg-zinc-800'
+          )}
           onClick={handleVoice}
         >
           <Mic className="w-4 h-4" />
@@ -371,64 +363,8 @@ export default function GeneratePage() {
         </Button>
       </div>
 
-      {/* Mode tabs */}
-      <div className="flex items-center gap-1 p-1 bg-zinc-900 rounded-xl w-fit border border-zinc-800">
-        {([
-          { id: 'topics', label: '🔥 Trending no meu nicho', icon: TrendingUp },
-          { id: 'search', label: '🔍 Busca livre', icon: Search },
-          { id: 'explore', label: '🌐 Explorar', icon: Globe },
-        ] as const).map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setMode(id)}
-            className={cn(
-              'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-              mode === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Topic list */}
-      {mode === 'topics' && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-zinc-500">Atualizado agora · Nicho: Automações com IA</p>
-            <Badge variant="outline" className="text-xs border-zinc-700 text-zinc-500">5 temas</Badge>
-          </div>
-          {MOCK_TOPICS.map((topic, i) => (
-            <TopicCard key={topic.id} topic={topic} rank={i + 1} onSelect={handleGenerate} />
-          ))}
-        </div>
-      )}
-
-      {mode === 'search' && (
-        <div className="space-y-4">
-          <Input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Buscar tendências sobre qualquer assunto..."
-            className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-600"
-          />
-          <p className="text-sm text-zinc-500 text-center py-8">
-            Digite um assunto para buscar o que está viral agora
-          </p>
-        </div>
-      )}
-
-      {mode === 'explore' && (
-        <div className="grid grid-cols-4 gap-3">
-          {['💰 Finanças', '🤖 IA & Tech', '💪 Saúde', '📱 Marketing',
-            '🏠 Negócios', '🎓 Educação', '✈️ Lifestyle', '🔧 Produtividade'].map(cat => (
-            <button key={cat}
-              className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-600 text-sm text-zinc-400 hover:text-zinc-100 transition-colors text-left">
-              {cat}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Discovery — trending / busca / explorar com EXA */}
+      <TopicDiscovery niche={niche} onSelect={handleGenerate} />
     </div>
   )
 }

@@ -12,7 +12,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* --font-dm-sans disponível para os cards Frank */}
       <div className={`flex h-screen overflow-hidden ${dmSans.variable}`}>
         <Sidebar />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 min-w-0 overflow-y-auto flex flex-col">
           {children}
         </main>
       </div>

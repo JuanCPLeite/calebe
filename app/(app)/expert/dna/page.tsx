@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Save, Wand2, Plus, X, Sparkles } from 'lucide-react'
+import { Save, Wand2, Plus, X, Sparkles, Camera, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { JUAN_CARLOS_TEMPLATE } from '@/lib/expert-config'
 
@@ -38,11 +38,17 @@ function DnaForm() {
   const supabase = createClient()
   const searchParams = useSearchParams()
   const isOnboarding = searchParams.get('onboarding') === '1'
-  const [form, setForm] = useState<FormData>(EMPTY)
+
+  const [form, setForm]       = useState<FormData>(EMPTY)
   const [newRule, setNewRule] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [userId, setUserId] = useState<string | null>(null)
+  const [saving, setSaving]   = useState(false)
+  const [saved, setSaved]     = useState(false)
+  const [userId, setUserId]   = useState<string | null>(null)
+
+  // Avatar
+  const [avatarUrl, setAvatarUrl]         = useState<string | null>(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     async function load() {
@@ -58,18 +64,20 @@ function DnaForm() {
 
       if (expert) {
         setForm({
-          display_name: expert.display_name || '',
-          handle: expert.handle || '',
-          niche: expert.niche || '',
-          bio_short: expert.bio_short || '',
-          product_name: expert.product_name || '',
-          product_cta: expert.product_cta || '',
-          highlight_color: expert.highlight_color || '#9B59FF',
-          author_slide_template: expert.author_slide_template || '',
-          cta_final_template: expert.cta_final_template || '',
-          style_rules: expert.style_rules || [],
-          ig_account_id: expert.ig_account_id || '',
+          display_name:           expert.display_name || '',
+          handle:                 expert.handle || '',
+          niche:                  expert.niche || '',
+          bio_short:              expert.bio_short || '',
+          product_name:           expert.product_name || '',
+          product_cta:            expert.product_cta || '',
+          highlight_color:        expert.highlight_color || '#9B59FF',
+          author_slide_template:  expert.author_slide_template || '',
+          cta_final_template:     expert.cta_final_template || '',
+          style_rules:            expert.style_rules || [],
+          ig_account_id:          expert.ig_account_id || '',
         })
+        // avatar_url pode não existir ainda se migration não foi rodada
+        setAvatarUrl((expert as any).avatar_url || null)
       }
     }
     load()
@@ -77,18 +85,54 @@ function DnaForm() {
 
   function applyTemplate() {
     setForm({
-      display_name: JUAN_CARLOS_TEMPLATE.displayName,
-      handle: JUAN_CARLOS_TEMPLATE.handle,
-      niche: JUAN_CARLOS_TEMPLATE.niche,
-      bio_short: JUAN_CARLOS_TEMPLATE.bioShort,
-      product_name: JUAN_CARLOS_TEMPLATE.productName,
-      product_cta: JUAN_CARLOS_TEMPLATE.productCta,
-      highlight_color: JUAN_CARLOS_TEMPLATE.highlightColor,
-      author_slide_template: JUAN_CARLOS_TEMPLATE.authorSlideTemplate,
-      cta_final_template: JUAN_CARLOS_TEMPLATE.ctaFinalTemplate,
-      style_rules: JUAN_CARLOS_TEMPLATE.styleRules,
-      ig_account_id: JUAN_CARLOS_TEMPLATE.igAccountId,
+      display_name:           JUAN_CARLOS_TEMPLATE.displayName,
+      handle:                 JUAN_CARLOS_TEMPLATE.handle,
+      niche:                  JUAN_CARLOS_TEMPLATE.niche,
+      bio_short:              JUAN_CARLOS_TEMPLATE.bioShort,
+      product_name:           JUAN_CARLOS_TEMPLATE.productName,
+      product_cta:            JUAN_CARLOS_TEMPLATE.productCta,
+      highlight_color:        JUAN_CARLOS_TEMPLATE.highlightColor,
+      author_slide_template:  JUAN_CARLOS_TEMPLATE.authorSlideTemplate,
+      cta_final_template:     JUAN_CARLOS_TEMPLATE.ctaFinalTemplate,
+      style_rules:            JUAN_CARLOS_TEMPLATE.styleRules,
+      ig_account_id:          JUAN_CARLOS_TEMPLATE.igAccountId,
     })
+  }
+
+  async function handleAvatarUpload(file: File) {
+    if (!userId) return
+    setUploadingAvatar(true)
+
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      const storagePath = `${userId}/avatar.${ext}`
+
+      // Remove avatar anterior se existir
+      await supabase.storage.from('expert-photos').remove([storagePath])
+
+      const { error: uploadError } = await supabase.storage
+        .from('expert-photos')
+        .upload(storagePath, file, { upsert: true })
+
+      if (uploadError) throw uploadError
+
+      const { data: signed } = await supabase.storage
+        .from('expert-photos')
+        .createSignedUrl(storagePath, 60 * 60 * 24 * 365)
+
+      const url = signed?.signedUrl || ''
+
+      // Salva URL no experts
+      await supabase
+        .from('experts')
+        .upsert({ avatar_url: url, user_id: userId }, { onConflict: 'user_id' })
+
+      setAvatarUrl(url)
+    } catch (err) {
+      console.error('Erro ao enviar avatar:', err)
+    } finally {
+      setUploadingAvatar(false)
+    }
   }
 
   async function handleSave() {
@@ -144,6 +188,11 @@ function DnaForm() {
     </div>
   )
 
+  // Cor de preview para o avatar placeholder
+  const hl = form.highlight_color || '#9B59FF'
+  const initials = form.display_name
+    .split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?'
+
   return (
     <div className="p-8 max-w-2xl">
       {isOnboarding && (
@@ -152,12 +201,13 @@ function DnaForm() {
           <div>
             <p className="text-sm font-medium text-violet-200">Configure seu perfil para começar</p>
             <p className="text-xs text-violet-400 mt-0.5">
-              Clique em <strong>Usar template</strong> para pré-preencher com um exemplo de expert de IA,
+              Clique em <strong>Usar template</strong> para pré-preencher com um exemplo,
               depois personalize com seus dados e salve.
             </p>
           </div>
         </div>
       )}
+
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">DNA Expert</h1>
@@ -172,6 +222,65 @@ function DnaForm() {
         </button>
       </div>
 
+      {/* ── Avatar ─────────────────────────────────────────────────── */}
+      <div className="mb-8">
+        <label className="block text-xs text-zinc-400 mb-3">Foto de perfil (avatar)</label>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => avatarInputRef.current?.click()}
+            disabled={uploadingAvatar}
+            className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-dashed border-zinc-600 hover:border-violet-500 transition-colors group flex-shrink-0"
+            style={{ background: hl + '22' }}
+          >
+            {uploadingAvatar ? (
+              <div className="flex items-center justify-center w-full h-full">
+                <Loader2 className="w-5 h-5 text-violet-400 animate-spin" />
+              </div>
+            ) : avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarUrl}
+                alt="Avatar"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center w-full h-full gap-1">
+                <span className="text-xl font-bold" style={{ color: hl }}>{initials}</span>
+              </div>
+            )}
+            {/* Hover overlay */}
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <Camera className="w-5 h-5 text-white" />
+            </div>
+          </button>
+
+          <div className="text-xs text-zinc-500 leading-relaxed">
+            <p>Esta foto aparece no cabeçalho de cada slide.</p>
+            <p className="mt-1">Use uma foto quadrada com rosto visível.</p>
+            <button
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="mt-2 text-violet-400 hover:text-violet-300 underline underline-offset-2 disabled:opacity-50"
+            >
+              {avatarUrl ? 'Trocar foto' : 'Fazer upload'}
+            </button>
+          </div>
+        </div>
+
+        <input
+          ref={avatarInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={e => {
+            const file = e.target.files?.[0]
+            if (file) handleAvatarUpload(file)
+            e.target.value = ''
+          }}
+        />
+      </div>
+
+      {/* ── Campos do formulário ─────────────────────────────────── */}
       <div className="space-y-5">
         <div className="grid grid-cols-2 gap-4">
           {field('Nome', 'display_name', 'Juan Carlos')}
@@ -248,7 +357,7 @@ function DnaForm() {
         className="mt-8 flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-lg transition-colors text-sm"
       >
         <Save className="w-4 h-4" />
-        {saved ? 'Salvo!' : saving ? 'Salvando...' : 'Salvar DNA'}
+        {saved ? '✓ Salvo!' : saving ? 'Salvando...' : 'Salvar DNA'}
       </button>
     </div>
   )

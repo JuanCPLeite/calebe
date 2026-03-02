@@ -19,6 +19,8 @@ export interface FrankCardProps {
   showHeader?: boolean
   /** 'portrait' (4:5) | 'square' (1:1) — afeta só o preview */
   format?: 'portrait' | 'square'
+  /** Percentual da altura do card ocupado pela imagem (10–75). Default 45. */
+  imageHeightPercent?: number
 }
 
 /**
@@ -76,6 +78,7 @@ export function FrankCard({
   highlightColor,
   showHeader = true,
   format = 'portrait',
+  imageHeightPercent = 45,
 }: FrankCardProps) {
   const fontSize = useMemo(() => autoFontSize(text), [text])
   const content = useMemo(() => parseTextToJSX(text, highlightColor), [text, highlightColor])
@@ -156,11 +159,12 @@ export function FrankCard({
 
       {/* ── Corpo de texto ──────────────────────── */}
       <div style={{
-        flex: imagePath ? '0 1 auto' : '1',
+        flex: '1',
         padding: '12px 20px',
         overflow: 'hidden',
         display: 'flex',
         alignItems: 'flex-start',
+        minHeight: 0,
       }}>
         <p style={{
           fontSize: `${fontSize}px`,
@@ -177,12 +181,13 @@ export function FrankCard({
       {/* ── Imagem inferior ──────────────────────── */}
       {imagePath && (
         <div style={{
-          flex: '1 0 80px',
+          flexBasis: `${imageHeightPercent}%`,
+          flexShrink: 0,
+          flexGrow: 0,
           margin: '0 20px 14px 20px',
           overflow: 'hidden',
           borderRadius: '10px',
           background: '#f0f0f0',
-          minHeight: '80px',
         }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

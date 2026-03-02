@@ -14,6 +14,7 @@ create table if not exists experts (
   product_name text default '',
   product_cta text default '',
   highlight_color text default '#9B59FF',
+  avatar_url text default '',
   author_slide_template text default '',
   cta_final_template text default '',
   style_rules text[] default '{}',
@@ -100,6 +101,12 @@ insert into storage.buckets (id, name, public)
 values ('carousel-images', 'carousel-images', false)
 on conflict (id) do nothing;
 
+-- ============================================================
+-- Migration: adicionar avatar_url se tabela já existe
+-- ============================================================
+alter table if exists experts add column if not exists avatar_url text default '';
+
+-- ============================================================
 -- Policies do Storage: expert-photos
 create policy "upload own expert photos" on storage.objects
   for insert to authenticated
