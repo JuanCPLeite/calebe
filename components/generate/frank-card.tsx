@@ -1,13 +1,18 @@
 'use client'
 
 /**
- * FrankCard — Replica o visual do tweet-card-renderer.js
+ * FrankCard — Preview pixel-perfect do card Instagram
  *
- * Fundo branco · DM Sans · Avatar circular · Texto grande · Imagem na base
- * Estilo confirmado em produção no AIOS (T03-56-13)
+ * Renderiza internamente a 1080×1350px (portrait real) usando as mesmas
+ * proporções que card-renderer.ts, depois aplica CSS scale para caber
+ * no layout. O que você vê aqui é exatamente o que vai ser gerado.
  */
 
 import { useMemo } from 'react'
+
+// ─── Dimensões reais do Instagram Portrait ─────────────────────────────────────
+const CARD_W = 1080
+const CARD_H = 1350
 
 export interface FrankCardProps {
   text: string
@@ -17,20 +22,20 @@ export interface FrankCardProps {
   avatarUrl?: string
   highlightColor: string
   showHeader?: boolean
-  /** 'portrait' (4:5) | 'square' (1:1) — afeta só o preview */
+  /** 'portrait' (4:5) | 'square' (1:1) */
   format?: 'portrait' | 'square'
   /** Percentual da altura do card ocupado pela imagem (10–75). Default 45. */
   imageHeightPercent?: number
+  /** Largura de exibição em px — o card é renderizado em 1080px e escalado. Default: 380 */
+  displayWidth?: number
 }
 
 /**
- * Calcula font size com a mesma lógica do tweet-card-renderer.js
- * Calibrado para portrait 1080×1350 com padding 80px.
+ * Idêntico ao autoFontSize de card-renderer.ts — calibrado para 1080px.
  */
 function autoFontSize(text: string): number {
   const len = text.length
   const lineCount = text.split('\n').filter(l => l.trim().length > 0).length
-
   if (lineCount > 16 || len > 650) return 30
   if (lineCount > 12 || len > 450) return 34
   if (lineCount > 8  || len > 340) return 38
@@ -41,15 +46,13 @@ function autoFontSize(text: string): number {
 
 /**
  * Converte sintaxe do AIOS para JSX:
- *   {texto}   → <span color=highlight bold>
- *   *texto*   → <strong>
- *   _texto_   → <em>
- *   \n        → <br/>
+ *   {texto}  → destaque na cor do expert
+ *   *texto*  → negrito
+ *   _texto_  → itálico
+ *   \n       → <br/>
  */
 function parseTextToJSX(text: string, highlightColor: string): React.ReactNode[] {
-  // Tokeniza por padrões na ordem correta
   const parts = text.split(/(\{[^}]+\}|\*[^*]+\*|_[^_]+_|\n)/g)
-
   return parts.map((part, i) => {
     if (part === '\n') return <br key={i} />
     if (part.startsWith('{') && part.endsWith('}')) {
@@ -79,14 +82,27 @@ export function FrankCard({
   showHeader = true,
   format = 'portrait',
   imageHeightPercent = 45,
+  displayWidth = 380,
 }: FrankCardProps) {
-  const fontSize = useMemo(() => autoFontSize(text), [text])
-  const content = useMemo(() => parseTextToJSX(text, highlightColor), [text, highlightColor])
+  const cardW = CARD_W
+  const cardH = format === 'square' ? CARD_W : CARD_H
 
-  // Aspect ratio: portrait = 4/5, square = 1/1
-  const aspectRatio = format === 'portrait' ? '4 / 5' : '1 / 1'
+  // Fator de escala: do tamanho real para o display
+  const scale = displayWidth / cardW
+  const displayHeight = Math.round(cardH * scale)
 
-  // Initials fallback para o avatar
+  // ── Proporções idênticas ao card-renderer.ts ───────────────────────────────
+  const padH        = Math.round(cardW * 0.074)          // 80px
+  const padV        = Math.round(cardH * 0.048)          // 65px
+  const avatarSize  = Math.round(cardW * 0.078)          // 84px
+  const bottomPad   = Math.round(cardW * 0.055)          // 59px
+  const imgHeightPx = imagePath ? Math.round(cardH * imageHeightPercent / 100) : 0
+  const imgRadius   = Math.round(cardW * 0.022)          // 24px
+
+  const fontSize   = useMemo(() => autoFontSize(text), [text])
+  const lineHeight = fontSize <= 30 ? 1.2 : fontSize <= 36 ? 1.25 : 1.3
+  const content    = useMemo(() => parseTextToJSX(text, highlightColor), [text, highlightColor])
+
   const initials = authorName
     .split(' ')
     .map(w => w[0])
@@ -94,109 +110,135 @@ export function FrankCard({
     .join('')
     .toUpperCase()
 
-  // Linha-height proporcional
-  const lineHeight = fontSize <= 30 ? 1.2 : fontSize <= 36 ? 1.25 : 1.3
-
   return (
-    <div
-      style={{
-        aspectRatio,
-        background: '#ffffff',
-        fontFamily: "var(--font-dm-sans, 'DM Sans'), 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        width: '100%',
-        borderRadius: '12px',
-      }}
-    >
-      {/* ── Header ──────────────────────────────── */}
-      {showHeader && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          padding: '14px 20px 8px 20px',
-          flexShrink: 0,
-        }}>
-          {/* Avatar */}
-          <div style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '50%',
-            overflow: 'hidden',
-            flexShrink: 0,
-            background: highlightColor,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            {avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={avatarUrl}
-                alt={authorName}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            ) : (
-              <span style={{ color: '#fff', fontWeight: 700, fontSize: '16px' }}>
-                {initials}
-              </span>
-            )}
-          </div>
-
-          {/* Nome + handle */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontWeight: 700, fontSize: '15px', color: '#1a1a1a', lineHeight: 1.2 }}>
-              {authorName}
-            </span>
-            <span style={{ fontWeight: 400, fontSize: '12px', color: '#888888', lineHeight: 1.2 }}>
-              {authorHandle}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* ── Corpo de texto ──────────────────────── */}
+    // Container externo: reserva o espaço exato no layout
+    <div style={{
+      width:    displayWidth,
+      height:   displayHeight,
+      position: 'relative',
+      overflow: 'hidden',
+      borderRadius: 12,
+      flexShrink: 0,
+    }}>
+      {/* Card interno: tamanho real (1080×1350), escalado via transform */}
       <div style={{
-        flex: '1',
-        padding: '12px 20px',
-        overflow: 'hidden',
-        display: 'flex',
-        alignItems: 'flex-start',
-        minHeight: 0,
+        width:           cardW,
+        height:          cardH,
+        position:        'absolute',
+        top:             0,
+        left:            0,
+        transform:       `scale(${scale})`,
+        transformOrigin: 'top left',
+        background:      '#ffffff',
+        fontFamily:      "'DM Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+        display:         'flex',
+        flexDirection:   'column',
+        paddingBottom:   bottomPad,
+        overflow:        'hidden',
       }}>
-        <p style={{
-          fontSize: `${fontSize}px`,
-          lineHeight,
-          color: '#1a1a1a',
-          fontWeight: 400,
-          wordBreak: 'break-word',
-          margin: 0,
-        }}>
-          {content}
-        </p>
-      </div>
 
-      {/* ── Imagem inferior ──────────────────────── */}
-      {imagePath && (
+        {/* ── Header ───────────────────────────────────────────────────── */}
+        {showHeader && (
+          <div style={{
+            display:    'flex',
+            alignItems: 'center',
+            gap:        Math.round(avatarSize * 0.25),
+            padding:    `${Math.round(padV * 0.80)}px ${padH}px ${Math.round(padV * 0.25)}px ${padH}px`,
+            flexShrink: 0,
+          }}>
+            {/* Avatar */}
+            <div style={{
+              width:           avatarSize,
+              height:          avatarSize,
+              borderRadius:    '50%',
+              overflow:        'hidden',
+              flexShrink:      0,
+              background:      highlightColor,
+              display:         'flex',
+              alignItems:      'center',
+              justifyContent:  'center',
+            }}>
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarUrl}
+                  alt={authorName}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              ) : (
+                <span style={{
+                  color:      '#fff',
+                  fontWeight: 700,
+                  fontSize:   Math.round(avatarSize * 0.5),
+                }}>
+                  {initials}
+                </span>
+              )}
+            </div>
+
+            {/* Nome + handle */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: Math.round(avatarSize * 0.06) }}>
+              <span style={{
+                fontWeight: 700,
+                fontSize:   Math.round(avatarSize * 0.38),
+                color:      '#1a1a1a',
+                lineHeight: 1.2,
+              }}>
+                {authorName}
+              </span>
+              <span style={{
+                fontWeight: 400,
+                fontSize:   Math.round(avatarSize * 0.30),
+                color:      '#888888',
+                lineHeight: 1.2,
+              }}>
+                {authorHandle}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Corpo do texto ───────────────────────────────────────────── */}
         <div style={{
-          flexBasis: `${imageHeightPercent}%`,
-          flexShrink: 0,
-          flexGrow: 0,
-          margin: '0 20px 14px 20px',
-          overflow: 'hidden',
-          borderRadius: '10px',
-          background: '#f0f0f0',
+          flex:       1,
+          minHeight:  0,
+          padding:    `${Math.round(padV * 0.85)}px ${padH}px`,
+          overflow:   'hidden',
+          display:    'flex',
+          alignItems: 'flex-start',
         }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imagePath}
-            alt=""
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
+          <p style={{
+            fontSize,
+            lineHeight,
+            color:      '#1a1a1a',
+            fontWeight: 400,
+            wordBreak:  'break-word',
+            margin:     0,
+          }}>
+            {content}
+          </p>
         </div>
-      )}
+
+        {/* ── Imagem inferior ──────────────────────────────────────────── */}
+        {imagePath && (
+          <div style={{
+            flexBasis:    imgHeightPx,
+            flexShrink:   0,
+            flexGrow:     0,
+            margin:       `0 ${padH}px ${Math.round(padV * 0.4)}px ${padH}px`,
+            overflow:     'hidden',
+            borderRadius: imgRadius,
+            background:   '#f0f0f0',
+          }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imagePath}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

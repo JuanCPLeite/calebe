@@ -183,7 +183,7 @@ export function CarouselPreview({
       </div>
 
       {/* ── Card preview ─────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 flex flex-col gap-3" style={{ width: '380px' }}>
+      <div className="flex-shrink-0 flex flex-col gap-3" style={{ width: '420px' }}>
 
         {/* Slide header: num / type / nav */}
         <div className="flex items-center justify-between">
@@ -221,13 +221,13 @@ export function CarouselPreview({
         </div>
 
         {/* Card — exibe PNG renderizado ou FrankCard React */}
-        <div className="relative shadow-xl rounded-xl overflow-hidden" style={{ width: '380px' }}>
+        <div className="relative shadow-xl rounded-xl overflow-hidden" style={{ width: '420px' }}>
           {slide.cardPath ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={slide.cardPath}
               alt={`Slide ${slide.num}`}
-              style={{ width: '100%', display: 'block', borderRadius: '12px' }}
+              style={{ width: '420px', height: Math.round(420 * 1350 / 1080), display: 'block', borderRadius: '12px' }}
             />
           ) : (
             <FrankCard
@@ -239,6 +239,7 @@ export function CarouselPreview({
               highlightColor={expert.highlightColor}
               imageHeightPercent={imageHeightPercent}
               format="portrait"
+              displayWidth={420}
             />
           )}
 
