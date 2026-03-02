@@ -38,13 +38,16 @@ function buildQuery(
   category?: string,
 ): string {
   if (mode === 'search' && query) {
-    return `${query} Instagram carrossel viral tendência conteúdo`
+    // Busca livre: foca exatamente no que o usuário digitou
+    return `${query} tendências 2026 conteúdo Instagram`
   }
   if (mode === 'explore' && category) {
+    // Explorar: foca na categoria selecionada
     const cat = category.replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\s]+/u, '').trim()
-    return `${cat} negócios Instagram viral tendência 2025 2026`
+    return `${cat} tendências 2026 novidades Instagram`
   }
-  return `${niche} Instagram carrossel viral tendência conteúdo educacional 2026`
+  // Trending: usa o nicho do expert
+  return `${niche} tendências 2026 Instagram conteúdo viral`
 }
 
 /** Transforma um resultado do EXA em Topic */
@@ -95,16 +98,17 @@ function exaToTopic(result: ExaResult, index: number, niche: string): Topic {
 
 async function searchWithClaude(
   searchQuery: string,
-  niche: string,
   limit: number,
   anthropicKey: string,
 ): Promise<Topic[]> {
   const client = new Anthropic({ apiKey: anthropicKey })
 
+  console.log('[topics/claude] iniciando busca:', searchQuery)
+
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-sonnet-4-6',
     max_tokens: 2048,
-    tools: [{ type: 'web_search_20260209', name: 'web_search' }] as any,
+    tools: [{ type: 'web_search_20250305', name: 'web_search' }] as any,
     messages: [{
       role: 'user',
       content: `Pesquise na web e encontre ${limit} temas/notícias recentes sobre: "${searchQuery}"
@@ -117,7 +121,7 @@ Após pesquisar, responda SOMENTE com JSON válido (sem markdown, sem explicaç�
       "id": "cs-1",
       "title": "título conciso do tema (máx 70 chars)",
       "viralScore": 78,
-      "hook": "frase de gancho para carrossel Instagram — direto e provocativo",
+      "hook": "frase de gancho para carrossel Instagram — direto e provocativo (em português)",
       "gain": "o que o leitor vai aprender ou ganhar com esse conteúdo",
       "angle": "Tendência urgente",
       "growth": "+230%",
@@ -128,22 +132,32 @@ Após pesquisar, responda SOMENTE com JSON válido (sem markdown, sem explicaç�
 }
 
 Regras:
+- Mantenha o foco EXATAMENTE no tema pesquisado: "${searchQuery}"
 - viralScore: 15–99 (quanto mais recente/trending, mais alto)
 - angle deve ser: "Tendência urgente", "Oportunidade", "Educacional" ou "Análise"
-- hook deve ser em português, direto e acionável
-- Retorne exatamente ${limit} tópicos
-- Foque em conteúdo relevante para criadores de conteúdo no nicho: ${niche}`,
+- hook e gain sempre em português brasileiro
+- Retorne exatamente ${limit} tópicos sobre esse tema específico`,
     }],
   })
+
+  console.log('[topics/claude] stop_reason:', response.stop_reason, '| blocks:', response.content.map(b => b.type).join(', '))
 
   // Com tools server-side, o loop acontece internamente no servidor da Anthropic.
   // O último TextBlock é a resposta final após todas as buscas.
   const textBlocks = response.content.filter(b => b.type === 'text')
   const lastText = textBlocks[textBlocks.length - 1]
-  if (!lastText || lastText.type !== 'text') return []
+  if (!lastText || lastText.type !== 'text') {
+    console.warn('[topics/claude] nenhum text block na resposta')
+    return []
+  }
+
+  console.log('[topics/claude] texto recebido (200 chars):', lastText.text.slice(0, 200))
 
   const jsonMatch = lastText.text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) return []
+  if (!jsonMatch) {
+    console.warn('[topics/claude] JSON não encontrado no texto')
+    return []
+  }
 
   const parsed = JSON.parse(jsonMatch[0])
   return ((parsed.topics || []) as Topic[]).slice(0, limit)
@@ -276,6 +290,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    console.log('[topics] user:', user?.id ?? 'null', '| exaKey:', !!exaKey, '| anthropicKey:', !!anthropicKey)
+
     // ── 2. EXA Search (melhor para paginação e filtros de data) ────────────
     if (exaKey) {
       try {
@@ -291,12 +307,12 @@ export async function POST(req: NextRequest) {
     // ── 3. Claude web_search nativo (usa chave Anthropic — já configurada) ─
     if (anthropicKey) {
       try {
-        const topics = await searchWithClaude(searchQuery, niche, limit, anthropicKey)
+        const topics = await searchWithClaude(searchQuery, limit, anthropicKey)
         if (topics.length > 0) {
           return NextResponse.json({ topics, hasMore: false, source: 'claude' })
         }
       } catch (err: any) {
-        console.warn('[topics/claude] falhou, usando mock:', err.message)
+        console.warn('[topics/claude] falhou:', err.message, err.status ?? '')
       }
     }
 
