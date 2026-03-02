@@ -211,24 +211,65 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
         <span className="text-xs text-zinc-600 ml-1">{DATE_LABELS[dateFilter]}</span>
       </div>
 
-      {/* Tabs de modo */}
-      <div className="flex items-center gap-1 p-1 bg-zinc-900 rounded-xl w-fit border border-zinc-800">
-        {([
-          { id: 'trending' as Mode, icon: TrendingUp, label: '🔥 Trending no meu nicho' },
-          { id: 'search'   as Mode, icon: Search,     label: '🔍 Busca livre' },
-          { id: 'explore'  as Mode, icon: Globe,      label: '🌐 Explorar' },
-        ]).map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => handleTabChange(id)}
-            className={cn(
-              'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-              mode === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+      {/* Tabs de modo + controles globais */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1 p-1 bg-zinc-900 rounded-xl border border-zinc-800">
+          {([
+            { id: 'trending' as Mode, icon: TrendingUp, label: '🔥 Trending no meu nicho' },
+            { id: 'search'   as Mode, icon: Search,     label: '🔍 Busca livre' },
+            { id: 'explore'  as Mode, icon: Globe,      label: '🌐 Explorar' },
+          ]).map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => handleTabChange(id)}
+              className={cn(
+                'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                mode === id ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Quantidade + Atualizar — visíveis em todos os modos */}
+        <div className="flex items-center gap-2">
+          <div className="relative" ref={limitMenuRef}>
+            <button
+              onClick={() => setShowLimitMenu(v => !v)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 transition-colors bg-zinc-900"
+            >
+              Mostrar {limit}
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showLimitMenu && (
+              <div className="absolute right-0 top-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-20 py-1 min-w-[100px]">
+                {LIMIT_OPTIONS.map(opt => (
+                  <button
+                    key={opt}
+                    onClick={() => handleLimitChange(opt)}
+                    className={cn(
+                      'w-full text-left px-3 py-1.5 text-xs transition-colors',
+                      limit === opt
+                        ? 'text-violet-400 bg-violet-900/30'
+                        : 'text-zinc-300 hover:bg-zinc-700'
+                    )}
+                  >
+                    {opt} temas
+                  </button>
+                ))}
+              </div>
             )}
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-zinc-700 text-zinc-400 hover:border-violet-500 hover:text-violet-300 transition-colors bg-zinc-900 disabled:opacity-50"
           >
-            {label}
+            <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
+            Atualizar
           </button>
-        ))}
+        </div>
       </div>
 
       {/* Indicador de fonte */}
@@ -276,52 +317,10 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
       {/* ── TRENDING ──────────────────────────────────────────── */}
       {mode === 'trending' && (
         <div className="space-y-3">
-          {/* Cabeçalho com controles */}
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-zinc-500">
-              Trending · <span className="text-zinc-300">{niche}</span>
-              {topics.length > 0 && <span> · {topics.length} temas</span>}
-            </p>
-            <div className="flex items-center gap-2">
-              {/* Quantos resultados */}
-              <div className="relative" ref={limitMenuRef}>
-                <button
-                  onClick={() => setShowLimitMenu(v => !v)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 transition-colors bg-zinc-900"
-                >
-                  Mostrar {limit}
-                  <ChevronDown className="w-3 h-3" />
-                </button>
-                {showLimitMenu && (
-                  <div className="absolute right-0 top-full mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-20 py-1 min-w-[100px]">
-                    {LIMIT_OPTIONS.map(opt => (
-                      <button
-                        key={opt}
-                        onClick={() => handleLimitChange(opt)}
-                        className={cn(
-                          'w-full text-left px-3 py-1.5 text-xs transition-colors',
-                          limit === opt
-                            ? 'text-violet-400 bg-violet-900/30'
-                            : 'text-zinc-300 hover:bg-zinc-700'
-                        )}
-                      >
-                        {opt} temas
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {/* Atualizar */}
-              <button
-                onClick={handleRefresh}
-                disabled={loading}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-zinc-700 text-zinc-400 hover:border-violet-500 hover:text-violet-300 transition-colors bg-zinc-900 disabled:opacity-50"
-              >
-                <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
-                Atualizar
-              </button>
-            </div>
-          </div>
+          <p className="text-xs text-zinc-500">
+            Trending · <span className="text-zinc-300">{niche}</span>
+            {topics.length > 0 && <span> · {topics.length} temas</span>}
+          </p>
 
           <TopicList
             topics={topics}
@@ -394,26 +393,16 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
           {/* Resultados da categoria selecionada */}
           {activeCategory && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-zinc-500">
-                    {activeCategory.label}
-                    {topics.length > 0 && <span> · {topics.length} temas</span>}
-                  </span>
-                  <button
-                    onClick={() => { setActiveCategory(null); setTopics([]) }}
-                    className="text-zinc-600 hover:text-zinc-400 transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500">
+                  {activeCategory.label}
+                  {topics.length > 0 && <span> · {topics.length} temas</span>}
+                </span>
                 <button
-                  onClick={handleRefresh}
-                  disabled={loading}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-zinc-700 text-zinc-400 hover:border-violet-500 hover:text-violet-300 transition-colors bg-zinc-900 disabled:opacity-50"
+                  onClick={() => { setActiveCategory(null); setTopics([]) }}
+                  className="text-zinc-600 hover:text-zinc-400 transition-colors"
                 >
-                  <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
-                  Atualizar
+                  <X className="w-3 h-3" />
                 </button>
               </div>
 

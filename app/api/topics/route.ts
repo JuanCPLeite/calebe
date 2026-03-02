@@ -103,14 +103,17 @@ async function generateWithClaude(
 ): Promise<Topic[]> {
   const client = new Anthropic({ apiKey: anthropicKey })
 
+  // Extrai o tema principal da searchQuery (remove sufixo "tendências 2026...")
+  const tema = searchQuery.split(' tendências')[0].split(' novidades')[0].trim()
+
   const response = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
+    max_tokens: 2048,
     messages: [{
       role: 'user',
       content: `Você é um especialista em conteúdo viral para Instagram no Brasil.
 
-Gere ${limit} ideias de tópicos para carrosséis do Instagram sobre: "${searchQuery}"
+Gere ${limit} ideias de tópicos para carrosséis do Instagram sobre: "${tema}"
 
 Responda SOMENTE com JSON válido, sem markdown, sem texto extra:
 
@@ -118,9 +121,9 @@ Responda SOMENTE com JSON válido, sem markdown, sem texto extra:
   "topics": [
     {
       "id": "t1",
-      "title": "título direto e específico (máx 70 chars)",
+      "title": "título direto e específico sobre ${tema} (máx 70 chars)",
       "viralScore": 78,
-      "hook": "frase de abertura impactante para o slide 1 — direto, em português",
+      "hook": "frase de abertura impactante sobre ${tema} — direto, em português",
       "gain": "o que o seguidor vai aprender ou ganhar com esse carrossel",
       "angle": "Tendência urgente",
       "growth": "+230%",
@@ -130,8 +133,9 @@ Responda SOMENTE com JSON válido, sem markdown, sem texto extra:
   ]
 }
 
-Regras:
-- Foque EXATAMENTE no tema: "${searchQuery}"
+Regras OBRIGATÓRIAS:
+- Todos os tópicos devem ser especificamente sobre: "${tema}"
+- NÃO gere tópicos sobre outros assuntos além de "${tema}"
 - Tópicos variados e com ângulos diferentes entre si
 - viralScore: 15–99 baseado no potencial de engajamento
 - angle: "Tendência urgente" | "Oportunidade" | "Educacional" | "Análise"
@@ -141,13 +145,24 @@ Regras:
   })
 
   const textBlock = response.content.find(b => b.type === 'text')
-  if (!textBlock || textBlock.type !== 'text') return []
+  if (!textBlock || textBlock.type !== 'text') {
+    console.warn('[topics/claude] sem bloco de texto na resposta')
+    return []
+  }
 
   const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) return []
+  if (!jsonMatch) {
+    console.warn('[topics/claude] JSON não encontrado na resposta:', textBlock.text.slice(0, 200))
+    return []
+  }
 
-  const parsed = JSON.parse(jsonMatch[0])
-  return ((parsed.topics || []) as Topic[]).slice(0, limit)
+  try {
+    const parsed = JSON.parse(jsonMatch[0])
+    return ((parsed.topics || []) as Topic[]).slice(0, limit)
+  } catch (e) {
+    console.warn('[topics/claude] falha ao parsear JSON:', e)
+    return []
+  }
 }
 
 // ─── EXA Search ──────────────────────────────────────────────────────────────
@@ -302,9 +317,29 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 4. Mock fallback ────────────────────────────────────────────────────
-    const sliced = MOCK_TOPICS.slice(offset, offset + limit)
+    // Se é busca ou explorar (tem tema específico), gera mock temático
+    const tema = (query || category || niche || 'negócios')
+      .replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\s]+/u, '')
+      .split(' tendências')[0]
+      .split(' novidades')[0]
+      .trim()
+    const isTrending = mode === 'trending'
+    const mockTopics: Topic[] = isTrending
+      ? MOCK_TOPICS.slice(offset, offset + limit)
+      : Array.from({ length: Math.min(limit, 5) }, (_, i) => ({
+          id: `mock-${tema}-${i}`,
+          title: `${tema}: ideia ${i + 1} (configure uma chave API para resultados reais)`,
+          viralScore: 40 + i * 5,
+          growth: `+${80 + i * 20}%`,
+          postsToday: 30 + i * 15,
+          avgEngagement: '2.5%',
+          hook: `Configure sua chave Anthropic ou EXA para ver tópicos reais sobre ${tema}.`,
+          gain: `Com a chave configurada, você vai ver tópicos de alta performance para ${tema}.`,
+          angle: 'Exemplo',
+        }))
+
     return NextResponse.json({
-      topics: sliced,
+      topics: mockTopics,
       hasMore: false,
       noKey: !exaKey && !anthropicKey,
       source: 'mock',
