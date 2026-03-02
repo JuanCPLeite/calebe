@@ -243,7 +243,7 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
           {source === 'claude' && (
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs bg-violet-900/40 border border-violet-700/50 text-violet-300">
               <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
-              Claude web_search
+              Claude AI
             </span>
           )}
           {source === 'mock' && (
