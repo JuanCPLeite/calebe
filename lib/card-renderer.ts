@@ -36,6 +36,8 @@ export interface CardRenderOpts {
   showHeader?: boolean
   /** Percentual da altura do card ocupado pela imagem (10–75). Default 45. */
   imageHeightPercent?: number
+  /** Posição da imagem no card. Default 'bottom'. */
+  imagePosition?: 'top' | 'bottom'
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -88,6 +90,7 @@ export function buildCardHTML(opts: CardRenderOpts): string {
     format        = 'portrait',
     showHeader    = true,
     imageHeightPercent = 45,
+    imagePosition = 'bottom',
   } = opts
 
   const { width, height } = FORMATS[format] ?? FORMATS.portrait
@@ -252,11 +255,13 @@ export function buildCardHTML(opts: CardRenderOpts): string {
     </div>
   </div>` : ''}
 
+  ${imagePosition === 'top' ? imageBlockHTML : ''}
+
   <div class="card-body">
     <div class="card-text">${parseText(text)}</div>
   </div>
 
-  ${imageBlockHTML}
+  ${imagePosition === 'bottom' ? imageBlockHTML : ''}
 
 </body>
 </html>`

@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
       format = 'portrait',
       showHeader = true,
       imageHeightPercent,
+      imagePosition = 'bottom',
     } = body
 
     // Dados do expert — busca do DB se autenticado
@@ -87,6 +88,7 @@ export async function POST(req: NextRequest) {
       format: format as 'portrait' | 'square' | 'story',
       showHeader,
       imageHeightPercent: typeof imageHeightPercent === 'number' ? imageHeightPercent : undefined,
+      imagePosition: imagePosition as 'top' | 'bottom',
     })
 
     const cardBase64 = pngBuffer.toString('base64')

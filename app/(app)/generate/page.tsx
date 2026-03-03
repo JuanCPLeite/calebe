@@ -35,6 +35,7 @@ export default function GeneratePage() {
   const [expert, setExpert]               = useState<ExpertInfo>(DEFAULT_EXPERT)
   const [niche, setNiche]                 = useState('seu nicho')
   const [imageHeightPercent, setImageHeightPercent] = useState(45)
+  const [imagePosition, setImagePosition]           = useState<'top' | 'bottom'>('bottom')
   const [generateError, setGenerateError] = useState('')
   const [missingTokens, setMissingTokens] = useState<string[]>([])
 
@@ -190,6 +191,7 @@ export default function GeneratePage() {
           format:             'portrait',
           showHeader:         true,
           imageHeightPercent,
+          imagePosition,
         }),
       })
       const cardData = await cardRes.json()
@@ -300,7 +302,7 @@ export default function GeneratePage() {
           )}
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-5">
+        <div className="flex-1 min-h-0 overflow-hidden">
           <CarouselPreview
             slides={slides}
             caption={caption}
@@ -311,6 +313,8 @@ export default function GeneratePage() {
             imageProgress={imageProgress}
             imageHeightPercent={imageHeightPercent}
             onImageHeightPercentChange={setImageHeightPercent}
+            imagePosition={imagePosition}
+            onImagePositionChange={setImagePosition}
             onRegenerateSlide={handleRegenerateSlide}
           />
         </div>
