@@ -3,14 +3,13 @@
 /**
  * FrankCard — Preview pixel-perfect do card Instagram
  *
- * Renderiza internamente a 1080×1350px (portrait real) usando as mesmas
- * proporções que card-renderer.ts, depois aplica CSS scale para caber
- * no layout. O que você vê aqui é exatamente o que vai ser gerado.
+ * Renderiza internamente a 1080×1350px com as mesmas proporções de
+ * card-renderer.ts, depois aplica CSS scale. O que você vê = o que será gerado.
  *
- * Novidades: imagePosition ('top' | 'bottom') + placeholder visual da imagem.
+ * Drag handle: arraste a linha divisória no card para ajustar o tamanho da imagem.
  */
 
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 const CARD_W = 1080
 const CARD_H = 1350
@@ -27,6 +26,8 @@ export interface FrankCardProps {
   imageHeightPercent?: number
   imagePosition?: 'top' | 'bottom'
   displayWidth?: number
+  /** Se fornecido, o drag handle de resize fica visível */
+  onImageHeightPercentChange?: (v: number) => void
 }
 
 function autoFontSize(text: string): number {
@@ -66,67 +67,91 @@ export function FrankCard({
   imageHeightPercent = 45,
   imagePosition = 'bottom',
   displayWidth = 380,
+  onImageHeightPercentChange,
 }: FrankCardProps) {
+  const [handleHovered, setHandleHovered] = useState(false)
+  const isDragging = useRef(false)
+  const dragStartY = useRef(0)
+  const dragStartPct = useRef(0)
+
   const cardW     = CARD_W
   const cardH     = format === 'square' ? CARD_W : CARD_H
   const scale     = displayWidth / cardW
   const displayHeight = Math.round(cardH * scale)
 
-  // Proporções idênticas ao card-renderer.ts
-  const padH       = Math.round(cardW * 0.074)
-  const padV       = Math.round(cardH * 0.048)
-  const avatarSize = Math.round(cardW * 0.078)
-  const bottomPad  = Math.round(cardW * 0.055)
+  // ── Proporções idênticas a card-renderer.ts ──────────────────────────────
+  const padV       = Math.round(cardH * 0.048)          // 65px
+  const padH       = Math.round(cardW * 0.074)          // 80px
+  const avatarSize = Math.round(cardW * 0.078)          // 84px
+  const bottomPad  = Math.round(cardW * 0.055)          // 59px
   const imgHeightPx = Math.round(cardH * imageHeightPercent / 100)
-  const imgRadius  = Math.round(cardW * 0.022)
-  const imgMarginBottom = imagePosition === 'bottom' ? Math.round(padV * 0.4) : 0
-  const imgMarginTop    = imagePosition === 'top'    ? Math.round(padV * 0.3) : 0
+  const imgRadius  = Math.round(cardW * 0.022)          // 24px
+  const imgMarginB = imagePosition === 'bottom' ? Math.round(padV * 0.4) : 0
+  const imgMarginT = imagePosition === 'top'    ? Math.round(padV * 0.3) : 0
+
+  // Altura interna do header (para calcular posição do handle)
+  const headerInternalH = showHeader
+    ? Math.round(padV * 0.80) + avatarSize + Math.round(padV * 0.25)
+    : 0
+
+  // Y do handle em display pixels (na borda entre texto e imagem)
+  const handleY = imagePosition === 'bottom'
+    ? displayHeight - (bottomPad + imgMarginB + imgHeightPx) * scale
+    : (headerInternalH + imgMarginT + imgHeightPx) * scale
 
   const fontSize   = useMemo(() => autoFontSize(text), [text])
   const lineHeight = fontSize <= 30 ? 1.2 : fontSize <= 36 ? 1.25 : 1.3
   const content    = useMemo(() => parseTextToJSX(text, highlightColor), [text, highlightColor])
+  const initials   = authorName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
-  const initials = authorName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+  // ── Drag do handle ────────────────────────────────────────────────────────
+  function startDrag(e: React.MouseEvent) {
+    if (!onImageHeightPercentChange) return
+    e.preventDefault()
+    isDragging.current   = true
+    dragStartY.current   = e.clientY
+    dragStartPct.current = imageHeightPercent
 
-  // ── Bloco de imagem (real ou placeholder) ────────────────────────────────
+    function onMove(ev: MouseEvent) {
+      const dy    = ev.clientY - dragStartY.current
+      // drag para cima numa imagem bottom = imagem maior (dy negativo → pct maior)
+      const delta = (imagePosition === 'bottom' ? -dy : dy) / displayHeight * 100
+      const next  = Math.max(10, Math.min(75, dragStartPct.current + delta))
+      onImageHeightPercentChange!(Math.round(next))
+    }
+    function onUp() {
+      isDragging.current = false
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
+  // ── Blocos ────────────────────────────────────────────────────────────────
   const imageBlock = (
     <div style={{
       flexBasis:    imgHeightPx,
-      flexShrink:   0,
-      flexGrow:     0,
-      margin:       `${imgMarginTop}px ${padH}px ${imgMarginBottom}px ${padH}px`,
+      flexShrink:   0, flexGrow: 0,
+      margin:       `${imgMarginT}px ${padH}px ${imgMarginB}px ${padH}px`,
       overflow:     'hidden',
       borderRadius: imgRadius,
-      background:   imagePath ? '#f0f0f0' : '#f8f8f8',
-      border:       imagePath ? 'none' : `4px dashed #d1d5db`,
-      display:      'flex',
-      alignItems:   'center',
-      justifyContent: 'center',
-      flexDirection: 'column' as const,
-      gap:          16,
+      background:   imagePath ? '#f0f0f0' : '#f7f7f7',
+      border:       imagePath ? 'none' : '4px dashed #d1d5db',
+      display:      'flex', alignItems: 'center', justifyContent: 'center',
+      flexDirection: 'column' as const, gap: 16,
     }}>
       {imagePath ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={imagePath}
-          alt=""
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
+        <img src={imagePath} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
       ) : (
         <>
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none"
-            stroke="#c4c4c4" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+            stroke="#c8c8c8" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
             <circle cx="12" cy="13" r="4"/>
           </svg>
-          <span style={{
-            fontSize:    30,
-            color:       '#b0b0b0',
-            fontWeight:  500,
-            textAlign:   'center',
-            padding:     '0 60px',
-            lineHeight:  1.4,
-          }}>
+          <span style={{ fontSize: 28, color: '#bebebe', fontWeight: 500, textAlign: 'center', padding: '0 60px', lineHeight: 1.4 }}>
             Imagem será gerada aqui
           </span>
         </>
@@ -134,15 +159,11 @@ export function FrankCard({
     </div>
   )
 
-  // ── Bloco de texto ───────────────────────────────────────────────────────
   const bodyBlock = (
     <div style={{
-      flex:       1,
-      minHeight:  0,
-      padding:    `${Math.round(padV * 0.85)}px ${padH}px`,
-      overflow:   'hidden',
-      display:    'flex',
-      alignItems: 'flex-start',
+      flex: 1, minHeight: 0,
+      padding: `${Math.round(padV * 0.85)}px ${padH}px`,
+      overflow: 'hidden', display: 'flex', alignItems: 'flex-start',
     }}>
       <p style={{ fontSize, lineHeight, color: '#1a1a1a', fontWeight: 400, wordBreak: 'break-word', margin: 0 }}>
         {content}
@@ -151,30 +172,27 @@ export function FrankCard({
   )
 
   return (
-    <div style={{ width: displayWidth, height: displayHeight, position: 'relative', overflow: 'hidden', borderRadius: 12, flexShrink: 0 }}>
+    <div style={{
+      width: displayWidth, height: displayHeight,
+      position: 'relative', overflow: 'hidden',
+      borderRadius: 12, flexShrink: 0,
+    }}>
+      {/* Card interno — renderizado em 1080px, escalado */}
       <div style={{
-        width:           cardW,
-        height:          cardH,
-        position:        'absolute',
-        top:             0,
-        left:            0,
-        transform:       `scale(${scale})`,
-        transformOrigin: 'top left',
-        background:      '#ffffff',
-        fontFamily:      "var(--font-dm-sans, 'DM Sans'), 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
-        display:         'flex',
-        flexDirection:   'column',
-        paddingBottom:   bottomPad,
-        overflow:        'hidden',
+        width: cardW, height: cardH,
+        position: 'absolute', top: 0, left: 0,
+        transform: `scale(${scale})`, transformOrigin: 'top left',
+        background: '#ffffff',
+        fontFamily: "var(--font-dm-sans, 'DM Sans'), 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+        display: 'flex', flexDirection: 'column',
+        paddingBottom: bottomPad, overflow: 'hidden',
       }}>
-
-        {/* ── Header ───────────────────────────────────────────── */}
+        {/* Header */}
         {showHeader && (
           <div style={{
-            display:    'flex',
-            alignItems: 'center',
-            gap:        Math.round(avatarSize * 0.25),
-            padding:    `${Math.round(padV * 0.80)}px ${padH}px ${Math.round(padV * 0.25)}px ${padH}px`,
+            display: 'flex', alignItems: 'center',
+            gap: Math.round(avatarSize * 0.25),
+            padding: `${Math.round(padV * 0.80)}px ${padH}px ${Math.round(padV * 0.25)}px ${padH}px`,
             flexShrink: 0,
           }}>
             <div style={{
@@ -200,13 +218,55 @@ export function FrankCard({
           </div>
         )}
 
-        {/* ── Corpo + Imagem (ordem muda por imagePosition) ────── */}
-        {imagePosition === 'top' ? (
-          <>{imageBlock}{bodyBlock}</>
-        ) : (
-          <>{bodyBlock}{imageBlock}</>
-        )}
+        {/* Corpo + imagem na ordem correta */}
+        {imagePosition === 'top' ? <>{imageBlock}{bodyBlock}</> : <>{bodyBlock}{imageBlock}</>}
       </div>
+
+      {/* ── Drag handle (overlay em display coords) ──────────────────────── */}
+      {onImageHeightPercentChange && (
+        <div
+          onMouseDown={startDrag}
+          onMouseEnter={() => setHandleHovered(true)}
+          onMouseLeave={() => setHandleHovered(false)}
+          title="Arraste para redimensionar a imagem"
+          style={{
+            position: 'absolute',
+            left: 0, right: 0,
+            top: Math.max(4, handleY - 12),
+            height: 24,
+            cursor: 'ns-resize',
+            zIndex: 30,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            // área clicável maior que o visual
+          }}
+        >
+          {/* Linha visual + grip dots */}
+          <div style={{
+            width: '55%',
+            height: handleHovered ? 5 : 3,
+            background: handleHovered ? '#7c3aed' : 'rgba(124, 58, 237, 0.45)',
+            borderRadius: 4,
+            transition: 'all 0.12s ease',
+            boxShadow: handleHovered ? '0 0 8px rgba(124,58,237,0.5)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+          }}>
+            {/* grip dots */}
+            {[0,1,2].map(d => (
+              <div key={d} style={{
+                width: 3, height: 3,
+                borderRadius: '50%',
+                background: handleHovered ? '#fff' : 'rgba(255,255,255,0.7)',
+                flexShrink: 0,
+              }} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

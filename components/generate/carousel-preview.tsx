@@ -348,6 +348,7 @@ export function CarouselPreview({
                 avatarUrl={expert.avatarUrl}
                 highlightColor={expert.highlightColor}
                 imageHeightPercent={imageHeightPercent}
+                onImageHeightPercentChange={onImageHeightPercentChange}
                 imagePosition={imagePosition}
                 format="portrait"
                 displayWidth={PREVIEW_W}
@@ -424,17 +425,13 @@ export function CarouselPreview({
               Controles da imagem
             </p>
 
-            {/* Tamanho */}
-            <div className="flex items-center gap-3">
-              <ImageIcon className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-              <span className="text-xs text-zinc-500 w-16 flex-shrink-0">Tamanho</span>
-              <input
-                type="range" min={10} max={75} step={5}
-                value={imageHeightPercent}
-                onChange={e => onImageHeightPercentChange(Number(e.target.value))}
-                className="flex-1 accent-violet-500 h-1.5 cursor-pointer"
-              />
-              <span className="text-xs text-zinc-400 w-8 text-right flex-shrink-0">{imageHeightPercent}%</span>
+            {/* Dica de drag */}
+            <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-violet-950/40 border border-violet-800/30">
+              <span className="text-violet-400 text-sm">↕</span>
+              <span className="text-[11px] text-violet-300/80 leading-snug">
+                Arraste a linha roxa no card para ajustar o tamanho da imagem
+              </span>
+              <span className="text-[10px] text-zinc-600 ml-auto flex-shrink-0">{imageHeightPercent}%</span>
             </div>
 
             {/* Posição */}

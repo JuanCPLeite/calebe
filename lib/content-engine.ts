@@ -149,9 +149,14 @@ function buildUserPrompt(topic: string, hook?: string): string {
 
 "${topic}"
 
-${hook ? `Hook sugerido para o slide 1 (adapte se necessário): "${hook}"` : ''}
+${hook ? `━━━ HOOK OBRIGATÓRIO — SLIDE 1 ━━━
+O slide 1 DEVE COMEÇAR com exatamente esta frase como primeira linha:
+"${hook}"
+Esta é a frase de abertura que prende o leitor. Coloque-a como a PRIMEIRA linha do slide 1, com *negrito* ou {destaque} para reforçar. O restante do slide complementa e expande essa ideia.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` : ''}
 
 REGRAS CRÍTICAS:
+- Slide 1: PRIMEIRA linha = "${hook || 'frase de abertura impactante'}" (obrigatório)
 - Slide 5: COPIAR EXATAMENTE o template do autor fornecido no system prompt. NENHUMA alteração.
 - Slide 10: COPIAR EXATAMENTE o template de CTA final. NENHUMA alteração.
 - Dados sempre específicos com números reais
