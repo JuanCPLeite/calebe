@@ -100,11 +100,22 @@ async function generateWithClaude(
   searchQuery: string,
   limit: number,
   anthropicKey: string,
+  dateFilter: string = '7d',
 ): Promise<Topic[]> {
   const client = new Anthropic({ apiKey: anthropicKey })
 
   // Extrai o tema principal da searchQuery (remove sufixo "tendências 2026...")
   const tema = searchQuery.split(' tendências')[0].split(' novidades')[0].trim()
+
+  const now = new Date()
+  const currentDate = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  const periodoLabel: Record<string, string> = {
+    '24h': 'nas últimas 24 horas',
+    '7d':  'nos últimos 7 dias',
+    '30d': 'nos últimos 30 dias',
+    '3m':  'nos últimos 3 meses',
+  }
+  const periodo = periodoLabel[dateFilter] || 'nos últimos 7 dias'
 
   const response = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -112,6 +123,7 @@ async function generateWithClaude(
     messages: [{
       role: 'user',
       content: `Você é um especialista em conteúdo viral para Instagram no Brasil.
+DATA ATUAL: ${currentDate}. Gere tópicos relevantes para ${periodo}.
 
 Gere ${limit} ideias de tópicos para carrosséis do Instagram sobre: "${tema}"
 
@@ -307,7 +319,7 @@ export async function POST(req: NextRequest) {
     // ── 3. Claude — geração por conhecimento (rápido, usa chave Anthropic) ──
     if (anthropicKey) {
       try {
-        const topics = await generateWithClaude(searchQuery, limit, anthropicKey)
+        const topics = await generateWithClaude(searchQuery, limit, anthropicKey, dateFilter)
         if (topics.length > 0) {
           return NextResponse.json({ topics, hasMore: false, source: 'claude' })
         }
