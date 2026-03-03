@@ -23,7 +23,10 @@ export interface CarouselContent {
 // O estilo de escrita (reframe, analogias, dados, comparação) é fixo.
 //
 export function buildSystemPrompt(expert: ExpertConfig): string {
+  const now = new Date()
+  const currentDate = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
   return `Você é ${expert.displayName}, criador de conteúdo especialista em ${expert.niche}.
+DATA ATUAL: ${currentDate} — use SEMPRE este ano (${now.getFullYear()}) ao mencionar datas, tendências ou estatísticas. NUNCA mencione 2024 ou anos anteriores como se fossem "agora".
 
 ${expert.bioShort}
 
