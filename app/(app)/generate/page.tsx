@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Topic } from '@/components/generate/topic-card'
 import { CarouselPreview, type Slide, type ExpertInfo } from '@/components/generate/carousel-preview'
-import { Sparkles, Mic, Loader2, ArrowLeft, Send, AlertCircle, Key } from 'lucide-react'
+import { Sparkles, Mic, Loader2, ArrowLeft, Send, AlertCircle, Key, Calendar, Check } from 'lucide-react'
 import { TopicDiscovery } from '@/components/generate/topic-discovery'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -38,6 +38,11 @@ export default function GeneratePage() {
   const [niche, setNiche]                 = useState('seu nicho')
   const [generateError, setGenerateError] = useState('')
   const [missingTokens, setMissingTokens] = useState<string[]>([])
+  const [carouselId, setCarouselId]       = useState<string | null>(null)
+  const [scheduledAt, setScheduledAt]     = useState('')
+  const [showScheduler, setShowScheduler] = useState(false)
+  const [savedTopicRef, setSavedTopicRef] = useState<string | null>(null)
+  const autoSaveTimerRef                  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Carrega expert + verifica tokens essenciais
   useEffect(() => {
@@ -106,6 +111,51 @@ export default function GeneratePage() {
     loadExpertAndTokens()
   }, [])
 
+  // ── Cria registro no banco ao entrar em editing ───────────────────────────
+  useEffect(() => {
+    if (stage !== 'editing' || !slides.length || savedTopicRef === selectedTopic) return
+
+    async function createCarousel() {
+      try {
+        const res = await fetch('/api/carousels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: selectedTopic, caption, slides }),
+        })
+        const data = await res.json()
+        if (data.id) {
+          setCarouselId(data.id)
+          setSavedTopicRef(selectedTopic)
+        }
+      } catch (e) {
+        console.error('Falha ao criar carousel:', e)
+      }
+    }
+    createCarousel()
+  }, [stage, selectedTopic])
+
+  // ── Auto-save com debounce de 1.5s ────────────────────────────────────────
+  useEffect(() => {
+    if (!carouselId || stage !== 'editing') return
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await fetch(`/api/carousels/${carouselId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ caption, slides }),
+        })
+      } catch (e) {
+        console.error('Auto-save falhou:', e)
+      }
+    }, 1500)
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+    }
+  }, [slides, caption, carouselId])
+
   // ── Geração de conteúdo ──────────────────────────────────────────────────
   async function handleGenerate(topic: Topic, hook: string) {
     setSelectedTopic(topic.title)
@@ -117,6 +167,9 @@ export default function GeneratePage() {
     setPublishedUrl('')
     setSlidesGenerated(0)
     setRetryMessage('')
+    setCarouselId(null)
+    setScheduledAt('')
+    setShowScheduler(false)
 
     try {
       const res = await fetch('/api/generate/content', {
@@ -240,7 +293,7 @@ export default function GeneratePage() {
           imageBase64,
           format:             'portrait',
           showHeader:         true,
-          imageHeightPercent: slide.imageHeightPercent ?? 45,
+          imageHeightPercent: slide.imageHeightPercent ?? 0,
           imagePosition:      slide.imagePosition ?? 'bottom',
         }),
       })
@@ -309,6 +362,20 @@ export default function GeneratePage() {
     }
   }
 
+  async function handleSchedule() {
+    if (!carouselId || !scheduledAt) return
+    try {
+      await fetch(`/api/carousels/${carouselId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_at: new Date(scheduledAt).toISOString() }),
+      })
+      setShowScheduler(false)
+    } catch (e) {
+      console.error('Falha ao agendar:', e)
+    }
+  }
+
   const imagesReady = slides.length > 0 && slides.every(s => imageProgress[s.num] === 'done')
 
   // ── Tela de edição ───────────────────────────────────────────────────────
@@ -324,6 +391,34 @@ export default function GeneratePage() {
             <ArrowLeft className="w-4 h-4 mr-1.5" /> Voltar
           </Button>
           <h1 className="text-sm font-medium text-zinc-300 flex-1 truncate">{selectedTopic}</h1>
+
+          {/* Agendador */}
+          {carouselId && !publishedUrl && (
+            <div className="relative">
+              <Button
+                size="sm" variant="outline"
+                className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 gap-1.5"
+                onClick={() => setShowScheduler(v => !v)}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                {scheduledAt ? new Date(scheduledAt).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Agendar'}
+              </Button>
+              {showScheduler && (
+                <div className="absolute right-0 top-9 z-50 bg-zinc-900 border border-zinc-700 rounded-xl p-3 shadow-xl flex flex-col gap-2 min-w-[220px]">
+                  <p className="text-xs text-zinc-400 font-medium">Publicar automaticamente em:</p>
+                  <input
+                    type="datetime-local"
+                    value={scheduledAt}
+                    onChange={e => setScheduledAt(e.target.value)}
+                    className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-violet-500"
+                  />
+                  <Button size="sm" className="bg-violet-600 hover:bg-violet-500 text-white gap-1" onClick={handleSchedule} disabled={!scheduledAt}>
+                    <Check className="w-3 h-3" /> Confirmar
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           {publishedUrl ? (
             <a href={publishedUrl} target="_blank" rel="noopener noreferrer">

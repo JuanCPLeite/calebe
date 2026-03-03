@@ -97,48 +97,64 @@ export function FrankCard({
   const padH       = Math.round(cardW * 0.074)          // 80px
   const avatarSize = Math.round(cardW * 0.078)          // 84px
   const bottomPad  = Math.round(cardW * 0.055)          // 59px
-  const imgHeightPx = Math.round(cardH * imageHeightPercent / 100)
   const imgRadius  = Math.round(cardW * 0.022)          // 24px
   const imgMarginB = imagePosition === 'bottom' ? Math.round(padV * 0.4) : 0
   const imgMarginT = imagePosition === 'top'    ? Math.round(padV * 0.3) : 0
 
+  // imageHeightPercent é reutilizado como "espaço extra entre texto e imagem" (0-40%)
+  // Valores > 40 são legados (formato antigo) e tratados como 0
+  const textExtraPct   = imageHeightPercent > 40 ? 0 : imageHeightPercent
+  const textBottomPadPx = Math.round(cardH * textExtraPct / 100)
+
   const headerInternalH = showHeader
     ? Math.round(padV * 0.80) + avatarSize + Math.round(padV * 0.25)
     : 0
-
-  // Y do handle em display pixels
-  const handleY = imagePosition === 'bottom'
-    ? displayHeight - (bottomPad + imgMarginB + imgHeightPx) * scale
-    : (headerInternalH + imgMarginT + imgHeightPx) * scale
 
   const fontSize   = useMemo(() => autoFontSize(text), [text])
   const lineHeight = fontSize <= 30 ? 1.2 : fontSize <= 36 ? 1.25 : 1.3
   const content    = useMemo(() => parseTextToJSX(text), [text])
   const initials   = authorName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
+  // Estimativa da altura do bloco de texto para posicionar o handle e a textarea
+  const bodyPadV      = Math.round(padV * 0.85)
+  const textW         = cardW - 2 * padH
+  const charsPerLine  = Math.max(1, Math.floor(textW / (fontSize * 0.52)))
+  const wrappedLines  = text.split('\n').reduce((acc, line) => {
+    const stripped = line.replace(/[*_{}\[\]]/g, '')
+    return acc + Math.max(1, Math.ceil((stripped.length || 1) / charsPerLine))
+  }, 0)
+  const textContentH   = wrappedLines * fontSize * lineHeight
+  const estimatedBodyH = textContentH + bodyPadV * 2
+
+  // Y do handle em display pixels — na fronteira entre texto+spacer e imagem
+  const handleY = imagePosition === 'bottom'
+    ? (headerInternalH + estimatedBodyH + textBottomPadPx) * scale
+    : (cardH - bottomPad - estimatedBodyH - textBottomPadPx) * scale
+
   // Coordenadas da textarea inline (em display pixels)
   const bodyTopInCard = imagePosition === 'top'
-    ? headerInternalH + imgMarginT + imgHeightPx
+    ? cardH - bottomPad - estimatedBodyH
     : headerInternalH
   const textareaTop    = bodyTopInCard * scale
   const textareaLeft   = padH * scale
   const textareaWidth  = (cardW - 2 * padH) * scale
-  const textareaHeight = displayHeight - textareaTop - bottomPad * scale
+  const textareaHeight = estimatedBodyH * scale
   const textareaFontSize  = fontSize * scale
-  const textareaBodyPadV  = Math.round(padV * 0.85) * scale
+  const textareaBodyPadV  = bodyPadV * scale
 
-  // ── Drag do handle ────────────────────────────────────────────────────────
+  // ── Drag do handle — controla o espaço extra entre texto e imagem ────────
   function startDrag(e: React.MouseEvent) {
     if (!onImageHeightPercentChange) return
     e.preventDefault()
     isDragging.current   = true
     dragStartY.current   = e.clientY
-    dragStartPct.current = imageHeightPercent
+    dragStartPct.current = textExtraPct
 
     function onMove(ev: MouseEvent) {
       const dy    = ev.clientY - dragStartY.current
-      const delta = (imagePosition === 'bottom' ? -dy : dy) / displayHeight * 100
-      const next  = Math.max(10, Math.min(75, dragStartPct.current + delta))
+      // bottom: arrastar para baixo aumenta o espaço; top: arrastar para cima aumenta
+      const delta = (imagePosition === 'top' ? -dy : dy) / displayHeight * 100
+      const next  = Math.max(0, Math.min(40, dragStartPct.current + delta))
       onImageHeightPercentChange!(Math.round(next))
     }
     function onUp() {
@@ -161,7 +177,8 @@ export function FrankCard({
     imgDragStartObjY.current = imageObjectY
 
     const imageDisplayW = (cardW - 2 * padH) * scale
-    const imageDisplayH = imgHeightPx * scale
+    // Estimativa da altura da imagem em display (espaço restante após texto e spacer)
+    const imageDisplayH = Math.max(50, displayHeight - (headerInternalH + estimatedBodyH + textBottomPadPx) * scale)
 
     function onMove(ev: MouseEvent) {
       const dx = ev.clientX - imgDragStartX.current
@@ -183,8 +200,8 @@ export function FrankCard({
     <div
       onMouseDown={startImgDrag}
       style={{
-        flexBasis:    imgHeightPx,
-        flexShrink:   0, flexGrow: 0,
+        flex:         '1 1 0',
+        minHeight:    0,
         margin:       `${imgMarginT}px ${padH}px ${imgMarginB}px ${padH}px`,
         overflow:     'hidden',
         borderRadius: imgRadius,
@@ -222,13 +239,15 @@ export function FrankCard({
     </div>
   )
 
+  const spacer = <div style={{ flexShrink: 0, height: textBottomPadPx }} />
+
   const bodyBlock = (
     <div
       onClick={() => { if (onTextChange && !editingText) setEditingText(true) }}
       style={{
-        flex: 1, minHeight: 0,
-        padding: `${Math.round(padV * 0.85)}px ${padH}px`,
-        overflow: 'hidden', display: 'flex', alignItems: 'flex-start',
+        flexShrink: 0,
+        padding: `${bodyPadV}px ${padH}px`,
+        display: 'flex', alignItems: 'flex-start',
         cursor: onTextChange ? 'text' : 'default',
       }}
     >
@@ -285,8 +304,11 @@ export function FrankCard({
           </div>
         )}
 
-        {/* Corpo + imagem na ordem correta */}
-        {imagePosition === 'top' ? <>{imageBlock}{bodyBlock}</> : <>{bodyBlock}{imageBlock}</>}
+        {/* Corpo + spacer + imagem na ordem correta — imagem preenche o espaço restante */}
+        {imagePosition === 'top'
+          ? <>{imageBlock}{spacer}{bodyBlock}</>
+          : <>{bodyBlock}{spacer}{imageBlock}</>
+        }
       </div>
 
       {/* ── Drag handle — sempre visível ─────────────────────────────────── */}

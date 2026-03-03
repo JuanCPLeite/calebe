@@ -103,8 +103,10 @@ export function buildCardHTML(opts: CardRenderOpts): string {
     ? `data:image/${imageMime};base64,${imageBase64}`
     : null
 
-  // Altura da imagem em pixels baseada no percentual configurado
-  const imgHeightPx = imageBase64 ? Math.round(height * imageHeightPercent / 100) : 0
+  // imageHeightPercent é reutilizado como "espaço extra entre texto e imagem" (0-40%)
+  // Valores > 40 são legados e tratados como 0
+  const textExtraPct    = imageHeightPercent > 40 ? 0 : imageHeightPercent
+  const textBottomPadPx = Math.round(height * textExtraPct / 100)
 
   const fontSize = autoFontSize(text)
 
@@ -194,12 +196,10 @@ export function buildCardHTML(opts: CardRenderOpts): string {
     line-height: 1.2;
   }
 
-  /* ── Corpo do texto ──────────────────────────────── */
+  /* ── Corpo do texto — ocupa apenas o espaço natural do texto ─────────── */
   .card-body {
-    flex: 1;
-    min-height: 0;
+    flex-shrink: 0;
     padding: ${Math.round(padV * 0.85)}px ${padH}px;
-    overflow: hidden;
     display: flex;
     align-items: flex-start;
   }
@@ -222,9 +222,16 @@ export function buildCardHTML(opts: CardRenderOpts): string {
     color: #1a1a1a;
   }
 
-  /* ── Imagem inferior ─────────────────────────────── */
+  /* ── Spacer entre texto e imagem ─────────────────── */
+  .card-spacer {
+    flex-shrink: 0;
+    height: ${textBottomPadPx}px;
+  }
+
+  /* ── Imagem — preenche o espaço restante ─────────── */
   .card-image {
-    flex: 0 0 ${imgHeightPx}px;
+    flex: 1 1 0;
+    min-height: 0;
     margin: 0 ${padH}px ${Math.round(padV * 0.4)}px ${padH}px;
     overflow: hidden;
     border-radius: ${Math.round(width * 0.022)}px;
@@ -250,13 +257,13 @@ export function buildCardHTML(opts: CardRenderOpts): string {
     </div>
   </div>` : ''}
 
-  ${imagePosition === 'top' ? imageBlockHTML : ''}
+  ${imagePosition === 'top' ? `${imageBlockHTML}<div class="card-spacer"></div>` : ''}
 
   <div class="card-body">
     <div class="card-text">${parseText(text)}</div>
   </div>
 
-  ${imagePosition === 'bottom' ? imageBlockHTML : ''}
+  ${imagePosition === 'bottom' ? `<div class="card-spacer"></div>${imageBlockHTML}` : ''}
 
 </body>
 </html>`
@@ -281,16 +288,15 @@ export async function renderCardToPng(opts: CardRenderOpts): Promise<Buffer> {
     // networkidle aguarda Google Fonts carregar
     await page.setContent(html, { waitUntil: 'networkidle', timeout: 15000 })
 
-    // Safety net: encolhe fonte pixel a pixel até texto caber sem overflow
+    // Safety net: encolhe fonte pixel a pixel até o conteúdo total caber no card
     await page.evaluate(() => {
-      const cardBody = document.querySelector('.card-body') as HTMLElement | null
       const cardText = document.querySelector('.card-text') as HTMLElement | null
-      if (!cardBody || !cardText) return
+      if (!cardText) return
 
       const MIN_FONT = 24
       let fontSize = parseFloat(window.getComputedStyle(cardText).fontSize)
 
-      while (fontSize > MIN_FONT && cardBody.scrollHeight > cardBody.clientHeight) {
+      while (fontSize > MIN_FONT && document.body.scrollHeight > document.body.clientHeight) {
         fontSize -= 1
         cardText.style.fontSize = fontSize + 'px'
         cardText.style.lineHeight = fontSize <= 30 ? '1.2' : fontSize <= 36 ? '1.25' : '1.3'

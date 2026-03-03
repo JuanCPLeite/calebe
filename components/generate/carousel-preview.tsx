@@ -45,43 +45,6 @@ interface CarouselPreviewProps {
   imageProgress: Record<number, 'loading' | 'done' | 'error'>
 }
 
-// Calcula o percentual de altura ideal para a imagem ocupar o espaço que sobra após o texto
-function calcIdealImageHeightPct(text: string, position: 'top' | 'bottom' = 'bottom'): number {
-  const padV      = Math.round(CARD_H * 0.048)  // 65
-  const padH      = Math.round(CARD_W * 0.074)  // 80
-  const avatarSz  = Math.round(CARD_W * 0.078)  // 84
-  const bottomPad = Math.round(CARD_W * 0.055)  // 59
-  const headerH   = Math.round(padV * 0.80) + avatarSz + Math.round(padV * 0.25) // 152
-  const bodyPadV  = Math.round(padV * 0.85)      // 55
-  const imgMargin = position === 'bottom' ? Math.round(padV * 0.4) : Math.round(padV * 0.3)
-
-  // Mesmo algoritmo de autoFontSize de frank-card.tsx
-  const len = text.length
-  const lineCount = text.split('\n').filter(l => l.trim().length > 0).length
-  let fs: number
-  if      (lineCount > 16 || len > 650) fs = 30
-  else if (lineCount > 12 || len > 450) fs = 34
-  else if (lineCount > 8  || len > 340) fs = 38
-  else if (lineCount > 5  || len > 200) fs = 44
-  else if (len < 120)                   fs = 58
-  else                                  fs = 50
-  const lh = fs <= 30 ? 1.2 : fs <= 36 ? 1.25 : 1.3
-
-  // Estima a altura do texto levando em conta quebras automáticas de linha
-  const textW = CARD_W - 2 * padH  // 920
-  const charsPerLine = Math.max(1, Math.floor(textW / (fs * 0.52)))
-  const wrappedLines = text.split('\n').reduce((acc, line) => {
-    const stripped = line.replace(/[*_{}\[\]]/g, '')
-    return acc + Math.max(1, Math.ceil((stripped.length || 1) / charsPerLine))
-  }, 0)
-  const textContentH = wrappedLines * fs * lh
-  const textBlockH   = textContentH + bodyPadV * 2
-
-  const available = CARD_H - headerH - bottomPad - imgMargin
-  const imgH = available - textBlockH
-  const pct = Math.round((imgH / CARD_H) * 100)
-  return Math.max(15, Math.min(70, pct))
-}
 
 const TYPE_LABELS: Record<string, string> = {
   hook: 'Hook', problem: 'Problema', content: 'Conteúdo',
@@ -89,11 +52,7 @@ const TYPE_LABELS: Record<string, string> = {
   proof: 'Prova', 'cta-final': 'CTA Final',
 }
 
-// Dimensões do card no editor (maior para edição confortável)
-const CARD_W = 1080
-const CARD_H = 1350
 const PREVIEW_W = 400
-const PREVIEW_H = Math.round(PREVIEW_W * CARD_H / CARD_W) // 500
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -341,7 +300,8 @@ export function CarouselPreview({
             const isActive        = i === activeSlide
             const imgState        = getImgState(slide.num)
             const slideImgPos     = slide.imagePosition ?? 'bottom'
-            const slideImgHeight  = slide.imageHeightPercent ?? calcIdealImageHeightPct(slide.text, slideImgPos)
+            // imageHeightPercent agora controla o espaço extra (0-40%); default 0
+            const slideExtraPct   = (slide.imageHeightPercent ?? 0) > 40 ? 0 : (slide.imageHeightPercent ?? 0)
             const slideObjX       = slide.imageObjectX ?? 50
             const slideObjY       = slide.imageObjectY ?? 50
 
@@ -406,7 +366,7 @@ export function CarouselPreview({
                     authorHandle={expert.handle}
                     avatarUrl={expert.avatarUrl}
                     highlightColor={expert.highlightColor}
-                    imageHeightPercent={slideImgHeight}
+                    imageHeightPercent={slideExtraPct}
                     onImageHeightPercentChange={v => updateSlide(i, { imageHeightPercent: v })}
                     imagePosition={slideImgPos}
                     imageObjectX={slideObjX}
@@ -443,7 +403,9 @@ export function CarouselPreview({
                     </Button>
                   )}
                   <div className="flex gap-1 ml-auto items-center">
-                    <span className="text-[10px] text-zinc-600 mr-1">{slideImgHeight}%</span>
+                    {slideExtraPct > 0 && (
+                      <span className="text-[10px] text-zinc-600 mr-1">+{slideExtraPct}% espaço</span>
+                    )}
                     <button
                       onClick={() => updateSlide(i, { imagePosition: 'top' })}
                       className={cn(
