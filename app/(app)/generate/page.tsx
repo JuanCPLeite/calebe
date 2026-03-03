@@ -30,12 +30,12 @@ export default function GeneratePage() {
   const [selectedTopic, setSelectedTopic] = useState<string>('')
   const [voiceActive, setVoiceActive]     = useState(false)
   const [customTopic, setCustomTopic]     = useState('')
+  const [slidesGenerated, setSlidesGenerated] = useState(0)
+  const [retryMessage, setRetryMessage]   = useState('')
   const [publishing, setPublishing]       = useState(false)
   const [publishedUrl, setPublishedUrl]   = useState('')
   const [expert, setExpert]               = useState<ExpertInfo>(DEFAULT_EXPERT)
   const [niche, setNiche]                 = useState('seu nicho')
-  const [imageHeightPercent, setImageHeightPercent] = useState(45)
-  const [imagePosition, setImagePosition]           = useState<'top' | 'bottom'>('bottom')
   const [generateError, setGenerateError] = useState('')
   const [missingTokens, setMissingTokens] = useState<string[]>([])
 
@@ -115,6 +115,8 @@ export default function GeneratePage() {
     setImageProgress({})
     setCaption('')
     setPublishedUrl('')
+    setSlidesGenerated(0)
+    setRetryMessage('')
 
     try {
       const res = await fetch('/api/generate/content', {
@@ -122,17 +124,65 @@ export default function GeneratePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: topic.title, hook }),
       })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      setSlides(data.slides.map((s: Slide) => ({ ...s, approved: false })))
-      setCaption(data.caption || '')
-      setStage('editing')
+
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({ error: 'Erro ao conectar com a API' }))
+        throw new Error(err.error)
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      outer: while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const jsonStr = line.slice(6).trim()
+          if (!jsonStr) continue
+
+          let event: any
+          try { event = JSON.parse(jsonStr) } catch { continue }
+
+          if (event.error) throw new Error(event.error)
+
+          if (event.retrying) {
+            setRetryMessage(`API sobrecarregada. Nova tentativa ${event.attempt}/3 em ${event.waitSeconds}s...`)
+          }
+
+          if (typeof event.slidesGenerated === 'number') {
+            setSlidesGenerated(event.slidesGenerated)
+            setRetryMessage('')
+          }
+
+          if (event.done) {
+            setSlides((event.slides as Slide[]).map(s => ({
+              ...s,
+              approved: false,
+              imagePosition: 'bottom' as const,
+              imageObjectX: 50,
+              imageObjectY: 50,
+            })))
+            setCaption(event.caption || '')
+            setStage('editing')
+            break outer
+          }
+        }
+      }
     } catch (err: any) {
       console.error(err)
       setGenerateError(err.message || 'Erro ao gerar carrossel.')
       setStage('discovery')
     } finally {
       setGenerating(false)
+      setSlidesGenerated(0)
+      setRetryMessage('')
     }
   }
 
@@ -190,8 +240,8 @@ export default function GeneratePage() {
           imageBase64,
           format:             'portrait',
           showHeader:         true,
-          imageHeightPercent,
-          imagePosition,
+          imageHeightPercent: slide.imageHeightPercent ?? 45,
+          imagePosition:      slide.imagePosition ?? 'bottom',
         }),
       })
       const cardData = await cardRes.json()
@@ -211,9 +261,7 @@ export default function GeneratePage() {
 
   async function handleGenerateImages() {
     setGeneratingImages(true)
-    for (const slide of slides) {
-      await generateOneSlide(slide)
-    }
+    await Promise.all(slides.map(slide => generateOneSlide(slide)))
     setGeneratingImages(false)
   }
 
@@ -311,10 +359,6 @@ export default function GeneratePage() {
             onGenerateImages={handleGenerateImages}
             generatingImages={generatingImages}
             imageProgress={imageProgress}
-            imageHeightPercent={imageHeightPercent}
-            onImageHeightPercentChange={setImageHeightPercent}
-            imagePosition={imagePosition}
-            onImagePositionChange={setImagePosition}
             onRegenerateSlide={handleRegenerateSlide}
           />
         </div>
@@ -324,15 +368,33 @@ export default function GeneratePage() {
 
   // ── Gerando ──────────────────────────────────────────────────────────────
   if (stage === 'generating') {
+    const clampedSlides = Math.min(slidesGenerated, 10)
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center space-y-4">
+        <div className="text-center space-y-5">
           <div className="w-16 h-16 rounded-2xl bg-violet-600/20 flex items-center justify-center mx-auto">
             <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
           </div>
-          <div>
+          <div className="space-y-2">
             <p className="text-sm font-medium text-zinc-100">Gerando carrossel com Claude...</p>
-            <p className="text-xs text-zinc-500 mt-1">Criando 10 slides no seu estilo</p>
+            {clampedSlides > 0 ? (
+              <>
+                <p className="text-xs text-zinc-400">
+                  Slide <span className="text-violet-400 font-semibold">{clampedSlides}</span> de 10
+                </p>
+                <div className="w-48 h-1 bg-zinc-800 rounded-full mx-auto overflow-hidden">
+                  <div
+                    className="h-full bg-violet-500 rounded-full transition-all duration-300"
+                    style={{ width: `${(clampedSlides / 10) * 100}%` }}
+                  />
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-zinc-500">Criando 10 slides no seu estilo</p>
+            )}
+            {retryMessage && (
+              <p className="text-xs text-amber-400 mt-1">{retryMessage}</p>
+            )}
           </div>
         </div>
       </div>

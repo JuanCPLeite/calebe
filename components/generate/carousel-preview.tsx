@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
-  Bold, Italic, RotateCcw, Check, ImageIcon, Loader2,
-  ChevronLeft, ChevronRight, AlertCircle, Highlighter,
+  RotateCcw, Check, ImageIcon, Loader2,
+  ChevronLeft, ChevronRight, AlertCircle,
   GripVertical, ArrowUp, ArrowDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,10 @@ export interface Slide {
   imagePath?: string
   cardPath?: string
   approved?: boolean
+  imageHeightPercent?: number
+  imagePosition?: 'top' | 'bottom'
+  imageObjectX?: number
+  imageObjectY?: number
 }
 
 export interface ExpertInfo {
@@ -39,10 +43,44 @@ interface CarouselPreviewProps {
   onRegenerateSlide?: (slideNum: number) => void
   generatingImages: boolean
   imageProgress: Record<number, 'loading' | 'done' | 'error'>
-  imageHeightPercent: number
-  onImageHeightPercentChange: (v: number) => void
-  imagePosition: 'top' | 'bottom'
-  onImagePositionChange: (pos: 'top' | 'bottom') => void
+}
+
+// Calcula o percentual de altura ideal para a imagem ocupar o espaço que sobra após o texto
+function calcIdealImageHeightPct(text: string, position: 'top' | 'bottom' = 'bottom'): number {
+  const padV      = Math.round(CARD_H * 0.048)  // 65
+  const padH      = Math.round(CARD_W * 0.074)  // 80
+  const avatarSz  = Math.round(CARD_W * 0.078)  // 84
+  const bottomPad = Math.round(CARD_W * 0.055)  // 59
+  const headerH   = Math.round(padV * 0.80) + avatarSz + Math.round(padV * 0.25) // 152
+  const bodyPadV  = Math.round(padV * 0.85)      // 55
+  const imgMargin = position === 'bottom' ? Math.round(padV * 0.4) : Math.round(padV * 0.3)
+
+  // Mesmo algoritmo de autoFontSize de frank-card.tsx
+  const len = text.length
+  const lineCount = text.split('\n').filter(l => l.trim().length > 0).length
+  let fs: number
+  if      (lineCount > 16 || len > 650) fs = 30
+  else if (lineCount > 12 || len > 450) fs = 34
+  else if (lineCount > 8  || len > 340) fs = 38
+  else if (lineCount > 5  || len > 200) fs = 44
+  else if (len < 120)                   fs = 58
+  else                                  fs = 50
+  const lh = fs <= 30 ? 1.2 : fs <= 36 ? 1.25 : 1.3
+
+  // Estima a altura do texto levando em conta quebras automáticas de linha
+  const textW = CARD_W - 2 * padH  // 920
+  const charsPerLine = Math.max(1, Math.floor(textW / (fs * 0.52)))
+  const wrappedLines = text.split('\n').reduce((acc, line) => {
+    const stripped = line.replace(/[*_{}\[\]]/g, '')
+    return acc + Math.max(1, Math.ceil((stripped.length || 1) / charsPerLine))
+  }, 0)
+  const textContentH = wrappedLines * fs * lh
+  const textBlockH   = textContentH + bodyPadV * 2
+
+  const available = CARD_H - headerH - bottomPad - imgMargin
+  const imgH = available - textBlockH
+  const pct = Math.round((imgH / CARD_H) * 100)
+  return Math.max(15, Math.min(70, pct))
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -51,11 +89,11 @@ const TYPE_LABELS: Record<string, string> = {
   proof: 'Prova', 'cta-final': 'CTA Final',
 }
 
-// Dimensões reais — portrait Instagram
+// Dimensões do card no editor (maior para edição confortável)
 const CARD_W = 1080
 const CARD_H = 1350
-const PREVIEW_W = 300
-const PREVIEW_H = Math.round(PREVIEW_W * CARD_H / CARD_W) // 375
+const PREVIEW_W = 400
+const PREVIEW_H = Math.round(PREVIEW_W * CARD_H / CARD_W) // 500
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -68,45 +106,33 @@ export function CarouselPreview({
   onRegenerateSlide,
   generatingImages,
   imageProgress,
-  imageHeightPercent,
-  onImageHeightPercentChange,
-  imagePosition,
-  onImagePositionChange,
 }: CarouselPreviewProps) {
   const [activeSlide, setActiveSlide]     = useState(0)
   const [dragIndex, setDragIndex]         = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [showCaption, setShowCaption]     = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const slide = slides[activeSlide]
-  if (!slide) return null
+  if (slides.length === 0) return null
 
-  const doneCount = Object.values(imageProgress).filter(v => v === 'done').length
+  const doneCount  = Object.values(imageProgress).filter(v => v === 'done').length
   const canGenImages = !generatingImages && slides.length > 0
 
-  // ── Texto ──────────────────────────────────────────────────────────────────
-  function updateActiveText(text: string) {
-    onSlidesChange(slides.map((s, i) => i === activeSlide ? { ...s, text } : s))
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function updateSlide(i: number, patch: Partial<Slide>) {
+    onSlidesChange(slides.map((s, idx) => idx === i ? { ...s, ...patch } : s))
   }
 
-  function approveSlide() {
-    onSlidesChange(slides.map((s, i) => i === activeSlide ? { ...s, approved: true } : s))
-    if (activeSlide < slides.length - 1) setActiveSlide(activeSlide + 1)
+  function approveSlide(i: number) {
+    updateSlide(i, { approved: true })
+    if (i < slides.length - 1) setActiveSlide(i + 1)
   }
 
-  function applyFormat(tag: 'bold' | 'italic' | 'highlight') {
-    const area = textareaRef.current
-    if (!area) return
-    const { selectionStart: s, selectionEnd: e } = area
-    const selected = slide.text.slice(s, e)
-    if (!selected) return
-    const wrapped = tag === 'bold' ? `*${selected}*` : tag === 'italic' ? `_${selected}_` : `{${selected}}`
-    updateActiveText(slide.text.slice(0, s) + wrapped + slide.text.slice(e))
-    requestAnimationFrame(() => { area.focus(); area.setSelectionRange(s + 1, s + 1 + selected.length) })
+  function getImgState(num: number) {
+    const p = imageProgress[num]
+    return p === 'loading' ? 'loading' : p === 'done' ? 'done' : p === 'error' ? 'error' : 'idle'
   }
 
-  // ── Drag & Drop ────────────────────────────────────────────────────────────
+  // ── Drag & Drop do strip ──────────────────────────────────────────────────
   function handleDragStart(index: number) { setDragIndex(index) }
 
   function handleDragOver(e: React.DragEvent, index: number) {
@@ -128,16 +154,9 @@ export function CarouselPreview({
 
   function handleDragEnd() { setDragIndex(null); setDragOverIndex(null) }
 
-  // ── Ordem ──────────────────────────────────────────────────────────────────
   function handleResetOrder() {
     onSlidesChange([...slides].sort((a, b) => a.num - b.num))
     setActiveSlide(0)
-  }
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  function getImgState(num: number) {
-    const p = imageProgress[num]
-    return p === 'loading' ? 'loading' : p === 'done' ? 'done' : p === 'error' ? 'error' : 'idle'
   }
 
   const isReordered = slides.some((s, i) => s.num !== i + 1)
@@ -207,7 +226,10 @@ export function CarouselPreview({
                 onDragOver={(e) => handleDragOver(e, i)}
                 onDrop={() => handleDrop(i)}
                 onDragEnd={handleDragEnd}
-                onClick={() => setActiveSlide(i)}
+                onClick={() => {
+                  setActiveSlide(i)
+                  document.getElementById(`slide-card-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }}
                 className={cn(
                   'relative rounded-xl overflow-hidden flex-shrink-0 cursor-grab active:cursor-grabbing transition-all duration-150',
                   isActive   ? 'ring-2 ring-violet-500 shadow-lg shadow-violet-500/20' : 'ring-1 ring-zinc-700 hover:ring-zinc-500',
@@ -225,16 +247,13 @@ export function CarouselPreview({
                 {/* Conteúdo: mini preview de texto */}
                 {!s.cardPath && (
                   <div className="absolute inset-0 flex flex-col p-1.5 bg-white">
-                    {/* mini header */}
                     <div className="flex items-center gap-1 flex-shrink-0 mb-1">
                       <div className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ background: expert.highlightColor }} />
                       <span className="text-[6px] text-zinc-500 truncate font-medium">{expert.displayName}</span>
                     </div>
-                    {/* mini text */}
                     <p className="text-[5.5px] text-zinc-600 leading-snug flex-1 overflow-hidden">
                       {miniText.slice(0, 150)}
                     </p>
-                    {/* mini image placeholder */}
                     {s.imagePath ? (
                       <div className="mt-1 rounded overflow-hidden flex-shrink-0" style={{ height: 36 }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -293,80 +312,13 @@ export function CarouselPreview({
         </div>
       </div>
 
-      {/* ══ PAINEL PRINCIPAL ═════════════════════════════════════════════════ */}
-      <div className="flex flex-1 min-h-0 gap-5 p-5">
+      {/* ══ ÁREA SCROLL VERTICAL: slides empilhados ══════════════════════════ */}
+      <div className="flex-1 overflow-y-auto py-6 px-4">
+        <div className="flex flex-col items-center gap-6" style={{ maxWidth: PREVIEW_W + 20, margin: '0 auto' }}>
 
-        {/* ── Coluna esquerda: Preview do card + legenda ──────────────────── */}
-        <div
-          className="flex flex-col gap-4 flex-shrink-0 overflow-y-auto"
-          style={{ width: PREVIEW_W + 20 }}
-        >
-          {/* Slide info */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-zinc-300">
-              Slide {activeSlide + 1}
-              <span className="text-zinc-600 font-normal">/{slides.length}</span>
-            </span>
-            <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400 h-5 px-1.5">
-              {TYPE_LABELS[slide.type] || slide.type}
-            </Badge>
-            {slide.approved && (
-              <Badge className="text-[10px] bg-green-600/20 text-green-400 border border-green-600/30 h-5 px-1.5">
-                ✓
-              </Badge>
-            )}
-            <div className="ml-auto flex gap-0.5">
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-500"
-                onClick={() => setActiveSlide(Math.max(0, activeSlide - 1))}
-                disabled={activeSlide === 0}>
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </Button>
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-500"
-                onClick={() => setActiveSlide(Math.min(slides.length - 1, activeSlide + 1))}
-                disabled={activeSlide === slides.length - 1}>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Card preview */}
-          <div className="relative shadow-2xl rounded-xl overflow-hidden flex-shrink-0"
-            style={{ width: PREVIEW_W, height: PREVIEW_H }}>
-            {slide.cardPath ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={slide.cardPath}
-                alt={`Slide ${slide.num}`}
-                style={{ width: PREVIEW_W, height: PREVIEW_H, objectFit: 'cover', display: 'block' }}
-              />
-            ) : (
-              <FrankCard
-                text={slide.text}
-                imagePath={slide.imagePath}
-                authorName={expert.displayName}
-                authorHandle={expert.handle}
-                avatarUrl={expert.avatarUrl}
-                highlightColor={expert.highlightColor}
-                imageHeightPercent={imageHeightPercent}
-                onImageHeightPercentChange={onImageHeightPercentChange}
-                imagePosition={imagePosition}
-                format="portrait"
-                displayWidth={PREVIEW_W}
-              />
-            )}
-
-            {/* Overlay de loading */}
-            {getImgState(slide.num) === 'loading' && (
-              <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-                <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
-                <span className="text-xs text-violet-700 font-medium">Gerando imagem...</span>
-              </div>
-            )}
-          </div>
-
-          {/* Legenda */}
+          {/* Legenda colapsável */}
           {caption && (
-            <div className="border border-zinc-800 rounded-xl overflow-hidden flex-shrink-0">
+            <div className="w-full border border-zinc-800 rounded-xl overflow-hidden">
               <button
                 onClick={() => setShowCaption(v => !v)}
                 className="flex items-center justify-between w-full px-3 py-2.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors"
@@ -383,112 +335,143 @@ export function CarouselPreview({
               )}
             </div>
           )}
-        </div>
 
-        {/* ── Coluna direita: Editor + controles ──────────────────────────── */}
-        <div className="flex flex-col flex-1 gap-4 min-w-0 min-h-0">
+          {/* Slides empilhados */}
+          {slides.map((slide, i) => {
+            const isActive        = i === activeSlide
+            const imgState        = getImgState(slide.num)
+            const slideImgPos     = slide.imagePosition ?? 'bottom'
+            const slideImgHeight  = slide.imageHeightPercent ?? calcIdealImageHeightPct(slide.text, slideImgPos)
+            const slideObjX       = slide.imageObjectX ?? 50
+            const slideObjY       = slide.imageObjectY ?? 50
 
-          {/* Toolbar de formatação */}
-          <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1.5 flex-shrink-0">
-            <button onClick={() => applyFormat('bold')}
-              className="p-1.5 rounded hover:bg-zinc-700 text-zinc-300 transition-colors" title="Negrito">
-              <Bold className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => applyFormat('italic')}
-              className="p-1.5 rounded hover:bg-zinc-700 text-zinc-300 transition-colors" title="Itálico">
-              <Italic className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => applyFormat('highlight')}
-              className="p-1.5 rounded hover:bg-zinc-700 transition-colors" title="Destaque"
-              style={{ color: expert.highlightColor }}>
-              <Highlighter className="w-3.5 h-3.5" />
-            </button>
-            <div className="w-px h-4 bg-zinc-700 mx-1" />
-            <span className="text-[10px] text-zinc-600 select-none">
-              *negrito* &nbsp;_itálico_&nbsp; {'{'}destaque{'}'}
-            </span>
-          </div>
-
-          {/* Editor de texto */}
-          <textarea
-            ref={textareaRef}
-            value={slide.text}
-            onChange={e => updateActiveText(e.target.value)}
-            className="flex-1 min-h-0 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 font-mono leading-relaxed resize-none focus:outline-none focus:border-violet-500 transition-colors placeholder-zinc-600"
-            placeholder="Texto do slide..."
-            spellCheck={false}
-          />
-
-          {/* Controles de imagem */}
-          <div className="flex-shrink-0 bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-4">
-            <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-widest">
-              Controles da imagem
-            </p>
-
-            {/* Dica de drag */}
-            <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-violet-950/40 border border-violet-800/30">
-              <span className="text-violet-400 text-sm">↕</span>
-              <span className="text-[11px] text-violet-300/80 leading-snug">
-                Arraste a linha roxa no card para ajustar o tamanho da imagem
-              </span>
-              <span className="text-[10px] text-zinc-600 ml-auto flex-shrink-0">{imageHeightPercent}%</span>
-            </div>
-
-            {/* Posição */}
-            <div className="flex items-center gap-3">
-              <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                <span className="text-zinc-500 text-xs">↕</span>
-              </div>
-              <span className="text-xs text-zinc-500 w-16 flex-shrink-0">Posição</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => onImagePositionChange('top')}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
-                    imagePosition === 'top'
-                      ? 'bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-500/30'
-                      : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500 hover:text-zinc-200'
-                  )}
-                >
-                  <ArrowUp className="w-3 h-3" /> Topo
-                </button>
-                <button
-                  onClick={() => onImagePositionChange('bottom')}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
-                    imagePosition === 'bottom'
-                      ? 'bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-500/30'
-                      : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500 hover:text-zinc-200'
-                  )}
-                >
-                  <ArrowDown className="w-3 h-3" /> Base
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Ações do slide */}
-          <div className="flex gap-2 flex-shrink-0 flex-wrap">
-            {onRegenerateSlide && (
-              <Button
-                size="sm" variant="outline"
-                className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 gap-1.5"
-                onClick={() => onRegenerateSlide(slide.num)}
-                disabled={getImgState(slide.num) === 'loading'}
+            return (
+              <div
+                key={`${slide.num}-${i}`}
+                id={`slide-card-${i}`}
+                onClick={() => setActiveSlide(i)}
+                className={cn(
+                  'w-full rounded-2xl overflow-hidden border transition-all cursor-pointer',
+                  isActive
+                    ? 'border-violet-500/70 shadow-xl shadow-violet-500/10'
+                    : 'border-zinc-800 hover:border-zinc-700'
+                )}
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Refazer imagem
-              </Button>
-            )}
-            <Button
-              size="sm"
-              className={cn('gap-1.5', slide.approved ? 'bg-green-700 hover:bg-green-600' : 'bg-green-600 hover:bg-green-500', 'text-white')}
-              onClick={approveSlide}
-            >
-              <Check className="w-3.5 h-3.5" />
-              {slide.approved ? 'Aprovado ✓' : 'Aprovar slide'}
-            </Button>
-          </div>
+                {/* ── Barra superior: badge + nav + aprovar ─────────────── */}
+                <div className="flex items-center gap-2 px-3 py-2 bg-zinc-900 border-b border-zinc-800">
+                  <span className="text-xs font-semibold text-zinc-500 w-5 flex-shrink-0">{i + 1}</span>
+                  <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400 h-5 px-1.5">
+                    {TYPE_LABELS[slide.type] || slide.type}
+                  </Badge>
+                  {slide.approved && (
+                    <Badge className="text-[10px] bg-green-600/20 text-green-400 border border-green-600/30 h-5 px-1.5">
+                      ✓
+                    </Badge>
+                  )}
+                  <div className="ml-auto flex items-center gap-0.5">
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-500"
+                      onClick={e => { e.stopPropagation(); setActiveSlide(Math.max(0, i - 1)) }}
+                      disabled={i === 0}>
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-500"
+                      onClick={e => { e.stopPropagation(); setActiveSlide(Math.min(slides.length - 1, i + 1)) }}
+                      disabled={i === slides.length - 1}>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={cn(
+                        'h-6 px-2 text-xs gap-1 ml-1',
+                        slide.approved ? 'bg-green-700 hover:bg-green-600' : 'bg-green-600 hover:bg-green-500',
+                        'text-white'
+                      )}
+                      onClick={e => { e.stopPropagation(); approveSlide(i) }}
+                    >
+                      <Check className="w-3 h-3" />
+                      {slide.approved ? 'OK ✓' : 'Aprovar'}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* ── Card preview — sempre editável até publicar ────────── */}
+                <div
+                  className="relative bg-zinc-950 flex justify-center"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <FrankCard
+                    text={slide.text}
+                    imagePath={slide.imagePath}
+                    authorName={expert.displayName}
+                    authorHandle={expert.handle}
+                    avatarUrl={expert.avatarUrl}
+                    highlightColor={expert.highlightColor}
+                    imageHeightPercent={slideImgHeight}
+                    onImageHeightPercentChange={v => updateSlide(i, { imageHeightPercent: v })}
+                    imagePosition={slideImgPos}
+                    imageObjectX={slideObjX}
+                    imageObjectY={slideObjY}
+                    onImageObjectChange={(x, y) => updateSlide(i, { imageObjectX: x, imageObjectY: y })}
+                    onTextChange={text => updateSlide(i, { text })}
+                    format="portrait"
+                    displayWidth={PREVIEW_W}
+                  />
+
+                  {/* Loading overlay */}
+                  {imgState === 'loading' && (
+                    <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
+                      <span className="text-xs text-violet-700 font-medium">Gerando imagem...</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Barra inferior: refazer + posição imagem ──────────── */}
+                <div
+                  className="flex items-center gap-2 px-3 py-2 bg-zinc-900 border-t border-zinc-800"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {onRegenerateSlide && (
+                    <Button
+                      size="sm" variant="outline"
+                      className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 gap-1.5 h-7 text-xs"
+                      onClick={() => onRegenerateSlide(slide.num)}
+                      disabled={imgState === 'loading'}
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Refazer imagem
+                    </Button>
+                  )}
+                  <div className="flex gap-1 ml-auto items-center">
+                    <span className="text-[10px] text-zinc-600 mr-1">{slideImgHeight}%</span>
+                    <button
+                      onClick={() => updateSlide(i, { imagePosition: 'top' })}
+                      className={cn(
+                        'flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all border',
+                        slideImgPos === 'top'
+                          ? 'bg-violet-600 text-white border-violet-600'
+                          : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'
+                      )}
+                    >
+                      <ArrowUp className="w-3 h-3" /> Topo
+                    </button>
+                    <button
+                      onClick={() => updateSlide(i, { imagePosition: 'bottom' })}
+                      className={cn(
+                        'flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all border',
+                        slideImgPos === 'bottom'
+                          ? 'bg-violet-600 text-white border-violet-600'
+                          : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'
+                      )}
+                    >
+                      <ArrowDown className="w-3 h-3" /> Base
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>

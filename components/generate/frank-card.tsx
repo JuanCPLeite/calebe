@@ -6,7 +6,10 @@
  * Renderiza internamente a 1080×1350px com as mesmas proporções de
  * card-renderer.ts, depois aplica CSS scale. O que você vê = o que será gerado.
  *
- * Drag handle: arraste a linha divisória no card para ajustar o tamanho da imagem.
+ * Features:
+ * - Drag handle sempre visível → resize da imagem por slide
+ * - Drag na imagem → reposiciona objectPosition X/Y
+ * - Click no texto → abre textarea inline para edição
  */
 
 import { useMemo, useRef, useState } from 'react'
@@ -25,9 +28,12 @@ export interface FrankCardProps {
   format?: 'portrait' | 'square'
   imageHeightPercent?: number
   imagePosition?: 'top' | 'bottom'
+  imageObjectX?: number
+  imageObjectY?: number
   displayWidth?: number
-  /** Se fornecido, o drag handle de resize fica visível */
   onImageHeightPercentChange?: (v: number) => void
+  onImageObjectChange?: (x: number, y: number) => void
+  onTextChange?: (text: string) => void
 }
 
 function autoFontSize(text: string): number {
@@ -41,17 +47,15 @@ function autoFontSize(text: string): number {
   return 50
 }
 
-function parseTextToJSX(text: string, highlightColor: string): React.ReactNode[] {
-  const parts = text.split(/(\{[^}]+\}|\*[^*]+\*|_[^_]+_|\n)/g)
+function parseTextToJSX(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*[^*]+\*|_[^_]+_|\n)/g)
   return parts.map((part, i) => {
     if (part === '\n') return <br key={i} />
-    if (part.startsWith('{') && part.endsWith('}'))
-      return <span key={i} style={{ color: highlightColor, fontWeight: 700 }}>{part.slice(1, -1)}</span>
     if (part.startsWith('*') && part.endsWith('*'))
       return <strong key={i}>{part.slice(1, -1)}</strong>
     if (part.startsWith('_') && part.endsWith('_'))
       return <em key={i}>{part.slice(1, -1)}</em>
-    return part
+    return part.replace(/\{([^}]+)\}/g, '$1')
   })
 }
 
@@ -66,13 +70,22 @@ export function FrankCard({
   format = 'portrait',
   imageHeightPercent = 45,
   imagePosition = 'bottom',
+  imageObjectX = 50,
+  imageObjectY = 50,
   displayWidth = 380,
   onImageHeightPercentChange,
+  onImageObjectChange,
+  onTextChange,
 }: FrankCardProps) {
   const [handleHovered, setHandleHovered] = useState(false)
+  const [editingText, setEditingText] = useState(false)
   const isDragging = useRef(false)
   const dragStartY = useRef(0)
   const dragStartPct = useRef(0)
+  const imgDragStartX = useRef(0)
+  const imgDragStartY = useRef(0)
+  const imgDragStartObjX = useRef(imageObjectX)
+  const imgDragStartObjY = useRef(imageObjectY)
 
   const cardW     = CARD_W
   const cardH     = format === 'square' ? CARD_W : CARD_H
@@ -89,20 +102,30 @@ export function FrankCard({
   const imgMarginB = imagePosition === 'bottom' ? Math.round(padV * 0.4) : 0
   const imgMarginT = imagePosition === 'top'    ? Math.round(padV * 0.3) : 0
 
-  // Altura interna do header (para calcular posição do handle)
   const headerInternalH = showHeader
     ? Math.round(padV * 0.80) + avatarSize + Math.round(padV * 0.25)
     : 0
 
-  // Y do handle em display pixels (na borda entre texto e imagem)
+  // Y do handle em display pixels
   const handleY = imagePosition === 'bottom'
     ? displayHeight - (bottomPad + imgMarginB + imgHeightPx) * scale
     : (headerInternalH + imgMarginT + imgHeightPx) * scale
 
   const fontSize   = useMemo(() => autoFontSize(text), [text])
   const lineHeight = fontSize <= 30 ? 1.2 : fontSize <= 36 ? 1.25 : 1.3
-  const content    = useMemo(() => parseTextToJSX(text, highlightColor), [text, highlightColor])
+  const content    = useMemo(() => parseTextToJSX(text), [text])
   const initials   = authorName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+
+  // Coordenadas da textarea inline (em display pixels)
+  const bodyTopInCard = imagePosition === 'top'
+    ? headerInternalH + imgMarginT + imgHeightPx
+    : headerInternalH
+  const textareaTop    = bodyTopInCard * scale
+  const textareaLeft   = padH * scale
+  const textareaWidth  = (cardW - 2 * padH) * scale
+  const textareaHeight = displayHeight - textareaTop - bottomPad * scale
+  const textareaFontSize  = fontSize * scale
+  const textareaBodyPadV  = Math.round(padV * 0.85) * scale
 
   // ── Drag do handle ────────────────────────────────────────────────────────
   function startDrag(e: React.MouseEvent) {
@@ -114,7 +137,6 @@ export function FrankCard({
 
     function onMove(ev: MouseEvent) {
       const dy    = ev.clientY - dragStartY.current
-      // drag para cima numa imagem bottom = imagem maior (dy negativo → pct maior)
       const delta = (imagePosition === 'bottom' ? -dy : dy) / displayHeight * 100
       const next  = Math.max(10, Math.min(75, dragStartPct.current + delta))
       onImageHeightPercentChange!(Math.round(next))
@@ -128,22 +150,63 @@ export function FrankCard({
     document.addEventListener('mouseup', onUp)
   }
 
+  // ── Drag da imagem para reposicionar objectPosition ───────────────────────
+  function startImgDrag(e: React.MouseEvent) {
+    if (!onImageObjectChange || !imagePath) return
+    e.preventDefault()
+    e.stopPropagation()
+    imgDragStartX.current    = e.clientX
+    imgDragStartY.current    = e.clientY
+    imgDragStartObjX.current = imageObjectX
+    imgDragStartObjY.current = imageObjectY
+
+    const imageDisplayW = (cardW - 2 * padH) * scale
+    const imageDisplayH = imgHeightPx * scale
+
+    function onMove(ev: MouseEvent) {
+      const dx = ev.clientX - imgDragStartX.current
+      const dy = ev.clientY - imgDragStartY.current
+      const newX = Math.max(0, Math.min(100, imgDragStartObjX.current - dx / imageDisplayW * 100))
+      const newY = Math.max(0, Math.min(100, imgDragStartObjY.current - dy / imageDisplayH * 100))
+      onImageObjectChange!(Math.round(newX), Math.round(newY))
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+
   // ── Blocos ────────────────────────────────────────────────────────────────
   const imageBlock = (
-    <div style={{
-      flexBasis:    imgHeightPx,
-      flexShrink:   0, flexGrow: 0,
-      margin:       `${imgMarginT}px ${padH}px ${imgMarginB}px ${padH}px`,
-      overflow:     'hidden',
-      borderRadius: imgRadius,
-      background:   imagePath ? '#f0f0f0' : '#f7f7f7',
-      border:       imagePath ? 'none' : '4px dashed #d1d5db',
-      display:      'flex', alignItems: 'center', justifyContent: 'center',
-      flexDirection: 'column' as const, gap: 16,
-    }}>
+    <div
+      onMouseDown={startImgDrag}
+      style={{
+        flexBasis:    imgHeightPx,
+        flexShrink:   0, flexGrow: 0,
+        margin:       `${imgMarginT}px ${padH}px ${imgMarginB}px ${padH}px`,
+        overflow:     'hidden',
+        borderRadius: imgRadius,
+        background:   imagePath ? '#f0f0f0' : '#f7f7f7',
+        border:       imagePath ? 'none' : '4px dashed #d1d5db',
+        display:      'flex', alignItems: 'center', justifyContent: 'center',
+        flexDirection: 'column' as const, gap: 16,
+        cursor:       imagePath && onImageObjectChange ? 'grab' : 'default',
+      }}
+    >
       {imagePath ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={imagePath} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        <img
+          src={imagePath}
+          alt=""
+          draggable={false}
+          style={{
+            width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+            objectPosition: `${imageObjectX}% ${imageObjectY}%`,
+            userSelect: 'none', pointerEvents: 'none',
+          }}
+        />
       ) : (
         <>
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none"
@@ -160,11 +223,15 @@ export function FrankCard({
   )
 
   const bodyBlock = (
-    <div style={{
-      flex: 1, minHeight: 0,
-      padding: `${Math.round(padV * 0.85)}px ${padH}px`,
-      overflow: 'hidden', display: 'flex', alignItems: 'flex-start',
-    }}>
+    <div
+      onClick={() => { if (onTextChange && !editingText) setEditingText(true) }}
+      style={{
+        flex: 1, minHeight: 0,
+        padding: `${Math.round(padV * 0.85)}px ${padH}px`,
+        overflow: 'hidden', display: 'flex', alignItems: 'flex-start',
+        cursor: onTextChange ? 'text' : 'default',
+      }}
+    >
       <p style={{ fontSize, lineHeight, color: '#1a1a1a', fontWeight: 400, wordBreak: 'break-word', margin: 0 }}>
         {content}
       </p>
@@ -222,50 +289,75 @@ export function FrankCard({
         {imagePosition === 'top' ? <>{imageBlock}{bodyBlock}</> : <>{bodyBlock}{imageBlock}</>}
       </div>
 
-      {/* ── Drag handle (overlay em display coords) ──────────────────────── */}
-      {onImageHeightPercentChange && (
-        <div
-          onMouseDown={startDrag}
-          onMouseEnter={() => setHandleHovered(true)}
-          onMouseLeave={() => setHandleHovered(false)}
-          title="Arraste para redimensionar a imagem"
+      {/* ── Drag handle — sempre visível ─────────────────────────────────── */}
+      <div
+        onMouseDown={startDrag}
+        onMouseEnter={() => setHandleHovered(true)}
+        onMouseLeave={() => setHandleHovered(false)}
+        title="Arraste para redimensionar a imagem"
+        style={{
+          position: 'absolute',
+          left: 0, right: 0,
+          top: Math.max(4, handleY - 12),
+          height: 24,
+          cursor: onImageHeightPercentChange ? 'ns-resize' : 'default',
+          zIndex: 30,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div style={{
+          width: '55%',
+          height: handleHovered ? 5 : 3,
+          background: handleHovered ? '#7c3aed' : 'rgba(124, 58, 237, 0.65)',
+          borderRadius: 4,
+          transition: 'all 0.12s ease',
+          boxShadow: handleHovered ? '0 0 8px rgba(124,58,237,0.5)' : 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 4,
+        }}>
+          {[0,1,2].map(d => (
+            <div key={d} style={{
+              width: 3, height: 3,
+              borderRadius: '50%',
+              background: handleHovered ? '#fff' : 'rgba(255,255,255,0.7)',
+              flexShrink: 0,
+            }} />
+          ))}
+        </div>
+      </div>
+
+      {/* ── Textarea inline de edição ─────────────────────────────────────── */}
+      {editingText && onTextChange && (
+        <textarea
+          autoFocus
+          value={text}
+          onChange={e => onTextChange(e.target.value)}
+          onBlur={() => setEditingText(false)}
           style={{
             position: 'absolute',
-            left: 0, right: 0,
-            top: Math.max(4, handleY - 12),
-            height: 24,
-            cursor: 'ns-resize',
-            zIndex: 30,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            // área clicável maior que o visual
+            top: textareaTop,
+            left: textareaLeft,
+            width: textareaWidth,
+            height: textareaHeight,
+            fontSize: textareaFontSize,
+            lineHeight,
+            fontFamily: "var(--font-dm-sans, 'DM Sans'), 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+            fontWeight: 400,
+            color: '#1a1a1a',
+            background: 'rgba(255,255,255,0.93)',
+            border: '2px solid #7c3aed',
+            borderRadius: 8,
+            padding: `${textareaBodyPadV}px 0`,
+            resize: 'none',
+            outline: 'none',
+            zIndex: 40,
+            boxSizing: 'border-box',
           }}
-        >
-          {/* Linha visual + grip dots */}
-          <div style={{
-            width: '55%',
-            height: handleHovered ? 5 : 3,
-            background: handleHovered ? '#7c3aed' : 'rgba(124, 58, 237, 0.45)',
-            borderRadius: 4,
-            transition: 'all 0.12s ease',
-            boxShadow: handleHovered ? '0 0 8px rgba(124,58,237,0.5)' : 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 4,
-          }}>
-            {/* grip dots */}
-            {[0,1,2].map(d => (
-              <div key={d} style={{
-                width: 3, height: 3,
-                borderRadius: '50%',
-                background: handleHovered ? '#fff' : 'rgba(255,255,255,0.7)',
-                flexShrink: 0,
-              }} />
-            ))}
-          </div>
-        </div>
+        />
       )}
     </div>
   )

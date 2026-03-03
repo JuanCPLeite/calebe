@@ -22,7 +22,7 @@ export interface CarouselContent {
 // O que muda por expert: nome, handle, nicho, produto, slide 5 e slide 10.
 // O estilo de escrita (reframe, analogias, dados, comparação) é fixo.
 //
-function buildSystemPrompt(expert: ExpertConfig): string {
+export function buildSystemPrompt(expert: ExpertConfig): string {
   return `Você é ${expert.displayName}, criador de conteúdo especialista em ${expert.niche}.
 
 ${expert.bioShort}
@@ -144,7 +144,7 @@ ${expert.ctaFinalTemplate}
 
 // ─── User prompt ─────────────────────────────────────────────────────────────
 
-function buildUserPrompt(topic: string, hook?: string): string {
+export function buildUserPrompt(topic: string, hook?: string): string {
   return `Gere um carrossel de 10 slides no estilo Frank Costa sobre:
 
 "${topic}"
@@ -195,12 +195,28 @@ export async function generateCarouselContent(
 
   const client = new Anthropic({ apiKey: key })
 
-  const message = await client.messages.create({
-    model: 'claude-opus-4-6',
-    max_tokens: 4096,
-    system: buildSystemPrompt(expert),
-    messages: [{ role: 'user', content: buildUserPrompt(topic, hook) }],
-  })
+  // Retry com backoff exponencial para 529 overloaded_error
+  let message
+  let lastError
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      message = await client.messages.create({
+        model: 'claude-opus-4-6',
+        max_tokens: 4096,
+        system: buildSystemPrompt(expert),
+        messages: [{ role: 'user', content: buildUserPrompt(topic, hook) }],
+      })
+      break
+    } catch (err: any) {
+      lastError = err
+      const isOverloaded = err?.status === 529 || err?.error?.type === 'overloaded_error'
+      if (!isOverloaded || attempt === 2) throw err
+      const wait = (attempt + 1) * 8000 // 8s, 16s
+      console.warn(`[content-engine] Anthropic overloaded (tentativa ${attempt + 1}), aguardando ${wait / 1000}s...`)
+      await new Promise(r => setTimeout(r, wait))
+    }
+  }
+  if (!message) throw lastError
 
   const raw = message.content[0].type === 'text' ? message.content[0].text : ''
 

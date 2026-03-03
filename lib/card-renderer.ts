@@ -51,7 +51,7 @@ function parseText(raw: string): string {
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')  // **bold** primeiro
     .replace(/\*([^*]+)\*/g,     '<strong>$1</strong>')  // *bold* compat
     .replace(/_([^_]+)_/g,       '<em>$1</em>')          // _italic_
-    .replace(/\{([^}]+)\}/g,     '<span class="hl">$1</span>') // {destaque}
+    .replace(/\{([^}]+)\}/g,     '$1')                         // {destaque} → texto simples
     .replace(/\n/g, '<br>')
 }
 
@@ -210,11 +210,6 @@ export function buildCardHTML(opts: CardRenderOpts): string {
     color: #1a1a1a;
     word-break: break-word;
     font-weight: 400;
-  }
-
-  .card-text .hl {
-    font-weight: 700;
-    color: ${highlightColor};
   }
 
   .card-text strong {
