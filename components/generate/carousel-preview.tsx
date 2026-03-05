@@ -360,23 +360,37 @@ export function CarouselPreview({
                   className="relative bg-zinc-950 flex justify-center"
                   onClick={e => e.stopPropagation()}
                 >
-                  <FrankCard
-                    text={slide.text}
-                    imagePath={slide.imagePath}
-                    authorName={expert.displayName}
-                    authorHandle={expert.handle}
-                    avatarUrl={expert.avatarUrl}
-                    highlightColor={expert.highlightColor}
-                    imageHeightPercent={slideExtraPct}
-                    onImageHeightPercentChange={v => updateSlide(i, { imageHeightPercent: v })}
-                    imagePosition={slideImgPos}
-                    imageObjectX={slideObjX}
-                    imageObjectY={slideObjY}
-                    onImageObjectChange={(x, y) => updateSlide(i, { imageObjectX: x, imageObjectY: y })}
-                    onTextChange={text => updateSlide(i, { text })}
-                    format="portrait"
-                    displayWidth={PREVIEW_W}
-                  />
+                  {slide.cardPath && !slide.cardPath.startsWith('data:') && !slide.imagePath ? (
+                    /* Card já renderizado carregado do banco — mostra PNG direto */
+                    <div style={{
+                      width: PREVIEW_W,
+                      height: Math.round(PREVIEW_W * 1350 / 1080),
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                    }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={slide.cardPath} alt={`Slide ${slide.num}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  ) : (
+                    <FrankCard
+                      text={slide.text}
+                      imagePath={slide.imagePath}
+                      authorName={expert.displayName}
+                      authorHandle={expert.handle}
+                      avatarUrl={expert.avatarUrl}
+                      highlightColor={expert.highlightColor}
+                      imageHeightPercent={slideExtraPct}
+                      onImageHeightPercentChange={v => updateSlide(i, { imageHeightPercent: v })}
+                      imagePosition={slideImgPos}
+                      imageObjectX={slideObjX}
+                      imageObjectY={slideObjY}
+                      onImageObjectChange={(x, y) => updateSlide(i, { imageObjectX: x, imageObjectY: y })}
+                      onTextChange={text => updateSlide(i, { text })}
+                      format="portrait"
+                      displayWidth={PREVIEW_W}
+                    />
+                  )}
 
                   {/* Loading overlay */}
                   {imgState === 'loading' && (
