@@ -40,6 +40,8 @@ export default function GeneratePage() {
   const [missingTokens, setMissingTokens] = useState<string[]>([])
   const [carouselId, setCarouselId]       = useState<string | null>(null)
   const [userId, setUserId]               = useState<string | null>(null)
+  const [textLength, setTextLength]       = useState<'short' | 'medium' | 'long'>('medium')
+  const [useFixedSlides, setUseFixedSlides] = useState(true)
   const [scheduledAt, setScheduledAt]     = useState('')
   const [showScheduler, setShowScheduler] = useState(false)
   const [savedTopicRef, setSavedTopicRef] = useState<string | null>(null)
@@ -212,7 +214,7 @@ export default function GeneratePage() {
       const res = await fetch('/api/generate/content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topic.title, hook }),
+        body: JSON.stringify({ topic: topic.title, hook, textLength, useFixedSlides }),
       })
 
       if (!res.ok || !res.body) {
@@ -306,6 +308,12 @@ export default function GeneratePage() {
     recognition.start()
   }
 
+  // imagePrompts padrão para slides que não recebem prompt do Claude (ex: fixos)
+  const FALLBACK_IMAGE_PROMPTS: Record<string, string> = {
+    cta:       'warm professional portrait, confident approachable smile, natural light, modern clean office',
+    'cta-final': 'person sitting relaxed at clean desk, laptop open, coffee cup, warm natural sunlight',
+  }
+
   // ── Upload do card PNG para o Storage ────────────────────────────────────
   async function uploadCardToStorage(slideNum: number, cardBase64: string): Promise<{ url: string; path: string } | null> {
     if (!userId) return null
@@ -359,7 +367,8 @@ export default function GeneratePage() {
 
   // ── Gera imagem + card de UM slide ──────────────────────────────────────
   async function generateOneSlide(slide: Slide): Promise<void> {
-    if (!slide.imagePrompt) return
+    const imagePrompt = slide.imagePrompt || FALLBACK_IMAGE_PROMPTS[slide.type]
+    if (!imagePrompt) return
 
     setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
 
@@ -367,7 +376,7 @@ export default function GeneratePage() {
       const imageRes = await fetch('/api/generate/images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slideNum: slide.num, imagePrompt: slide.imagePrompt }),
+        body: JSON.stringify({ slideNum: slide.num, imagePrompt }),
       })
       const imageData = await imageRes.json()
       if (imageData.error) throw new Error(imageData.error)
@@ -634,6 +643,47 @@ export default function GeneratePage() {
           </button>
         </div>
       )}
+
+      {/* Opções de geração */}
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">Texto:</span>
+          <div className="flex rounded-lg bg-zinc-800 p-0.5 gap-0.5">
+            {(['short', 'medium', 'long'] as const).map(opt => (
+              <button
+                key={opt}
+                onClick={() => setTextLength(opt)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  textLength === opt ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-300'
+                }`}
+              >
+                {opt === 'short' ? 'Curto' : opt === 'medium' ? 'Médio' : 'Longo'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">Slides 5 e 10:</span>
+          <div className="flex rounded-lg bg-zinc-800 p-0.5 gap-0.5">
+            <button
+              onClick={() => setUseFixedSlides(true)}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                useFixedSlides ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-300'
+              }`}
+            >
+              Template fixo
+            </button>
+            <button
+              onClick={() => setUseFixedSlides(false)}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                !useFixedSlides ? 'bg-violet-600 text-white' : 'text-zinc-400 hover:text-zinc-300'
+              }`}
+            >
+              Gerar com IA
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Input livre + voz */}
       <div className="flex gap-2">

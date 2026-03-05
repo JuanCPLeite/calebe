@@ -212,15 +212,21 @@ export default function CarouselDetailPage() {
     })
   }, [slides])
 
+  const FALLBACK_IMAGE_PROMPTS: Record<string, string> = {
+    cta:         'warm professional portrait, confident approachable smile, natural light, modern clean office',
+    'cta-final': 'person sitting relaxed at clean desk, laptop open, coffee cup, warm natural sunlight',
+  }
+
   // ── Geração de imagem para um slide ───────────────────────────────────────
   async function generateOneSlide(slide: Slide) {
-    if (!slide.imagePrompt) return
+    const imagePrompt = slide.imagePrompt || FALLBACK_IMAGE_PROMPTS[slide.type]
+    if (!imagePrompt) return
     setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
     try {
       const imgRes  = await fetch('/api/generate/images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slideNum: slide.num, imagePrompt: slide.imagePrompt }),
+        body: JSON.stringify({ slideNum: slide.num, imagePrompt }),
       })
       const imgData = await imgRes.json()
       if (imgData.error) throw new Error(imgData.error)

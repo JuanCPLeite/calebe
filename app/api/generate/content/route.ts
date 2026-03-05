@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 })
   }
 
-  const { topic, hook } = await req.json()
+  const { topic, hook, textLength, useFixedSlides } = await req.json()
+  const contentOptions = { textLength, useFixedSlides: useFixedSlides !== false }
   if (!topic) {
     return new Response(JSON.stringify({ error: 'topic obrigatório' }), { status: 400 })
   }
@@ -55,8 +56,8 @@ export async function POST(req: NextRequest) {
           const msgStream = client.messages.stream({
             model: 'claude-opus-4-6',
             max_tokens: 4096,
-            system: buildSystemPrompt(expert),
-            messages: [{ role: 'user', content: buildUserPrompt(topic, hook) }],
+            system: buildSystemPrompt(expert, contentOptions),
+            messages: [{ role: 'user', content: buildUserPrompt(topic, hook, contentOptions) }],
           })
 
           for await (const event of msgStream) {

@@ -22,7 +22,13 @@ export interface CarouselContent {
 // O que muda por expert: nome, handle, nicho, produto, slide 5 e slide 10.
 // O estilo de escrita (reframe, analogias, dados, comparação) é fixo.
 //
-export function buildSystemPrompt(expert: ExpertConfig): string {
+export interface ContentOptions {
+  textLength?: 'short' | 'medium' | 'long'
+  useFixedSlides?: boolean
+}
+
+export function buildSystemPrompt(expert: ExpertConfig, options: ContentOptions = {}): string {
+  const { useFixedSlides = true } = options
   const now = new Date()
   const currentDate = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
   return `Você é ${expert.displayName}, criador de conteúdo especialista em ${expert.niche}.
@@ -54,8 +60,9 @@ Use no máximo 1-2 emojis por slide, só se natural.
 
 2. ANALOGIA CONCRETA (nunca explique abstrato sem imagem mental física):
    Ex: processo manual = "digitar CPF no mesmo campo 300 vezes por dia"
-   Ex: IA mal usada = "Ferrari batendo no poste"
+   Ex: ferramenta mal usada = "carro de corrida em estrada de terra"
    Ex: automação ruim = "robô que liga às 3 da manhã"
+   IMPORTANTE: varie as analogias conforme o tema — nunca repita os mesmos exemplos em carrosséis diferentes.
 
 3. DADOS SEMPRE ESPECÍFICOS:
    Nunca "muito caro" → sempre "R$ X" ou "X horas" ou "X vezes mais"
@@ -97,8 +104,13 @@ Slide 4 — content
   Custo: {R$ X/mês} para automação.
   *[Frase de fechamento com urgência.]*
 
-Slide 5 — cta (FIXO — COPIAR EXATAMENTE, SEM ALTERAR NADA):
-${expert.authorSlideTemplate}
+${useFixedSlides
+  ? `Slide 5 — cta (FIXO — COPIAR EXATAMENTE, SEM ALTERAR NADA):
+${expert.authorSlideTemplate}`
+  : `Slide 5 — cta
+  Apresentação do autor adaptada ao tema do carrossel. Quem é, o que faz, para quem.
+  Tom pessoal e direto. Inclua nome, especialidade e credencial relevante ao tema.
+  Finalize com CTA para seguir o perfil.`}
 
 Slide 6 — benefit
   {[Dado/estatística forte]} — *(Fonte se houver)*
@@ -122,32 +134,47 @@ Slide 8 — comparison
 Slide 9 — proof
   {[Afirmação contraintuitiva ou erro comum.]}
   [Consequência de fazer errado — específica.]
-  Anota isso: [analogia concreta — Ferrari, jet ski, tradutor de idiomas...]
+  Anota isso: [analogia concreta e INÉDITA — adaptada ao tema, variada a cada carrossel]
   [O segredo não é a ferramenta. É saber qual processo usar.]
   [CTA suave apontando pro conteúdo/produto.]
 
-Slide 10 — cta-final (FIXO — COPIAR EXATAMENTE, SEM ALTERAR NADA):
-${expert.ctaFinalTemplate}
+${useFixedSlides
+  ? `Slide 10 — cta-final (FIXO — COPIAR EXATAMENTE, SEM ALTERAR NADA):
+${expert.ctaFinalTemplate}`
+  : `Slide 10 — cta-final
+  CTA final criativo adaptado ao tema. Peça para seguir, salvar ou compartilhar.
+  Inclua: ${expert.productCta}
+  Tom: encerramento forte, direto, sem clichês.`}
 
 ━━━ IMAGENS (imagePrompt) ━━━
 
+ATENÇÃO: imagePrompt é OBRIGATÓRIO em TODOS os 10 slides, incluindo slides 5 e 10.
+
 - Em INGLÊS, cena fotorrealista, sem texto na imagem
-- Situações CONCRETAS de trabalho/negócio — nunca abstrações genéricas
+- Situações CONCRETAS — nunca abstrações genéricas
 - Contraste emocional quando possível (caótico vs organizado)
-- Ambiente brasileiro quando fizer sentido
 - Por tipo de slide:
-  hook    → person looking at screen with "I can't believe I didn't know this" expression
-  problem → messy desk, multiple open tabs, overwhelmed expression
-  content → clean dashboard, automated workflow, organized setup
-  cta     → warm approachable photo (if expert photo available: use it)
-  comparison → split: left=chaotic manual work, right=clean automated setup
-  proof   → powerful object requiring skill (Ferrari, cockpit, precision instrument)
-  cta-final → person relaxed, business running smoothly, laptop + coffee`
+  hook      → photorealistic scene DIRECTLY representing the carousel topic: show the brand, product, key industry object, or main concept — NOT a generic person looking at a screen
+  problem   → messy desk, multiple open tabs, overwhelmed professional
+  content   → clean dashboard, automated workflow, organized digital setup
+  cta       → warm professional portrait or natural workplace scene
+  benefit   → confident professional, upward growth visual, success indicators
+  comparison → split view: left=chaotic manual process, right=clean automated setup
+  proof     → skilled expert using specialized tool (adapt to topic: surgeon, pilot, engineer, chef, mechanic — choose the most fitting)
+  cta-final → person relaxed at desk, business running smoothly, laptop and coffee`
 }
 
 // ─── User prompt ─────────────────────────────────────────────────────────────
 
-export function buildUserPrompt(topic: string, hook?: string): string {
+export function buildUserPrompt(topic: string, hook?: string, options: ContentOptions = {}): string {
+  const { textLength = 'medium', useFixedSlides = true } = options
+
+  const textLengthInstruction = {
+    short:  'LIMITE OBRIGATÓRIO: máximo 130 caracteres por slide. Ultra-conciso — apenas a ideia central, sem explicações adicionais.',
+    medium: 'LIMITE DE TEXTO: máximo 240 caracteres por slide. Conciso e direto ao ponto.',
+    long:   'Sem limite fixo — use o espaço necessário para desenvolver bem cada ideia.',
+  }[textLength]
+
   return `Gere um carrossel de 10 slides no estilo Frank Costa sobre:
 
 "${topic}"
@@ -158,14 +185,20 @@ O slide 1 DEVE COMEÇAR com exatamente esta frase como primeira linha:
 Esta é a frase de abertura que prende o leitor. Coloque-a como a PRIMEIRA linha do slide 1, com *negrito* ou {destaque} para reforçar. O restante do slide complementa e expande essa ideia.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` : ''}
 
+${textLengthInstruction}
+
 REGRAS CRÍTICAS:
 - Slide 1: PRIMEIRA linha = "${hook || 'frase de abertura impactante'}" (obrigatório)
-- Slide 5: COPIAR EXATAMENTE o template do autor fornecido no system prompt. NENHUMA alteração.
-- Slide 10: COPIAR EXATAMENTE o template de CTA final. NENHUMA alteração.
+${useFixedSlides
+  ? `- Slide 5: COPIAR EXATAMENTE o template do autor fornecido no system prompt. NENHUMA alteração.
+- Slide 10: COPIAR EXATAMENTE o template de CTA final. NENHUMA alteração.`
+  : `- Slide 5: gerar livremente — apresentação do autor adaptada ao tema.
+- Slide 10: gerar livremente — CTA final adaptado ao tema.`}
 - Dados sempre específicos com números reais
 - Usar pelo menos 1 reframe ("A pergunta não é... A pergunta é:")
 - Usar pelo menos 1 lista numerada mostrando processo quebrado
 - Slide 8 DEVE ter formato Modo Antigo vs Com Automação com dados de tempo/custo
+- imagePrompt é OBRIGATÓRIO em TODOS os 10 slides (incluindo slides 5 e 10)
 
 RESPONDA SOMENTE com JSON válido, sem markdown, sem explicações:
 
@@ -177,7 +210,7 @@ RESPONDA SOMENTE com JSON válido, sem markdown, sem explicações:
       "num": 1,
       "type": "hook",
       "text": "texto do slide — use *negrito* para frase-chicote e {destaque} para dados/valores chave",
-      "imagePrompt": "detailed photorealistic scene in English, no text in image"
+      "imagePrompt": "detailed photorealistic scene in English, no text in image — MUST be directly related to the topic"
     }
   ]
 }
@@ -191,7 +224,8 @@ export async function generateCarouselContent(
   expert: ExpertConfig,
   topic: string,
   hook?: string,
-  apiKey?: string
+  apiKey?: string,
+  options: ContentOptions = {}
 ): Promise<CarouselContent> {
   const key = apiKey || process.env.ANTHROPIC_API_KEY
   if (!key) throw new Error('ANTHROPIC_API_KEY não configurada')
@@ -206,8 +240,8 @@ export async function generateCarouselContent(
       message = await client.messages.create({
         model: 'claude-opus-4-6',
         max_tokens: 4096,
-        system: buildSystemPrompt(expert),
-        messages: [{ role: 'user', content: buildUserPrompt(topic, hook) }],
+        system: buildSystemPrompt(expert, options),
+        messages: [{ role: 'user', content: buildUserPrompt(topic, hook, options) }],
       })
       break
     } catch (err: any) {
