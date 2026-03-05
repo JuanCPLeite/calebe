@@ -84,77 +84,90 @@ export default function CarouselDetailPage() {
     }
   }
 
-  // Carrega dados do carousel + expert
+  // Carrega dados do carousel + expert em paralelo
   useEffect(() => {
     async function load() {
-      try {
-        const res  = await fetch(`/api/carousels/${id}`)
-        const data = await res.json()
-        if (data.error) { router.push('/dashboard'); return }
+      // Dispara carousel e auth em paralelo
+      const [carouselRes, { data: { user } }] = await Promise.all([
+        fetch(`/api/carousels/${id}`),
+        supabase.auth.getUser(),
+      ])
 
-        setCarousel(data)
+      const data = await carouselRes.json()
+      if (data.error) { router.push('/dashboard'); return }
 
-        // Gera URLs assinadas para slides que têm cardStoragePath no banco
-        const rawSlides: Slide[] = (data.slides || []).map((s: Slide) => ({
-          ...s,
-          imagePosition: s.imagePosition ?? 'bottom',
-          imageObjectX:  s.imageObjectX  ?? 50,
-          imageObjectY:  s.imageObjectY  ?? 50,
-        }))
-        const slidesWithUrls = await Promise.all(rawSlides.map(async (s) => {
-          if (!s.cardStoragePath) return s
-          const { data: signed } = await supabase.storage
-            .from('carousel-images')
-            .createSignedUrl(s.cardStoragePath, 3600)
-          return signed?.signedUrl ? { ...s, cardPath: signed.signedUrl } : s
-        }))
-        setSlides(slidesWithUrls)
-        setCaption(data.caption || '')
-        if (data.scheduled_at) {
-          // converte ISO para formato datetime-local
-          const d = new Date(data.scheduled_at)
-          const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-            .toISOString().slice(0, 16)
-          setScheduledAt(local)
-        }
-      } catch (e) {
-        console.error('Erro ao carregar carousel:', e)
+      setCarousel(data)
+      if (user) setUserId(user.id)
+
+      // Prepara slides base
+      const rawSlides: Slide[] = (data.slides || []).map((s: Slide) => ({
+        ...s,
+        imagePosition: s.imagePosition ?? 'bottom',
+        imageObjectX:  s.imageObjectX  ?? 50,
+        imageObjectY:  s.imageObjectY  ?? 50,
+      }))
+
+      // Signed URLs dos slides e dados do expert em paralelo
+      const slidePaths = rawSlides.map(s => s.cardStoragePath).filter(Boolean) as string[]
+
+      const [signedSlides, expertData] = await Promise.all([
+        // Batch de URLs de slides (1 request ao invés de N)
+        slidePaths.length > 0
+          ? supabase.storage.from('carousel-images').createSignedUrls(slidePaths, 3600)
+          : Promise.resolve({ data: [] }),
+        // Expert query
+        user
+          ? supabase.from('experts')
+              .select('display_name, handle, highlight_color, id')
+              .eq('user_id', user.id)
+              .single()
+          : Promise.resolve({ data: null }),
+      ])
+
+      // Aplica URLs assinadas nos slides
+      const urlMap: Record<string, string> = {}
+      for (const item of (signedSlides.data || [])) {
+        if (item.signedUrl) urlMap[item.path] = item.signedUrl
+      }
+      const slidesWithUrls = rawSlides.map(s =>
+        s.cardStoragePath && urlMap[s.cardStoragePath]
+          ? { ...s, cardPath: urlMap[s.cardStoragePath] }
+          : s
+      )
+      setSlides(slidesWithUrls)
+
+      setCaption(data.caption || '')
+      if (data.scheduled_at) {
+        const d = new Date(data.scheduled_at)
+        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+          .toISOString().slice(0, 16)
+        setScheduledAt(local)
       }
 
-      // Carrega expert
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) setUserId(user.id)
-      if (user) {
-        const { data: exp } = await supabase
-          .from('experts')
-          .select('display_name, handle, highlight_color, id')
-          .eq('user_id', user.id)
-          .single()
+      // Busca foto do expert (se encontrou expert)
+      const exp = expertData.data
+      if (exp) {
+        const { data: photos } = await supabase
+          .from('expert_photos')
+          .select('storage_path')
+          .eq('expert_id', exp.id)
+          .order('order_index', { ascending: true })
+          .limit(1)
 
-        if (exp) {
-          let avatarUrl: string | undefined
-
-          const { data: photos } = await supabase
-            .from('expert_photos')
-            .select('storage_path')
-            .eq('expert_id', exp.id)
-            .order('order_index', { ascending: true })
-            .limit(1)
-
-          if (photos?.[0]?.storage_path) {
-            const { data: signed } = await supabase.storage
-              .from('expert-photos')
-              .createSignedUrl(photos[0].storage_path, 3600)
-            avatarUrl = signed?.signedUrl || undefined
-          }
-
-          setExpert({
-            displayName:    exp.display_name || DEFAULT_EXPERT.displayName,
-            handle:         exp.handle       || DEFAULT_EXPERT.handle,
-            highlightColor: exp.highlight_color || DEFAULT_EXPERT.highlightColor,
-            avatarUrl,
-          })
+        let avatarUrl: string | undefined
+        if (photos?.[0]?.storage_path) {
+          const { data: signed } = await supabase.storage
+            .from('expert-photos')
+            .createSignedUrl(photos[0].storage_path, 3600)
+          avatarUrl = signed?.signedUrl || undefined
         }
+
+        setExpert({
+          displayName:    exp.display_name || DEFAULT_EXPERT.displayName,
+          handle:         exp.handle       || DEFAULT_EXPERT.handle,
+          highlightColor: exp.highlight_color || DEFAULT_EXPERT.highlightColor,
+          avatarUrl,
+        })
       }
 
       setLoading(false)

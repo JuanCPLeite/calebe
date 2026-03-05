@@ -30,7 +30,7 @@ export default function DashboardPage() {
 
       const { data } = await supabase
         .from('carousels')
-        .select('*')
+        .select('id, topic, caption, ig_post_id, published_at, scheduled_at, created_at, slides')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(50)
