@@ -16,7 +16,6 @@ interface FormData {
   author_slide_template: string
   cta_final_template: string
   style_rules: string[]
-  ig_account_id: string
 }
 
 const EMPTY: FormData = {
@@ -30,7 +29,6 @@ const EMPTY: FormData = {
   author_slide_template: '',
   cta_final_template: '',
   style_rules: [],
-  ig_account_id: '',
 }
 
 const DNA_EXAMPLE = [
@@ -158,7 +156,6 @@ function DnaForm() {
           author_slide_template:  expert.author_slide_template || '',
           cta_final_template:     expert.cta_final_template || '',
           style_rules:            expert.style_rules || [],
-          ig_account_id:          expert.ig_account_id || '',
         })
         setAvatarUrl((expert as any).avatar_url || null)
       }
@@ -355,30 +352,25 @@ function DnaForm() {
             'Ex: Acesse o link na bio e comece hoje.')}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs text-zinc-400 mb-0.5">Cor de destaque</label>
-            <p className="text-[11px] text-zinc-600 mb-1.5 leading-snug">
-              Cor principal da sua marca. Aparece como destaque visual nos slides.
-            </p>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={form.highlight_color}
-                onChange={(e) => set('highlight_color', e.target.value)}
-                className="w-10 h-10 rounded cursor-pointer bg-transparent border-0"
-              />
-              <input
-                type="text"
-                value={form.highlight_color}
-                onChange={(e) => set('highlight_color', e.target.value)}
-                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-100 font-mono focus:outline-none focus:border-violet-500"
-              />
-            </div>
+        <div>
+          <label className="block text-xs text-zinc-400 mb-0.5">Cor de destaque</label>
+          <p className="text-[11px] text-zinc-600 mb-1.5 leading-snug">
+            Cor principal da sua marca. Aparece como destaque visual nos slides.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={form.highlight_color}
+              onChange={(e) => set('highlight_color', e.target.value)}
+              className="w-10 h-10 rounded cursor-pointer bg-transparent border-0"
+            />
+            <input
+              type="text"
+              value={form.highlight_color}
+              onChange={(e) => set('highlight_color', e.target.value)}
+              className="w-40 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-zinc-100 font-mono focus:outline-none focus:border-violet-500"
+            />
           </div>
-          {field('Instagram Account ID', 'ig_account_id',
-            'ID numérico da sua conta business. Necessário para publicar pelo app.',
-            '17841401...')}
         </div>
 
         {textarea('Template Slide 5 — apresentação do autor', 'author_slide_template',
