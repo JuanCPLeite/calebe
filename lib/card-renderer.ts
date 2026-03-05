@@ -38,6 +38,10 @@ export interface CardRenderOpts {
   imageHeightPercent?: number
   /** Posição da imagem no card. Default 'bottom'. */
   imagePosition?: 'top' | 'bottom'
+  /** object-position X da imagem (0-100). Default 50. */
+  imageObjectX?: number
+  /** object-position Y da imagem (0-100). Default 50. */
+  imageObjectY?: number
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -91,6 +95,8 @@ export function buildCardHTML(opts: CardRenderOpts): string {
     showHeader    = true,
     imageHeightPercent = 45,
     imagePosition = 'bottom',
+    imageObjectX  = 50,
+    imageObjectY  = 50,
   } = opts
 
   const { width, height } = FORMATS[format] ?? FORMATS.portrait
@@ -242,7 +248,7 @@ export function buildCardHTML(opts: CardRenderOpts): string {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    object-position: center center;
+    object-position: ${imageObjectX}% ${imageObjectY}%;
     display: block;
   }
 </style>

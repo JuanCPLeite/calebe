@@ -39,16 +39,26 @@ export default function GeneratePage() {
   const [generateError, setGenerateError] = useState('')
   const [missingTokens, setMissingTokens] = useState<string[]>([])
   const [carouselId, setCarouselId]       = useState<string | null>(null)
+  const [userId, setUserId]               = useState<string | null>(null)
   const [scheduledAt, setScheduledAt]     = useState('')
   const [showScheduler, setShowScheduler] = useState(false)
   const [savedTopicRef, setSavedTopicRef] = useState<string | null>(null)
   const autoSaveTimerRef                  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sessionIdRef                      = useRef<string>(`temp-${Date.now()}`)
+  const reRenderTimers                    = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
+  const lastRenderedSettings              = useRef<Record<number, { x: number; y: number; h: number; pos: string }>>({})
+
+  // Mantém sessionId sincronizado com o carouselId real assim que disponível
+  useEffect(() => {
+    if (carouselId) sessionIdRef.current = carouselId
+  }, [carouselId])
 
   // Carrega expert + verifica tokens essenciais
   useEffect(() => {
     async function loadExpertAndTokens() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      setUserId(user.id)
 
       // Carrega expert
       const { data: exp } = await supabase
@@ -141,10 +151,15 @@ export default function GeneratePage() {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = setTimeout(async () => {
       try {
+        // Remove campos grandes (base64) — só persiste paths e URLs pequenas
+        const slidesForSave = slides.map(({ imagePath, cardPath, ...rest }) => ({
+          ...rest,
+          ...(cardPath && !cardPath.startsWith('data:') ? { cardPath } : {}),
+        }))
         await fetch(`/api/carousels/${carouselId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ caption, slides }),
+          body: JSON.stringify({ caption, slides: slidesForSave }),
         })
       } catch (e) {
         console.error('Auto-save falhou:', e)
@@ -155,6 +170,28 @@ export default function GeneratePage() {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     }
   }, [slides, caption, carouselId])
+
+  // ── Re-render automático quando posição/espaço mudam (debounce 2s) ─────────
+  useEffect(() => {
+    slides.forEach(slide => {
+      if (!slide.imagePath) return // só re-renderiza se tiver a imagem Gemini em memória
+      const current = {
+        x:   slide.imageObjectX      ?? 50,
+        y:   slide.imageObjectY      ?? 50,
+        h:   slide.imageHeightPercent ?? 0,
+        pos: slide.imagePosition     ?? 'bottom',
+      }
+      const last = lastRenderedSettings.current[slide.num]
+      if (!last) { lastRenderedSettings.current[slide.num] = current; return }
+      if (last.x === current.x && last.y === current.y && last.h === current.h && last.pos === current.pos) return
+
+      if (reRenderTimers.current[slide.num]) clearTimeout(reRenderTimers.current[slide.num])
+      reRenderTimers.current[slide.num] = setTimeout(async () => {
+        lastRenderedSettings.current[slide.num] = current
+        await reRenderSlide(slide)
+      }, 2000)
+    })
+  }, [slides])
 
   // ── Geração de conteúdo ──────────────────────────────────────────────────
   async function handleGenerate(topic: Topic, hook: string) {
@@ -269,6 +306,57 @@ export default function GeneratePage() {
     recognition.start()
   }
 
+  // ── Upload do card PNG para o Storage ────────────────────────────────────
+  async function uploadCardToStorage(slideNum: number, cardBase64: string): Promise<{ url: string; path: string } | null> {
+    if (!userId) return null
+    const path = `${userId}/carousel-${sessionIdRef.current}/card-${slideNum}.png`
+    const bytes = Uint8Array.from(atob(cardBase64), c => c.charCodeAt(0))
+    const { error } = await supabase.storage.from('carousel-images').upload(path, bytes, {
+      contentType: 'image/png',
+      upsert: true,
+    })
+    if (error) { console.error('Upload card falhou:', error); return null }
+    const { data: signed } = await supabase.storage.from('carousel-images').createSignedUrl(path, 60 * 60 * 24 * 365)
+    return signed?.signedUrl ? { url: signed.signedUrl, path } : null
+  }
+
+  // ── Re-renderiza um slide usando a imagem Gemini já existente ─────────────
+  async function reRenderSlide(slide: Slide): Promise<void> {
+    if (!slide.imagePath) return
+    setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
+    try {
+      const imageBase64 = slide.imagePath.replace(/^data:[^;]+;base64,/, '')
+      const cardRes = await fetch('/api/render/card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text:               slide.text,
+          imageBase64,
+          format:             'portrait',
+          showHeader:         true,
+          imageHeightPercent: slide.imageHeightPercent ?? 0,
+          imagePosition:      slide.imagePosition      ?? 'bottom',
+          imageObjectX:       slide.imageObjectX       ?? 50,
+          imageObjectY:       slide.imageObjectY       ?? 50,
+        }),
+      })
+      const cardData = await cardRes.json()
+      if (cardData.error) throw new Error(cardData.error)
+
+      const stored = await uploadCardToStorage(slide.num, cardData.cardBase64)
+      const cardPath = stored?.url || `data:image/png;base64,${cardData.cardBase64}`
+      setSlides(prev => prev.map(s =>
+        s.num === slide.num
+          ? { ...s, cardPath, cardStoragePath: stored?.path }
+          : s
+      ))
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
+    } catch (err) {
+      console.error(`Re-render slide ${slide.num}:`, err)
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'error' }))
+    }
+  }
+
   // ── Gera imagem + card de UM slide ──────────────────────────────────────
   async function generateOneSlide(slide: Slide): Promise<void> {
     if (!slide.imagePrompt) return
@@ -294,15 +382,23 @@ export default function GeneratePage() {
           format:             'portrait',
           showHeader:         true,
           imageHeightPercent: slide.imageHeightPercent ?? 0,
-          imagePosition:      slide.imagePosition ?? 'bottom',
+          imagePosition:      slide.imagePosition      ?? 'bottom',
+          imageObjectX:       slide.imageObjectX       ?? 50,
+          imageObjectY:       slide.imageObjectY       ?? 50,
         }),
       })
       const cardData = await cardRes.json()
       if (cardData.error) throw new Error(cardData.error)
 
+      const stored = await uploadCardToStorage(slide.num, cardData.cardBase64)
+      const cardPath = stored?.url || `data:image/png;base64,${cardData.cardBase64}`
+      lastRenderedSettings.current[slide.num] = {
+        x: slide.imageObjectX ?? 50, y: slide.imageObjectY ?? 50,
+        h: slide.imageHeightPercent ?? 0, pos: slide.imagePosition ?? 'bottom',
+      }
       setSlides(prev => prev.map(s =>
         s.num === slide.num
-          ? { ...s, imagePath: imageData.dataUrl, cardPath: `data:image/png;base64,${cardData.cardBase64}` }
+          ? { ...s, imagePath: imageData.dataUrl, cardPath, cardStoragePath: stored?.path }
           : s
       ))
       setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))

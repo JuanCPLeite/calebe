@@ -18,8 +18,9 @@ export interface Slide {
   type: string
   text: string
   imagePrompt?: string
-  imagePath?: string
-  cardPath?: string
+  imagePath?: string       // base64 Gemini — apenas em memória, não persiste no banco
+  cardPath?: string        // URL assinada do Storage (ou base64 de fallback)
+  cardStoragePath?: string // path estável no bucket carousel-images
   approved?: boolean
   imageHeightPercent?: number
   imagePosition?: 'top' | 'bottom'

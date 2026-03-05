@@ -32,7 +32,57 @@ export default function CarouselDetailPage() {
   const [publishing, setPublishing]       = useState(false)
   const [scheduledAt, setScheduledAt]     = useState('')
   const [showScheduler, setShowScheduler] = useState(false)
+  const [userId, setUserId]               = useState<string | null>(null)
   const autoSaveTimer                     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reRenderTimers                    = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
+  const lastRenderedSettings              = useRef<Record<number, { x: number; y: number; h: number; pos: string }>>({})
+
+  // ── Upload do card PNG para o Storage ──────────────────────────────────────
+  async function uploadCardToStorage(slideNum: number, cardBase64: string): Promise<{ url: string; path: string } | null> {
+    if (!userId) return null
+    const path = `${userId}/carousel-${id}/card-${slideNum}.png`
+    const bytes = Uint8Array.from(atob(cardBase64), c => c.charCodeAt(0))
+    const { error } = await supabase.storage.from('carousel-images').upload(path, bytes, {
+      contentType: 'image/png',
+      upsert: true,
+    })
+    if (error) { console.error('Upload card falhou:', error); return null }
+    const { data: signed } = await supabase.storage.from('carousel-images').createSignedUrl(path, 60 * 60 * 24 * 365)
+    return signed?.signedUrl ? { url: signed.signedUrl, path } : null
+  }
+
+  // ── Re-renderiza slide usando imagem Gemini existente em memória ───────────
+  async function reRenderSlide(slide: Slide): Promise<void> {
+    if (!slide.imagePath) return
+    setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
+    try {
+      const imageBase64 = slide.imagePath.replace(/^data:[^;]+;base64,/, '')
+      const cardRes = await fetch('/api/render/card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text:               slide.text,
+          imageBase64,
+          format:             'portrait',
+          showHeader:         true,
+          imageHeightPercent: slide.imageHeightPercent ?? 0,
+          imagePosition:      slide.imagePosition      ?? 'bottom',
+          imageObjectX:       slide.imageObjectX       ?? 50,
+          imageObjectY:       slide.imageObjectY       ?? 50,
+        }),
+      })
+      const cardData = await cardRes.json()
+      if (cardData.error) throw new Error(cardData.error)
+      const stored = await uploadCardToStorage(slide.num, cardData.cardBase64)
+      const cardPath = stored?.url || `data:image/png;base64,${cardData.cardBase64}`
+      setSlides(prev => prev.map(s =>
+        s.num === slide.num ? { ...s, cardPath, cardStoragePath: stored?.path } : s
+      ))
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
+    } catch (err) {
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'error' }))
+    }
+  }
 
   // Carrega dados do carousel + expert
   useEffect(() => {
@@ -43,12 +93,22 @@ export default function CarouselDetailPage() {
         if (data.error) { router.push('/dashboard'); return }
 
         setCarousel(data)
-        setSlides((data.slides || []).map((s: Slide) => ({
+
+        // Gera URLs assinadas para slides que têm cardStoragePath no banco
+        const rawSlides: Slide[] = (data.slides || []).map((s: Slide) => ({
           ...s,
           imagePosition: s.imagePosition ?? 'bottom',
           imageObjectX:  s.imageObjectX  ?? 50,
           imageObjectY:  s.imageObjectY  ?? 50,
-        })))
+        }))
+        const slidesWithUrls = await Promise.all(rawSlides.map(async (s) => {
+          if (!s.cardStoragePath) return s
+          const { data: signed } = await supabase.storage
+            .from('carousel-images')
+            .createSignedUrl(s.cardStoragePath, 3600)
+          return signed?.signedUrl ? { ...s, cardPath: signed.signedUrl } : s
+        }))
+        setSlides(slidesWithUrls)
         setCaption(data.caption || '')
         if (data.scheduled_at) {
           // converte ISO para formato datetime-local
@@ -63,6 +123,7 @@ export default function CarouselDetailPage() {
 
       // Carrega expert
       const { data: { user } } = await supabase.auth.getUser()
+      if (user) setUserId(user.id)
       if (user) {
         const { data: exp } = await supabase
           .from('experts')
@@ -108,10 +169,15 @@ export default function CarouselDetailPage() {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     autoSaveTimer.current = setTimeout(async () => {
       try {
+        // Remove campos grandes (base64) — só persiste paths e URLs pequenas
+        const slidesForSave = slides.map(({ imagePath, cardPath, ...rest }) => ({
+          ...rest,
+          ...(cardPath && !cardPath.startsWith('data:') ? { cardPath } : {}),
+        }))
         await fetch(`/api/carousels/${id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ caption, slides }),
+          body: JSON.stringify({ caption, slides: slidesForSave }),
         })
       } catch (e) {
         console.error('Auto-save falhou:', e)
@@ -122,6 +188,29 @@ export default function CarouselDetailPage() {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     }
   }, [slides, caption, carousel, loading])
+
+  // ── Re-render automático quando posição/espaço mudam (debounce 2s) ─────────
+  useEffect(() => {
+    if (!carousel || carousel.ig_post_id || loading) return
+    slides.forEach(slide => {
+      if (!slide.imagePath) return
+      const current = {
+        x:   slide.imageObjectX       ?? 50,
+        y:   slide.imageObjectY       ?? 50,
+        h:   slide.imageHeightPercent ?? 0,
+        pos: slide.imagePosition      ?? 'bottom',
+      }
+      const last = lastRenderedSettings.current[slide.num]
+      if (!last) { lastRenderedSettings.current[slide.num] = current; return }
+      if (last.x === current.x && last.y === current.y && last.h === current.h && last.pos === current.pos) return
+
+      if (reRenderTimers.current[slide.num]) clearTimeout(reRenderTimers.current[slide.num])
+      reRenderTimers.current[slide.num] = setTimeout(async () => {
+        lastRenderedSettings.current[slide.num] = current
+        await reRenderSlide(slide)
+      }, 2000)
+    })
+  }, [slides])
 
   // ── Geração de imagem para um slide ───────────────────────────────────────
   async function generateOneSlide(slide: Slide) {
@@ -146,15 +235,23 @@ export default function CarouselDetailPage() {
           format:             'portrait',
           showHeader:         true,
           imageHeightPercent: slide.imageHeightPercent ?? 0,
-          imagePosition:      slide.imagePosition ?? 'bottom',
+          imagePosition:      slide.imagePosition      ?? 'bottom',
+          imageObjectX:       slide.imageObjectX       ?? 50,
+          imageObjectY:       slide.imageObjectY       ?? 50,
         }),
       })
       const cardData = await cardRes.json()
       if (cardData.error) throw new Error(cardData.error)
 
+      const stored = await uploadCardToStorage(slide.num, cardData.cardBase64)
+      const cardPath = stored?.url || `data:image/png;base64,${cardData.cardBase64}`
+      lastRenderedSettings.current[slide.num] = {
+        x: slide.imageObjectX ?? 50, y: slide.imageObjectY ?? 50,
+        h: slide.imageHeightPercent ?? 0, pos: slide.imagePosition ?? 'bottom',
+      }
       setSlides(prev => prev.map(s =>
         s.num === slide.num
-          ? { ...s, imagePath: imgData.dataUrl, cardPath: `data:image/png;base64,${cardData.cardBase64}` }
+          ? { ...s, imagePath: imgData.dataUrl, cardPath, cardStoragePath: stored?.path }
           : s
       ))
       setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
