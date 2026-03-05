@@ -28,14 +28,14 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('carousels')
         .select('id, topic, caption, ig_post_id, published_at, scheduled_at, created_at, slides')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(50)
 
-      const rows = data || []
+const rows = data || []
       setCarousels(rows)
       setStats({
         total:     rows.length,
