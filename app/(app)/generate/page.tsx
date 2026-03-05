@@ -67,7 +67,7 @@ export default function GeneratePage() {
         .from('experts')
         .select('display_name, handle, highlight_color, niche, id')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
       if (exp) {
         setNiche(exp.niche || 'seu nicho')
@@ -78,7 +78,7 @@ export default function GeneratePage() {
             .from('experts')
             .select('avatar_url')
             .eq('user_id', user.id)
-            .single()
+            .maybeSingle()
           avatarUrl = (expFull as any)?.avatar_url || undefined
         } catch { /* coluna ainda não existe */ }
 

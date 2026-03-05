@@ -130,7 +130,7 @@ export default function AudiencePage() {
         .from('experts')
         .select('audience_profile')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
       if (expert?.audience_profile) {
         setForm({ ...EMPTY, ...expert.audience_profile })

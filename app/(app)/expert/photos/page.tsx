@@ -29,7 +29,7 @@ export default function PhotosPage() {
         .from('experts')
         .select('id')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
       if (!expert) return
       setExpertId(expert.id)

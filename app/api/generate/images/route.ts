@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       .select('value')
       .eq('user_id', user.id)
       .eq('provider', 'google')
-      .single()
+      .maybeSingle()
 
     const googleKey = tokenRow?.value
     if (!googleKey) return NextResponse.json(
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       .from('experts')
       .select('id')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
     if (expert?.id) {
       const { data: photos } = await supabase

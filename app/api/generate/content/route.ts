@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     .select('value')
     .eq('user_id', user.id)
     .eq('provider', 'anthropic')
-    .single()
+    .maybeSingle()
 
   const anthropicKey = tokenRow?.value
   if (!anthropicKey) {

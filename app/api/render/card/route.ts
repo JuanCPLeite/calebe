@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
         .from('experts')
         .select('display_name, handle, highlight_color, id')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
       if (expert) {
         authorName    = expert.display_name || authorName

@@ -142,7 +142,7 @@ function DnaForm() {
         .from('experts')
         .select('*')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
       if (expert) {
         setForm({

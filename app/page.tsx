@@ -14,7 +14,7 @@ export default async function Home() {
     .from('experts')
     .select('display_name')
     .eq('user_id', user.id)
-    .single()
+    .maybeSingle()
 
   if (!expert?.display_name) {
     redirect('/expert/dna?onboarding=1')

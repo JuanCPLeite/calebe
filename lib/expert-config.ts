@@ -103,7 +103,7 @@ export async function getExpertFromDB(
     .from('experts')
     .select('*')
     .eq('user_id', userId)
-    .single()
+    .maybeSingle()
 
   if (error || !data) return null
   return toExpertConfig(data)

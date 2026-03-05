@@ -120,7 +120,7 @@ export default function CarouselDetailPage() {
           ? supabase.from('experts')
               .select('display_name, handle, highlight_color, id')
               .eq('user_id', user.id)
-              .single()
+              .maybeSingle()
           : Promise.resolve({ data: null }),
       ])
 
