@@ -267,6 +267,21 @@ const MOCK_TOPICS: Topic[] = [
   },
 ]
 
+// ─── Classificação de erros de API ───────────────────────────────────────────
+
+function classifyApiError(message: string, provider: string): string {
+  const msg = message.toLowerCase()
+  if (msg.includes('credit') || msg.includes('balance') || msg.includes('billing'))
+    return `Saldo insuficiente na conta ${provider}. Adicione créditos em console.${provider === 'Anthropic' ? 'anthropic.com' : 'exa.ai'}/billing.`
+  if (msg.includes('invalid') && msg.includes('key') || msg.includes('authentication') || msg.includes('unauthorized') || msg.includes('401'))
+    return `Chave ${provider} inválida. Verifique em Tokens & APIs.`
+  if (msg.includes('rate limit') || msg.includes('429'))
+    return `Limite de requisições atingido na ${provider}. Tente em alguns segundos.`
+  if (msg.includes('timeout') || msg.includes('network') || msg.includes('fetch'))
+    return `Erro de conexão com a ${provider}. Verifique sua internet e tente novamente.`
+  return `Erro na ${provider}: ${message.slice(0, 120)}`
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -304,7 +319,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+
     // ── 2. EXA Search (melhor para paginação e filtros de data) ────────────
+    let apiError: string | undefined
+
     if (exaKey) {
       try {
         const { topics, hasMore } = await searchWithExa(
@@ -312,7 +330,8 @@ export async function POST(req: NextRequest) {
         )
         return NextResponse.json({ topics, hasMore, source: 'exa' })
       } catch (err: any) {
-        console.warn('[topics/exa] falhou, tentando Claude web_search:', err.message)
+        console.warn('[topics/exa] falhou:', err.message)
+        apiError = classifyApiError(err.message, 'EXA')
       }
     }
 
@@ -325,35 +344,22 @@ export async function POST(req: NextRequest) {
         }
       } catch (err: any) {
         console.warn('[topics/claude] falhou:', err.message)
+        apiError = classifyApiError(err.message, 'Anthropic')
       }
     }
 
     // ── 4. Mock fallback ────────────────────────────────────────────────────
-    // Se é busca ou explorar (tem tema específico), gera mock temático
-    const tema = (query || category || niche || 'negócios')
-      .replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\s]+/u, '')
-      .split(' tendências')[0]
-      .split(' novidades')[0]
-      .trim()
-    const isTrending = mode === 'trending'
-    const mockTopics: Topic[] = isTrending
+    // Se houve erro de API (crédito, chave inválida, etc.) ou não há chave → sem temas
+    const hasKey = !!(exaKey || anthropicKey)
+    const mockTopics: Topic[] = (!hasKey && !apiError && mode === 'trending')
       ? MOCK_TOPICS.slice(offset, offset + limit)
-      : Array.from({ length: Math.min(limit, 5) }, (_, i) => ({
-          id: `mock-${tema}-${i}`,
-          title: `${tema}: ideia ${i + 1} (configure uma chave API para resultados reais)`,
-          viralScore: 40 + i * 5,
-          growth: `+${80 + i * 20}%`,
-          postsToday: 30 + i * 15,
-          avgEngagement: '2.5%',
-          hook: `Configure sua chave Anthropic ou EXA para ver tópicos reais sobre ${tema}.`,
-          gain: `Com a chave configurada, você vai ver tópicos de alta performance para ${tema}.`,
-          angle: 'Exemplo',
-        }))
+      : []
 
     return NextResponse.json({
       topics: mockTopics,
       hasMore: false,
-      noKey: !exaKey && !anthropicKey,
+      noKey: !hasKey,
+      apiError: apiError ?? null,
       source: 'mock',
     })
 

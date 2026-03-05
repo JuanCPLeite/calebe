@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { TopicCard, type Topic } from './topic-card'
-import { RefreshCw, Search, TrendingUp, Globe, Loader2, Key, ChevronDown, X } from 'lucide-react'
+import { RefreshCw, Search, TrendingUp, Globe, Loader2, Key, ChevronDown, X, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 
@@ -44,13 +44,14 @@ const LIMIT_OPTIONS = [5, 10, 15, 20]
 
 export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
   const [mode, setMode]                 = useState<Mode>('trending')
-  const [dateFilter, setDateFilter]     = useState<DateFilter>('7d')
+  const [dateFilter, setDateFilter]     = useState<DateFilter>('24h')
   const [searchQuery, setSearchQuery]   = useState('')
   const [activeCategory, setActiveCategory] = useState<(typeof EXPLORE_CATEGORIES)[0] | null>(null)
   const [topics, setTopics]             = useState<Topic[]>([])
   const [loading, setLoading]           = useState(false)
   const [hasMore, setHasMore]           = useState(false)
   const [noKey, setNoKey]               = useState(false)
+  const [apiError, setApiError]         = useState<string | null>(null)
   const [source, setSource]             = useState<'exa' | 'claude' | 'mock' | ''>('')
   const [limit, setLimit]               = useState(5)
   const [offset, setOffset]             = useState(0)
@@ -96,6 +97,7 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
       })
       const data = await res.json()
       setNoKey(!!data.noKey)
+      setApiError(data.apiError ?? null)
       setHasMore(!!data.hasMore)
       setSource(data.source || '')
 
@@ -182,6 +184,14 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
     setLimit(newLimit)
     setOffset(0)
     setShowLimitMenu(false)
+    // Refaz o fetch com o novo limite em todos os modos
+    if (mode === 'trending') {
+      fetchTopics({ mode: 'trending', dateFilter, limit: newLimit, offset: 0 })
+    } else if (mode === 'search' && searchQuery.trim()) {
+      fetchTopics({ mode: 'search', dateFilter, query: searchQuery.trim(), limit: newLimit, offset: 0 })
+    } else if (mode === 'explore' && activeCategory) {
+      fetchTopics({ mode: 'explore', dateFilter, category: activeCategory.query, limit: newLimit, offset: 0 })
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -308,8 +318,19 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
                 chave Anthropic (Claude) em Tokens & APIs
               </Link>{' '}
               para busca via IA — ou EXA Search para busca neural avançada.
-              Enquanto isso, mostrando exemplos.
+                      Enquanto isso, nenhum tema será exibido.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Banner de erro de API — créditos, chave inválida, rate limit, etc. */}
+      {apiError && (
+        <div className="flex items-start gap-3 bg-red-950/30 border border-red-700/40 rounded-xl px-4 py-3">
+          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-xs text-red-200 font-medium mb-1">Erro ao buscar tópicos</p>
+            <p className="text-xs text-red-400/80">{apiError}</p>
           </div>
         </div>
       )}
