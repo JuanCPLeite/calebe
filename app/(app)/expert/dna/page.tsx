@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Save, Wand2, Plus, X, Sparkles, Camera, Loader2 } from 'lucide-react'
+import { Save, Wand2, Plus, X, Sparkles, Camera, Loader2, Copy, Check } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 interface FormData {
@@ -33,36 +33,89 @@ const EMPTY: FormData = {
   ig_account_id: '',
 }
 
-// Exemplo genérico — não é um perfil real, serve só como referência
-const DNA_EXAMPLE: FormData = {
-  display_name: 'Marina Souza',
-  handle: '@marinasouza.fit',
-  niche: 'Emagrecimento feminino sem dieta restritiva',
-  bio_short: 'Nutricionista especializada em comportamento alimentar. Ajudo mulheres a emagrecer sem sofrimento e sem efeito sanfona em 12 semanas.',
-  product_name: 'Método Leveza Total',
-  product_cta: 'Acesse o link na bio e comece hoje.',
-  highlight_color: '#E91E8C',
-  author_slide_template: `Oi, eu sou a Marina Souza 👋
+const DNA_EXAMPLE = [
+  { label: 'Nome',            value: 'Marina Souza' },
+  { label: 'Handle',          value: '@marinasouza.fit' },
+  { label: 'Nicho',           value: 'Emagrecimento feminino sem dieta restritiva' },
+  { label: 'Bio curta',       value: 'Nutricionista especializada em comportamento alimentar. Ajudo mulheres a emagrecer sem sofrimento e sem efeito sanfona em 12 semanas.' },
+  { label: 'Produto',         value: 'Método Leveza Total' },
+  { label: 'CTA do produto',  value: 'Acesse o link na bio e comece hoje.' },
+  { label: 'Cor de destaque', value: '#E91E8C' },
+  { label: 'Template Slide 5 (autor)', value: `Oi, eu sou a Marina Souza 👋
 Nutricionista há 8 anos, especialista em comportamento alimentar.
 
 Já ajudei mais de 2.000 mulheres a emagrecer sem abrir mão da vida social.
 
-➡️ No próximo slide, o passo a passo completo.`,
-  cta_final_template: `Se esse conteúdo fez sentido pra você:
+➡️ No próximo slide, o passo a passo completo.` },
+  { label: 'Template Slide 10 (CTA)', value: `Se esse conteúdo fez sentido pra você:
 
 👆 Me segue — posto todo dia sobre emagrecimento real
 🔔 Ativa o sininho para não perder nada
 ❤️ Compartilha com uma amiga que precisa ver isso
 
-👇 Acesse o link na bio e conheça o Método Leveza Total`,
-  style_rules: [
-    'Use "você" — tom próximo e acolhedor, sem julgamentos',
-    'Frases curtas. Máximo uma ideia por parágrafo',
-    'Nunca use termos clínicos sem explicar em seguida',
-    'Prefira exemplos do cotidiano a dados técnicos',
-    'Fale sempre com empatia — o público já tentou muitas dietas',
-  ],
-  ig_account_id: '',
+👇 Acesse o link na bio e conheça o Método Leveza Total` },
+  { label: 'Regras de estilo', value: `• Use "você" — tom próximo e acolhedor, sem julgamentos
+• Frases curtas. Máximo uma ideia por parágrafo
+• Nunca use termos clínicos sem explicar em seguida
+• Prefira exemplos do cotidiano a dados técnicos
+• Fale sempre com empatia — o público já tentou muitas dietas` },
+]
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  async function handleCopy() {
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex-shrink-0 text-zinc-600 hover:text-violet-400 transition-colors mt-0.5"
+      title="Copiar"
+    >
+      {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  )
+}
+
+function ExampleModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 flex-shrink-0">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Exemplo de DNA Expert</h2>
+            <p className="text-xs text-zinc-500 mt-0.5">Leia, copie o que precisar e preencha com os seus dados</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+          {DNA_EXAMPLE.map(({ label, value }) => (
+            <div key={label}>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wide mb-1">{label}</p>
+              <div className="flex items-start gap-2">
+                <p className="text-xs text-zinc-300 leading-relaxed flex-1 whitespace-pre-line">{value}</p>
+                <CopyButton text={value} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-6 py-4 border-t border-zinc-800 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function DnaForm() {
@@ -70,13 +123,13 @@ function DnaForm() {
   const searchParams = useSearchParams()
   const isOnboarding = searchParams.get('onboarding') === '1'
 
-  const [form, setForm]       = useState<FormData>(EMPTY)
-  const [newRule, setNewRule] = useState('')
-  const [saving, setSaving]   = useState(false)
-  const [saved, setSaved]     = useState(false)
-  const [userId, setUserId]   = useState<string | null>(null)
+  const [form, setForm]         = useState<FormData>(EMPTY)
+  const [newRule, setNewRule]   = useState('')
+  const [saving, setSaving]     = useState(false)
+  const [saved, setSaved]       = useState(false)
+  const [userId, setUserId]     = useState<string | null>(null)
+  const [showExample, setShowExample] = useState(false)
 
-  // Avatar
   const [avatarUrl, setAvatarUrl]             = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -112,10 +165,6 @@ function DnaForm() {
     }
     load()
   }, [])
-
-  function applyExample() {
-    setForm(DNA_EXAMPLE)
-  }
 
   async function handleAvatarUpload(file: File) {
     if (!userId) return
@@ -221,7 +270,7 @@ function DnaForm() {
           <p className="text-zinc-400 text-sm mt-1">Tom de voz, estilo e dados do seu perfil</p>
         </div>
         <button
-          onClick={applyExample}
+          onClick={() => setShowExample(true)}
           className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
           <Wand2 className="w-4 h-4" />
@@ -258,7 +307,6 @@ function DnaForm() {
               <Camera className="w-5 h-5 text-white" />
             </div>
           </button>
-
           <button
             onClick={() => avatarInputRef.current?.click()}
             disabled={uploadingAvatar}
@@ -267,7 +315,6 @@ function DnaForm() {
             {avatarUrl ? 'Trocar foto' : 'Fazer upload'}
           </button>
         </div>
-
         <input
           ref={avatarInputRef}
           type="file"
@@ -281,7 +328,7 @@ function DnaForm() {
         />
       </div>
 
-      {/* ── Campos do formulário ─────────────────────────────────── */}
+      {/* ── Campos ───────────────────────────────────────────────── */}
       <div className="space-y-5">
         <div className="grid grid-cols-2 gap-4">
           {field('Nome', 'display_name',
@@ -335,16 +382,16 @@ function DnaForm() {
         </div>
 
         {textarea('Template Slide 5 — apresentação do autor', 'author_slide_template',
-          'Texto do slide central onde você se apresenta. Inclua nome, especialidade e uma credencial relevante. Use quebras de linha para separar as partes.', 6)}
+          'Texto do slide central onde você se apresenta. Inclua nome, especialidade e uma credencial relevante.', 6)}
 
         {textarea('Template Slide 10 — CTA final', 'cta_final_template',
-          'Chamada para ação do último slide. Peça para seguir, salvar ou clicar no link. Use emojis para destacar cada ação.', 6)}
+          'Chamada para ação do último slide. Peça para seguir, salvar ou clicar no link.', 6)}
 
         {/* Regras de estilo */}
         <div>
           <label className="block text-xs text-zinc-400 mb-0.5">Regras de estilo</label>
           <p className="text-[11px] text-zinc-600 mb-2 leading-snug">
-            Como você escreve: pronome (tu/você), tom, expressões que usa ou evita. Cada regra guia a IA na geração do conteúdo.
+            Como você escreve: pronome, tom, expressões que usa ou evita. Cada regra guia a IA na geração do conteúdo.
           </p>
           <div className="space-y-2 mb-2">
             {form.style_rules.map((rule, i) => (
@@ -383,6 +430,8 @@ function DnaForm() {
         <Save className="w-4 h-4" />
         {saved ? '✓ Salvo!' : saving ? 'Salvando...' : 'Salvar DNA'}
       </button>
+
+      {showExample && <ExampleModal onClose={() => setShowExample(false)} />}
     </div>
   )
 }
