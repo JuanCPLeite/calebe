@@ -11,8 +11,8 @@ export interface CarouselTemplate {
 export const TEMPLATES: CarouselTemplate[] = [
   {
     id: 'frank-costa-10',
-    name: 'Método Frank Costa',
-    description: 'Hook poderoso → 8 slides de conteúdo educativo → CTA com slide do autor. Ideal para nichos de negócios e automação.',
+    name: 'Brand Equity',
+    description: 'Hook poderoso → 8 slides de conteúdo educativo → CTA com slide do autor. Constrói autoridade e reconhecimento de marca a cada carrossel.',
     slideCount: 10,
     type: 'educativo',
     tags: ['educativo', 'autoridade', '10 slides'],
