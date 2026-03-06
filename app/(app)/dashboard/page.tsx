@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ExternalLink, Calendar, CheckCircle2, Clock, Trash2,
@@ -30,6 +30,7 @@ interface Expert {
 
 type FilterTab = 'all' | 'draft' | 'scheduled' | 'published'
 type ViewMode  = 'list' | 'grid'
+const DASHBOARD_VIEW_KEY = 'dashboard_view_mode'
 
 function computeStats(rows: Carousel[]) {
   return {
@@ -77,6 +78,67 @@ function StatusBadge({ c }: { c: Carousel }) {
   )
 }
 
+function ResponsiveFrankThumb({
+  text,
+  imagePath,
+  expert,
+  imageHeightPercent,
+  imagePosition,
+  imageObjectX,
+  imageObjectY,
+  fontSize,
+  highlightEnabled,
+}: {
+  text: string
+  imagePath?: string
+  expert: Expert
+  imageHeightPercent?: number
+  imagePosition?: 'top' | 'bottom'
+  imageObjectX?: number
+  imageObjectY?: number
+  fontSize?: number
+  highlightEnabled?: boolean
+}) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [width, setWidth] = useState(280)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    const update = () => {
+      const w = el.clientWidth
+      if (w > 0) setWidth(w)
+    }
+
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  return (
+    <div ref={ref} className="absolute inset-0 overflow-hidden pointer-events-none">
+      <FrankCard
+        text={text}
+        imagePath={imagePath}
+        authorName={expert.display_name}
+        authorHandle={expert.handle}
+        highlightColor={expert.highlight_color}
+        avatarUrl={expert.avatar_url ?? undefined}
+        imageHeightPercent={imageHeightPercent ?? 0}
+        imagePosition={imagePosition ?? 'bottom'}
+        imageObjectX={imageObjectX ?? 50}
+        imageObjectY={imageObjectY ?? 50}
+        fontSizeOverride={fontSize}
+        highlightEnabled={highlightEnabled !== false}
+        format="portrait"
+        displayWidth={width}
+      />
+    </div>
+  )
+}
+
 // ─── Página ─────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -92,6 +154,20 @@ export default function DashboardPage() {
   const [search,      setSearch]     = useState('')
   const [filter,      setFilter]     = useState<FilterTab>('all')
   const [view,        setView]       = useState<ViewMode>('list')
+  const [viewReady,   setViewReady]  = useState(false)
+
+  useEffect(() => {
+    const saved = localStorage.getItem(DASHBOARD_VIEW_KEY)
+    if (saved === 'list' || saved === 'grid') {
+      setView(saved)
+    }
+    setViewReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (!viewReady) return
+    localStorage.setItem(DASHBOARD_VIEW_KEY, view)
+  }, [view, viewReady])
 
   useEffect(() => {
     async function load() {
@@ -395,7 +471,7 @@ export default function DashboardPage() {
 
       ) : (
         /* ── GRID ───────────────────────────────────────────────────────── */
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
           {filtered.map(c => {
             const thumb      = getThumbnail(c)
             const slideCount = Array.isArray(c.slides) ? c.slides.length : 0
@@ -411,24 +487,17 @@ export default function DashboardPage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={thumb} alt="" className="w-full h-full object-cover" />
                   ) : expert && c.slides[0]?.text ? (
-                    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                      <FrankCard
-                        text={c.slides[0].text}
-                        imagePath={c.slides[0].imagePath}
-                        authorName={expert.display_name}
-                        authorHandle={expert.handle}
-                        highlightColor={expert.highlight_color}
-                        avatarUrl={expert.avatar_url ?? undefined}
-                        imageHeightPercent={c.slides[0].imageHeightPercent ?? 0}
-                        imagePosition={c.slides[0].imagePosition ?? 'bottom'}
-                        imageObjectX={c.slides[0].imageObjectX ?? 50}
-                        imageObjectY={c.slides[0].imageObjectY ?? 50}
-                        fontSizeOverride={c.slides[0].fontSize}
-                        highlightEnabled={c.slides[0].highlightEnabled !== false}
-                        format="portrait"
-                        displayWidth={280}
-                      />
-                    </div>
+                    <ResponsiveFrankThumb
+                      text={c.slides[0].text}
+                      imagePath={c.slides[0].imagePath}
+                      expert={expert}
+                      imageHeightPercent={c.slides[0].imageHeightPercent}
+                      imagePosition={c.slides[0].imagePosition}
+                      imageObjectX={c.slides[0].imageObjectX}
+                      imageObjectY={c.slides[0].imageObjectY}
+                      fontSize={c.slides[0].fontSize}
+                      highlightEnabled={c.slides[0].highlightEnabled}
+                    />
                   ) : (
                     <span className="text-5xl opacity-20">🖼️</span>
                   )}
