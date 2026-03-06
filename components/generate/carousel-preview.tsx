@@ -285,11 +285,11 @@ export function CarouselPreview({
       <div className="flex flex-1 min-h-0">
 
         {/* ── Coluna esquerda: slide ativo ────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto min-w-0 flex flex-col items-center py-6 px-6 gap-4">
-          <div style={{ width: PREVIEW_W, maxWidth: '100%' }}>
+        <div className="flex-1 overflow-y-auto min-w-0 flex flex-col items-center py-6 gap-4">
 
-            {/* Barra de navegação */}
-            <div className="flex items-center gap-2 mb-3">
+          {/* Barra de navegação */}
+          <div style={{ width: PREVIEW_W, maxWidth: '100%' }}>
+            <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 text-sm">
                 <span className="font-semibold text-zinc-300">{activeSlide + 1}</span>
                 <span className="text-zinc-700">/</span>
@@ -304,40 +304,68 @@ export function CarouselPreview({
                   ✓ aprovado
                 </Badge>
               )}
+              <button
+                onClick={() => approveSlide(activeSlide)}
+                className={cn(
+                  'ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                  slide.approved
+                    ? 'bg-green-800/30 text-green-400 hover:bg-green-800/50'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                )}
+              >
+                <Check className="w-3.5 h-3.5" />
+                {slide.approved ? 'Aprovado' : 'Aprovar'}
+              </button>
+            </div>
+          </div>
 
-              <div className="ml-auto flex items-center gap-1">
-                <button
-                  onClick={() => setActiveSlide(Math.max(0, activeSlide - 1))}
-                  disabled={activeSlide === 0}
-                  className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-25 transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setActiveSlide(Math.min(slides.length - 1, activeSlide + 1))}
-                  disabled={activeSlide === slides.length - 1}
-                  className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-25 transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-                <div className="w-px h-4 bg-zinc-800 mx-1" />
-                <button
-                  onClick={() => approveSlide(activeSlide)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                    slide.approved
-                      ? 'bg-green-800/30 text-green-400 hover:bg-green-800/50'
-                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
-                  )}
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  {slide.approved ? 'Aprovado' : 'Aprovar'}
-                </button>
-              </div>
+          {/* Coverflow */}
+          <div className="flex items-center gap-4 w-full justify-center px-4">
+
+            {/* Seta esquerda */}
+            <button
+              onClick={() => setActiveSlide(Math.max(0, activeSlide - 1))}
+              disabled={activeSlide === 0}
+              className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-full bg-zinc-800/80 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 disabled:opacity-20 transition-all"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+
+            {/* Slide anterior */}
+            <div
+              className="flex-shrink-0 transition-all duration-300"
+              style={{ opacity: 0.38, width: 200 }}
+              onClick={() => activeSlide > 0 && setActiveSlide(activeSlide - 1)}
+            >
+              {activeSlide > 0 ? (
+                <div className="rounded-xl overflow-hidden cursor-pointer border border-zinc-800/40">
+                  <FrankCard
+                    text={slides[activeSlide - 1].text}
+                    imagePath={slides[activeSlide - 1].imagePath}
+                    authorName={expert.displayName}
+                    authorHandle={expert.handle}
+                    avatarUrl={expert.avatarUrl}
+                    highlightColor={expert.highlightColor}
+                    imageHeightPercent={(slides[activeSlide - 1].imageHeightPercent ?? 0) > 40 ? 0 : (slides[activeSlide - 1].imageHeightPercent ?? 0)}
+                    imagePosition={slides[activeSlide - 1].imagePosition ?? 'bottom'}
+                    imageObjectX={slides[activeSlide - 1].imageObjectX ?? 50}
+                    imageObjectY={slides[activeSlide - 1].imageObjectY ?? 50}
+                    fontSizeOverride={slides[activeSlide - 1].fontSize}
+                    highlightEnabled={slides[activeSlide - 1].highlightEnabled !== false}
+                    format="portrait"
+                    displayWidth={200}
+                  />
+                </div>
+              ) : (
+                <div style={{ width: 200 }} />
+              )}
             </div>
 
-            {/* Card preview */}
-            <div className="relative rounded-2xl overflow-hidden border border-zinc-800/60 shadow-2xl shadow-black/50">
+            {/* Slide ativo */}
+            <div
+              className="flex-shrink-0 relative rounded-2xl overflow-hidden border border-zinc-800/60 shadow-2xl shadow-black/50"
+              style={{ width: PREVIEW_W }}
+            >
               <div className="relative bg-white flex justify-center">
                 <FrankCard
                   text={slide.text}
@@ -367,8 +395,50 @@ export function CarouselPreview({
               </div>
             </div>
 
-            {/* Controles do slide */}
-            <div className="flex items-center flex-wrap gap-2 mt-3">
+            {/* Slide seguinte */}
+            <div
+              className="flex-shrink-0 transition-all duration-300"
+              style={{ opacity: 0.38, width: 200 }}
+              onClick={() => activeSlide < slides.length - 1 && setActiveSlide(activeSlide + 1)}
+            >
+              {activeSlide < slides.length - 1 ? (
+                <div className="rounded-xl overflow-hidden cursor-pointer border border-zinc-800/40">
+                  <FrankCard
+                    text={slides[activeSlide + 1].text}
+                    imagePath={slides[activeSlide + 1].imagePath}
+                    authorName={expert.displayName}
+                    authorHandle={expert.handle}
+                    avatarUrl={expert.avatarUrl}
+                    highlightColor={expert.highlightColor}
+                    imageHeightPercent={(slides[activeSlide + 1].imageHeightPercent ?? 0) > 40 ? 0 : (slides[activeSlide + 1].imageHeightPercent ?? 0)}
+                    imagePosition={slides[activeSlide + 1].imagePosition ?? 'bottom'}
+                    imageObjectX={slides[activeSlide + 1].imageObjectX ?? 50}
+                    imageObjectY={slides[activeSlide + 1].imageObjectY ?? 50}
+                    fontSizeOverride={slides[activeSlide + 1].fontSize}
+                    highlightEnabled={slides[activeSlide + 1].highlightEnabled !== false}
+                    format="portrait"
+                    displayWidth={200}
+                  />
+                </div>
+              ) : (
+                <div style={{ width: 200 }} />
+              )}
+            </div>
+
+            {/* Seta direita */}
+            <button
+              onClick={() => setActiveSlide(Math.min(slides.length - 1, activeSlide + 1))}
+              disabled={activeSlide === slides.length - 1}
+              className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-full bg-zinc-800/80 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 disabled:opacity-20 transition-all"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+
+          </div>
+
+          {/* Controles do slide */}
+          <div style={{ width: PREVIEW_W, maxWidth: '100%' }}>
+            <div className="flex items-center flex-wrap gap-2">
               {onRegenerateSlide && (
                 <>
                   <button
@@ -449,8 +519,8 @@ export function CarouselPreview({
                 </>
               )}
             </div>
-
           </div>
+
         </div>
 
         {/* ── Coluna direita: legenda ─────────────────────────────────────── */}

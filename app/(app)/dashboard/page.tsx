@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ExternalLink, Calendar, CheckCircle2, Clock } from 'lucide-react'
+import { ExternalLink, Calendar, CheckCircle2, Clock, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 interface Carousel {
@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const [carousels, setCarousels] = useState<Carousel[]>([])
   const [loading, setLoading]     = useState(true)
   const [stats, setStats]         = useState({ total: 0, published: 0 })
+  const [deleting, setDeleting]   = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -50,6 +51,19 @@ const rows = data || []
     return new Date(iso).toLocaleDateString('pt-BR', {
       day: '2-digit', month: 'short', year: 'numeric',
     })
+  }
+
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.stopPropagation()
+    if (!confirm('Excluir este carrossel? Esta ação não pode ser desfeita.')) return
+    setDeleting(id)
+    await supabase.from('carousels').delete().eq('id', id)
+    setCarousels(prev => {
+      const next = prev.filter(c => c.id !== id)
+      setStats({ total: next.length, published: next.filter(c => c.ig_post_id).length })
+      return next
+    })
+    setDeleting(null)
   }
 
   function formatScheduled(iso: string) {
@@ -156,6 +170,14 @@ const rows = data || []
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
                     )}
+                    <button
+                      onClick={e => handleDelete(e, c.id)}
+                      disabled={deleting === c.id}
+                      title="Excluir carrossel"
+                      className="text-zinc-700 hover:text-red-400 disabled:opacity-40 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               )
