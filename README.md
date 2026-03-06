@@ -1,93 +1,107 @@
 # Carousel Studio
 
-Micro-SaaS para geração de carrosséis virais para Instagram com IA.
+Micro-SaaS para gerar, editar, renderizar e publicar carrosseis de Instagram com IA.
 
-**Stack:** Next.js 14 · TypeScript · Tailwind · shadcn/ui · Claude AI · Gemini Image · Meta Graph API
-
----
-
-## O que é
-
-Plataforma que transforma tendências em carrosséis prontos para publicar no Instagram em 1 clique — com o DNA, tom e estilo do expert configurado.
-
-**Fluxo completo:**
-```
-Trend discovery (EXA)
-  → Análise viral (score, hook sugerido, ganho da audiência)
-    → Geração de texto (Claude AI — 10 slides no estilo do expert)
-      → Editor inline (bold, italic, destaque, aprovar por slide)
-        → Geração de imagens (Gemini — expert como figurante ao fundo)
-          → Publicação automática (Meta Graph API)
-```
+**Stack atual:** Next.js 16 · React 19 · TypeScript · Tailwind 4 · shadcn/ui · Supabase · Claude · Gemini · Meta Graph API
 
 ---
 
-## Status
+## Estado atual (marco: 06/03/2026)
 
-### ✅ Implementado
-- Layout com sidebar completa (DNA Expert, Fotos, Perfil, Tokens, Templates, Dashboard, Gerar)
-- Topic Discovery — temas trending com análise de viralidade, hook, ganho e ângulos alternativos
-- Modo voz — Web Speech API em português
-- Carousel Preview — thumbnails dos 10 slides, editor inline
-- Formatação: `*negrito*` · `_itálico_` · `{destaque}`
-- Aprovação slide a slide antes de gerar imagens
-- API route `/api/generate/content` (mock)
+### Implementado
+- Autenticacao com Supabase (rotas privadas + callback)
+- Multi-tenant por usuario (RLS no banco)
+- Configuracao do expert:
+  - DNA (tom, estilo, CTA, templates fixos)
+  - Fotos de referencia
+  - Perfil e publico
+- Tokens por usuario (Anthropic, Google, EXA, Meta)
+- Descoberta de topicos (`/api/topics`):
+  - EXA quando chave existe
+  - fallback Claude
+  - fallback mock
+- Geracao de conteudo com streaming SSE (`/api/generate/content`)
+- Geracao de imagens com Gemini (`/api/generate/images`)
+- Render de cards (`/api/render/card`)
+- Fluxo de salvar imagens em storage (`/api/save-images`)
+- Publicacao no Instagram (`/api/publish`)
+- Agendamento e cron (`/api/cron/publish-scheduled`)
+- Dashboard:
+  - lista/grid
+  - filtros e busca
+  - duplicar/excluir
+  - detalhe por carousel
+  - fallback visual do thumbnail com `FrankCard`
 
-### 🔜 Próximo (ver ROADMAP.md)
-- Conectar content-engine.js — geração real via Claude AI
-- Busca de trends via EXA API
-- Geração de imagens via Gemini
-- Publicação direta no Instagram
-- Autenticação e multi-expert
+### Em andamento / atencao
+- Build local pode falhar sem internet por fontes Google (`Inter`, `DM Sans`)
+- Aviso de deprecacao do `middleware.ts` no Next 16 (migrar para `proxy.ts`)
+- Fluxo de cron/publish ainda precisa hardening final para execucao totalmente robusta em server-side sem sessao
 
 ---
 
-## Arquitetura
+## Estrutura principal
 
-```
-carousel-studio/              ← este repo (frontend + API routes)
-  app/
-    generate/                 ← página principal de geração
-    expert/dna|photos|audience← configuração do expert
-    dashboard/                ← histórico e métricas
-    tokens/                   ← chaves de API
-    templates/                ← templates reutilizáveis
-    api/generate/content/     ← POST → chama content-engine
-  components/
+```txt
+app/
+  (app)/
+    dashboard/
+    expert/
     generate/
-      topic-card.tsx          ← card de análise viral
-      carousel-preview.tsx    ← editor de slides
-    sidebar.tsx
-
-aios/squads/traffic/          ← repo AIOS (motor de geração)
-  scripts/lib/
-    content-engine.js         ← Claude SDK → 10 slides no DNA do expert
-    image-generator.js        ← Gemini → imagens por slide
-    tweet-card-renderer.js    ← Playwright → PNG dos cards
-    instagram-autopost.js     ← Meta Graph API → publicação
-  experts/
-    juan-carlos/
-      profile.yaml            ← DNA do expert (tom, estilo, CTAs)
-      style-guide.md          ← guia de escrita
+    templates/
+    tokens/
+  api/
+    carousels/
+    cron/publish-scheduled/
+    generate/content/
+    generate/images/
+    meta/accounts/
+    publish/
+    render/card/
+    save-images/
+    topics/
+lib/
+  content-engine.ts
+  image-generator.ts
+  instagram.ts
+  expert-config.ts
+  supabase/
+components/
+  generate/
+  ui/
 ```
 
 ---
 
-## Configuração local
+## Rodar local (porta fixa 8080)
 
 ```bash
-git clone https://github.com/JuanCPLeite/carousel-studio
-cd carousel-studio
 npm install
-npm run dev   # → http://localhost:8080
+npm run dev
+# http://localhost:8080
+```
+
+Scripts:
+
+```bash
+npm run dev     # next dev -p 8080
+npm run build   # next build
+npm run start   # next start -p 8080
 ```
 
 ---
 
-## Modelo de negócio
+## Banco e infra
 
-| Plano | Preço | Limites |
-|-------|-------|---------|
-| Free | R$ 0 | 3 carrosséis/mês · 1 expert |
-| Pro | R$ 97/mês | Ilimitado · 3 experts · agendamento |
-| Agency | R$ 297/mês | Ilimitado · 10 experts · multi-conta IG |
+- Schema base: `supabase-schema.sql`
+- Buckets: `expert-photos`, `carousel-images`
+- Politicas RLS por usuario
+
+Variaveis minimas esperadas:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_APP_URL`
+- `CRON_SECRET`
+
+Tokens de provedores sao salvos por usuario na tabela `user_tokens`.

@@ -1,41 +1,40 @@
 # Roadmap — Carousel Studio
 
-## Sprint 1 — Motor funcionando ✅ (hoje)
-- [x] Shell Next.js 14 + shadcn na porta 8080
-- [x] Sidebar com todas as seções
-- [x] Página Gerar: topic discovery + cards de análise viral
-- [x] Carousel Preview: editor inline + aprovação por slide
-- [x] Modo voz (Web Speech API)
-- [x] GitHub repo criado
+Data de referencia: 06/03/2026
 
-## Sprint 2 — Geração real (próximo)
-- [ ] Conectar `/api/generate/content` → `content-engine.js` (Claude real)
-- [ ] Conectar `/api/generate/images` → `image-generator.js` (Gemini real)
-- [ ] Renderizar cards PNG via `tweet-card-renderer.js`
-- [ ] Botão "Publicar" → `instagram-autopost.js`
-- [ ] Busca de trends reais via EXA API
+## Sprint 1 — Base do produto ✅
+- [x] Estrutura Next.js + shadcn + Tailwind
+- [x] Sidebar e navegacao principal
+- [x] Auth com Supabase
+- [x] Banco com RLS e storage
 
-## Sprint 3 — Expert configurável
-- [ ] Página DNA Expert — editar tom, estilo, frases padrão
-- [ ] Upload de fotos de referência (max 10) + preview
-- [ ] Página Perfil & Público — nicho, dores, desejos
-- [ ] Salvar configurações em arquivo local (depois: Supabase)
+## Sprint 2 — Motor de geracao ✅
+- [x] Geracao de topicos (`/api/topics`) com EXA/Claude/mock
+- [x] Geracao de conteudo Claude com streaming SSE
+- [x] Geracao de imagens Gemini
+- [x] Render de cards e preview completo
 
-## Sprint 4 — Autenticação + multi-expert
-- [ ] Auth com NextAuth (GitHub / Google)
-- [ ] Supabase para armazenar usuários e perfis
-- [ ] Trocar entre experts (dropdown no sidebar)
-- [ ] Isolamento de dados por usuário
+## Sprint 3 — Expert configuravel ✅
+- [x] DNA do expert (tom, estilo, templates)
+- [x] Upload e ordenacao de fotos de referencia
+- [x] Perfil e publico
+- [x] Persistencia em Supabase
 
-## Sprint 5 — Agendamento + Dashboard
-- [ ] Calendário de agendamento de posts
-- [ ] Dashboard com histórico de carrosséis gerados
-- [ ] Métricas de engajamento (via Instagram Insights API)
-- [ ] Status de publicação (publicado, agendado, rascunho)
+## Sprint 4 — Publicacao e operacao ✅
+- [x] Persistencia de carrosseis
+- [x] Publicacao no Instagram via Meta Graph API
+- [x] Dashboard com filtros, busca, duplicacao e exclusao
+- [x] Agendamento (`scheduled_at`) e endpoint de cron
 
-## Sprint 6 — Polimento e lançamento
-- [ ] Deploy na Vercel
-- [ ] Domínio próprio
-- [ ] Página de landing
-- [ ] Onboarding (wizard de configuração do expert)
-- [ ] Planos e pagamento (Stripe)
+## Sprint 5 — Endurecimento tecnico (proximo)
+- [ ] Hardening do cron para execucao 100% confiavel sem sessao de usuario
+- [ ] Idempotencia forte em publicacao (evitar duplicidade)
+- [ ] Retry/politica de falha por etapa (save, publish)
+- [ ] Logs estruturados e rastreabilidade por `carousel_id`
+
+## Sprint 6 — Produto e crescimento
+- [ ] Migrar `middleware.ts` para `proxy.ts` (Next 16)
+- [ ] Melhorar build offline (fontes locais ou fallback)
+- [ ] Landing + onboarding
+- [ ] Planos/pagamento (Stripe)
+- [ ] Metricas de performance e conversao

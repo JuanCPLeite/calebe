@@ -8,16 +8,24 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { FrankCard } from '@/components/generate/frank-card'
 
 interface Carousel {
   id: string
   topic: string
   caption: string
-  slides: Array<{ cardPath?: string; imagePath?: string }>
+  slides: Array<{ cardPath?: string; imagePath?: string; text?: string; imageHeightPercent?: number; imagePosition?: 'top' | 'bottom'; imageObjectX?: number; imageObjectY?: number; fontSize?: number; highlightEnabled?: boolean }>
   ig_post_id: string | null
   published_at: string | null
   scheduled_at: string | null
   created_at: string
+}
+
+interface Expert {
+  display_name: string
+  handle: string
+  highlight_color: string
+  avatar_url?: string | null
 }
 
 type FilterTab = 'all' | 'draft' | 'scheduled' | 'published'
@@ -76,6 +84,7 @@ export default function DashboardPage() {
   const router   = useRouter()
 
   const [carousels,   setCarousels]  = useState<Carousel[]>([])
+  const [expert,      setExpert]     = useState<Expert | null>(null)
   const [loading,     setLoading]    = useState(true)
   const [stats,       setStats]      = useState({ total: 0, published: 0, scheduled: 0 })
   const [deleting,    setDeleting]   = useState<string | null>(null)
@@ -89,16 +98,24 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data } = await supabase
-        .from('carousels')
-        .select('id, topic, caption, ig_post_id, published_at, scheduled_at, created_at, slides')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(100)
+      const [{ data: carouselData }, { data: expertData }] = await Promise.all([
+        supabase
+          .from('carousels')
+          .select('id, topic, caption, ig_post_id, published_at, scheduled_at, created_at, slides')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(100),
+        supabase
+          .from('experts')
+          .select('display_name, handle, highlight_color, avatar_url')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      ])
 
-      const rows = data || []
+      const rows = carouselData || []
       setCarousels(rows)
       setStats(computeStats(rows))
+      if (expertData) setExpert(expertData as Expert)
       setLoading(false)
     }
     load()
@@ -324,11 +341,32 @@ export default function DashboardPage() {
                 className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 cursor-pointer hover:border-zinc-600 hover:bg-zinc-800/60 transition-colors group"
               >
                 {/* Thumbnail */}
-                <div className="w-12 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-                  {thumb
+                <div className="w-12 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-white border border-zinc-700 flex items-center justify-center">
+                  {thumb ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={thumb} alt="" className="w-full h-full object-cover" />
-                    : <span className="text-xl">🖼️</span>}
+                    <img src={thumb} alt="" className="w-full h-full object-cover" />
+                  ) : expert && c.slides[0]?.text ? (
+                    <div className="w-full h-full overflow-hidden pointer-events-none">
+                      <FrankCard
+                        text={c.slides[0].text}
+                        imagePath={c.slides[0].imagePath}
+                        authorName={expert.display_name}
+                        authorHandle={expert.handle}
+                        highlightColor={expert.highlight_color}
+                        avatarUrl={expert.avatar_url ?? undefined}
+                        imageHeightPercent={c.slides[0].imageHeightPercent ?? 0}
+                        imagePosition={c.slides[0].imagePosition ?? 'bottom'}
+                        imageObjectX={c.slides[0].imageObjectX ?? 50}
+                        imageObjectY={c.slides[0].imageObjectY ?? 50}
+                        fontSizeOverride={c.slides[0].fontSize}
+                        highlightEnabled={c.slides[0].highlightEnabled !== false}
+                        format="portrait"
+                        displayWidth={48}
+                      />
+                    </div>
+                  ) : (
+                    <span className="text-xl">🖼️</span>
+                  )}
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -368,11 +406,32 @@ export default function DashboardPage() {
                 className="group rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden cursor-pointer hover:border-zinc-600 hover:shadow-lg hover:shadow-black/30 transition-all"
               >
                 {/* Thumbnail */}
-                <div className="relative bg-zinc-800 aspect-[4/5] flex items-center justify-center overflow-hidden">
-                  {thumb
+                <div className="relative bg-white aspect-[4/5] flex items-center justify-center overflow-hidden">
+                  {thumb ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={thumb} alt="" className="w-full h-full object-cover" />
-                    : <span className="text-5xl opacity-20">🖼️</span>}
+                    <img src={thumb} alt="" className="w-full h-full object-cover" />
+                  ) : expert && c.slides[0]?.text ? (
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                      <FrankCard
+                        text={c.slides[0].text}
+                        imagePath={c.slides[0].imagePath}
+                        authorName={expert.display_name}
+                        authorHandle={expert.handle}
+                        highlightColor={expert.highlight_color}
+                        avatarUrl={expert.avatar_url ?? undefined}
+                        imageHeightPercent={c.slides[0].imageHeightPercent ?? 0}
+                        imagePosition={c.slides[0].imagePosition ?? 'bottom'}
+                        imageObjectX={c.slides[0].imageObjectX ?? 50}
+                        imageObjectY={c.slides[0].imageObjectY ?? 50}
+                        fontSizeOverride={c.slides[0].fontSize}
+                        highlightEnabled={c.slides[0].highlightEnabled !== false}
+                        format="portrait"
+                        displayWidth={280}
+                      />
+                    </div>
+                  ) : (
+                    <span className="text-5xl opacity-20">🖼️</span>
+                  )}
 
                   {/* Slide count */}
                   <div className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-md">
