@@ -96,6 +96,8 @@ npm run start   # next start -p 8080
 - Schema base: `supabase-schema.sql`
 - Buckets: `expert-photos`, `carousel-images`
 - Politicas RLS por usuario
+- Guia setup CLI: `SUPABASE_SETUP.md`
+- Guia setup Dashboard-only (sem terminal local): `SUPABASE_SETUP_DASHBOARD_ONLY.md`
 
 Cron nativo Supabase (recomendado para postagem):
 - Edge Function: `publish-scheduled`

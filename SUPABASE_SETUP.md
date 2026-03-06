@@ -2,6 +2,9 @@
 
 Guia rapido para replicar a infraestrutura do Carousel Studio em outro projeto Supabase.
 
+Se voce preferir fazer tudo sem terminal local, use:
+- `SUPABASE_SETUP_DASHBOARD_ONLY.md`
+
 ## 1) Pre-requisitos
 
 - Node.js + npm instalados
@@ -147,4 +150,3 @@ Function processa mas nao publica:
 - Nunca compartilhar `service_role` em chat/log publico.
 - Se exposta, rotacionar imediatamente em Settings > API.
 - Atualizar `SERVICE_ROLE_KEY` no secret da function apos rotacao.
-
