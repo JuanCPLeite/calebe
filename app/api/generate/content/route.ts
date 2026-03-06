@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { buildSystemPrompt, buildUserPrompt } from '@/lib/content-engine'
+import { buildSystemPrompt, buildUserPrompt, buildSplitSystemPrompt, buildSplitUserPrompt } from '@/lib/content-engine'
 import { getExpertFromDB } from '@/lib/expert-config'
 import { createClient } from '@/lib/supabase/server'
 
@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 })
   }
 
-  const { topic, hook, textLength, useFixedSlides } = await req.json()
+  const { topic, hook, textLength, useFixedSlides, templateId } = await req.json()
+  const isSplit = templateId === 'positivo-negativo'
   const contentOptions = { textLength, useFixedSlides: useFixedSlides !== false }
   if (!topic) {
     return new Response(JSON.stringify({ error: 'topic obrigatório' }), { status: 400 })
@@ -55,9 +56,9 @@ export async function POST(req: NextRequest) {
         try {
           const msgStream = client.messages.stream({
             model: 'claude-opus-4-6',
-            max_tokens: 4096,
-            system: buildSystemPrompt(expert, contentOptions),
-            messages: [{ role: 'user', content: buildUserPrompt(topic, hook, contentOptions) }],
+            max_tokens: 8192,
+            system: isSplit ? buildSplitSystemPrompt(expert) : buildSystemPrompt(expert, contentOptions),
+            messages: [{ role: 'user', content: isSplit ? buildSplitUserPrompt(topic) : buildUserPrompt(topic, hook, contentOptions) }],
           })
 
           for await (const event of msgStream) {

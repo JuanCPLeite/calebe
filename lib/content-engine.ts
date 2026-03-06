@@ -269,3 +269,77 @@ export async function generateCarouselContent(
     slides: (parsed.slides || []).map((s: any) => ({ ...s, approved: false })),
   }
 }
+
+// ─── Template Split ("X vs Y") ───────────────────────────────────────────────
+
+export function buildSplitSystemPrompt(expert: ExpertConfig): string {
+  const now = new Date()
+  const currentDate = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+  return `Você é um especialista em conteúdo viral para Instagram no formato carrossel comparativo "X vs Y".
+DATA ATUAL: ${currentDate}
+
+Você cria conteúdo para: ${expert.displayName} — especialista em ${expert.niche}.
+${expert.bioShort}
+
+REGRAS DE COPYWRITING:
+1. Títulos de slide SEMPRE em CAIXA ALTA
+2. Máximo 2-3 frases por lado, diretas e impactantes
+3. Use **negrito** com duplo asterisco para palavras-chave
+4. Tom: direto, assertivo, provocativo — sem rodeios
+5. Lado esquerdo: mostra a DOR, a abordagem errada/negativa, a consequência ruim
+6. Lado direito: mostra a SOLUÇÃO, a atitude correta, o resultado positivo
+7. Gere entre 8 e 10 slides de conteúdo (além da capa e CTA = 10-12 total)
+8. Progressão de intensidade: começa leve, termina com as situações mais impactantes
+9. CTA final DEVE provocar comentários, marcações ou compartilhamentos
+10. Conteúdo deve ser PRÁTICO e ESPECÍFICO — situações reais, não generalidades
+
+Retorne APENAS JSON válido, sem markdown, sem backticks:
+{
+  "topic": "tema real do carrossel",
+  "caption": "Legenda do Instagram com emojis, quebras visuais e 5-7 hashtags relevantes ao nicho",
+  "slides": [
+    {
+      "num": 0,
+      "type": "cover",
+      "layout": "split-cover",
+      "text": "TÍTULO X VS. Y (ex: LÍDER BONZINHO VS. LÍDER HUMANO)",
+      "subtitulo": "Pergunta provocativa que gera curiosidade?",
+      "labelEsquerda": "Nome do perfil negativo (ex: Líder Bonzinho)",
+      "labelDireita": "Nome do perfil positivo (ex: Líder Humano)",
+      "imagePrompt": ""
+    },
+    {
+      "num": 1,
+      "type": "content",
+      "layout": "split-content",
+      "text": "SITUAÇÃO ESPECÍFICA EM CAIXA ALTA",
+      "esquerda": "Texto do lado negativo com **palavras-chave** em negrito. Máximo 3 frases.",
+      "direita": "Texto do lado positivo com **palavras-chave** em negrito. Máximo 3 frases.",
+      "labelEsquerda": "Nome do perfil negativo",
+      "labelDireita": "Nome do perfil positivo",
+      "imagePrompt": "Prompt em inglês para gerar imagem relacionada ao slide (sem texto na imagem)"
+    },
+    {
+      "num": 11,
+      "type": "cta-final",
+      "layout": "split-cta",
+      "text": "PERGUNTA PROVOCATIVA EM CAIXA ALTA?",
+      "subtexto": "Call-to-action: marque alguém que precisa ver isso. Salve para reler quando precisar.",
+      "hashtags": "#hashtag1 #hashtag2 #hashtag3",
+      "imagePrompt": ""
+    }
+  ]
+}`
+}
+
+export function buildSplitUserPrompt(topic: string): string {
+  return `Crie um carrossel comparativo "X vs Y" sobre o tema: "${topic}"
+
+O carrossel deve ter:
+- Capa com título impactante mostrando o contraste dos dois perfis
+- 8 a 10 slides de conteúdo (situações práticas, específicas e progressivas)
+- Slide final de CTA que provoque comentários e marcações
+
+IMPORTANTE: cada situação deve ser ESPECÍFICA e PRÁTICA.
+Evite generalidades — mostre cenas concretas e reconhecíveis do dia a dia.`
+}

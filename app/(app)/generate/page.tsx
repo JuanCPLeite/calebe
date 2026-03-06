@@ -46,6 +46,7 @@ export default function GeneratePage() {
   const [textLength, setTextLength]       = useState<'short' | 'medium' | 'long'>('medium')
   const [useFixedSlides, setUseFixedSlides] = useState(true)
   const [activeTemplateName, setActiveTemplateName] = useState<string>('')
+  const [activeTemplateId, setActiveTemplateId]     = useState<string>('')
   const [scheduledAt, setScheduledAt]     = useState('')
   const [showScheduler, setShowScheduler] = useState(false)
   const [scheduling, setScheduling]       = useState(false)
@@ -142,6 +143,7 @@ export default function GeneratePage() {
       setUseFixedSlides(preset.useFixedSlides)
     }
     setActiveTemplateName(template.name)
+    setActiveTemplateId(templateId)
   }, [searchParams])
 
   // ── Cria registro no banco ao entrar em editing ───────────────────────────
@@ -235,7 +237,7 @@ export default function GeneratePage() {
       const res = await fetch('/api/generate/content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topic.title, hook, textLength, useFixedSlides }),
+        body: JSON.stringify({ topic: topic.title, hook, textLength, useFixedSlides, templateId: activeTemplateId }),
       })
 
       if (!res.ok || !res.body) {

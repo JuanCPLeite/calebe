@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FrankCard } from './frank-card'
+import { SplitCard, type SplitSlide } from './split-card'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,15 @@ export interface Slide {
   imageObjectY?: number
   fontSize?: number
   highlightEnabled?: boolean
+  // ── Split template fields ──────────────────────
+  layout?: 'split-cover' | 'split-content' | 'split-cta'
+  subtitulo?: string
+  esquerda?: string
+  direita?: string
+  labelEsquerda?: string
+  labelDireita?: string
+  subtexto?: string
+  hashtags?: string
 }
 
 export interface ExpertInfo {
@@ -154,6 +164,8 @@ export function CarouselPreview({
   }
 
   const isReordered = slides.some((s, i) => s.num !== i + 1)
+
+  function isSplitSlide(s: Slide) { return !!s.layout?.startsWith('split') }
 
   // Dados do slide ativo
   const slide        = slides[activeSlide]
@@ -339,22 +351,26 @@ export function CarouselPreview({
             >
               {activeSlide > 0 ? (
                 <div className="rounded-xl overflow-hidden cursor-pointer border border-zinc-800/40">
-                  <FrankCard
-                    text={slides[activeSlide - 1].text}
-                    imagePath={slides[activeSlide - 1].imagePath}
-                    authorName={expert.displayName}
-                    authorHandle={expert.handle}
-                    avatarUrl={expert.avatarUrl}
-                    highlightColor={expert.highlightColor}
-                    imageHeightPercent={(slides[activeSlide - 1].imageHeightPercent ?? 0) > 40 ? 0 : (slides[activeSlide - 1].imageHeightPercent ?? 0)}
-                    imagePosition={slides[activeSlide - 1].imagePosition ?? 'bottom'}
-                    imageObjectX={slides[activeSlide - 1].imageObjectX ?? 50}
-                    imageObjectY={slides[activeSlide - 1].imageObjectY ?? 50}
-                    fontSizeOverride={slides[activeSlide - 1].fontSize}
-                    highlightEnabled={slides[activeSlide - 1].highlightEnabled !== false}
-                    format="portrait"
-                    displayWidth={200}
-                  />
+                  {isSplitSlide(slides[activeSlide - 1]) ? (
+                    <SplitCard slide={slides[activeSlide - 1] as SplitSlide} accentColor={expert.highlightColor} displayWidth={200} />
+                  ) : (
+                    <FrankCard
+                      text={slides[activeSlide - 1].text}
+                      imagePath={slides[activeSlide - 1].imagePath}
+                      authorName={expert.displayName}
+                      authorHandle={expert.handle}
+                      avatarUrl={expert.avatarUrl}
+                      highlightColor={expert.highlightColor}
+                      imageHeightPercent={(slides[activeSlide - 1].imageHeightPercent ?? 0) > 40 ? 0 : (slides[activeSlide - 1].imageHeightPercent ?? 0)}
+                      imagePosition={slides[activeSlide - 1].imagePosition ?? 'bottom'}
+                      imageObjectX={slides[activeSlide - 1].imageObjectX ?? 50}
+                      imageObjectY={slides[activeSlide - 1].imageObjectY ?? 50}
+                      fontSizeOverride={slides[activeSlide - 1].fontSize}
+                      highlightEnabled={slides[activeSlide - 1].highlightEnabled !== false}
+                      format="portrait"
+                      displayWidth={200}
+                    />
+                  )}
                 </div>
               ) : (
                 <div style={{ width: 200 }} />
@@ -366,26 +382,30 @@ export function CarouselPreview({
               className="flex-shrink-0 relative rounded-2xl overflow-hidden border border-zinc-800/60 shadow-2xl shadow-black/50"
               style={{ width: PREVIEW_W }}
             >
-              <div className="relative bg-white flex justify-center">
-                <FrankCard
-                  text={slide.text}
-                  imagePath={slide.imagePath}
-                  authorName={expert.displayName}
-                  authorHandle={expert.handle}
-                  avatarUrl={expert.avatarUrl}
-                  highlightColor={expert.highlightColor}
-                  imageHeightPercent={slideExtraPct}
-                  onImageHeightPercentChange={v => updateSlide(activeSlide, { imageHeightPercent: v })}
-                  imagePosition={slideImgPos}
-                  imageObjectX={slideObjX}
-                  imageObjectY={slideObjY}
-                  onImageObjectChange={(x, y) => updateSlide(activeSlide, { imageObjectX: x, imageObjectY: y })}
-                  onTextChange={text => updateSlide(activeSlide, { text })}
-                  fontSizeOverride={slide.fontSize}
-                  highlightEnabled={slide.highlightEnabled !== false}
-                  format="portrait"
-                  displayWidth={PREVIEW_W}
-                />
+              <div className="relative flex justify-center" style={{ background: isSplitSlide(slide) ? '#0c0c0c' : '#fff' }}>
+                {isSplitSlide(slide) ? (
+                  <SplitCard slide={slide as SplitSlide} accentColor={expert.highlightColor} displayWidth={PREVIEW_W} />
+                ) : (
+                  <FrankCard
+                    text={slide.text}
+                    imagePath={slide.imagePath}
+                    authorName={expert.displayName}
+                    authorHandle={expert.handle}
+                    avatarUrl={expert.avatarUrl}
+                    highlightColor={expert.highlightColor}
+                    imageHeightPercent={slideExtraPct}
+                    onImageHeightPercentChange={v => updateSlide(activeSlide, { imageHeightPercent: v })}
+                    imagePosition={slideImgPos}
+                    imageObjectX={slideObjX}
+                    imageObjectY={slideObjY}
+                    onImageObjectChange={(x, y) => updateSlide(activeSlide, { imageObjectX: x, imageObjectY: y })}
+                    onTextChange={text => updateSlide(activeSlide, { text })}
+                    fontSizeOverride={slide.fontSize}
+                    highlightEnabled={slide.highlightEnabled !== false}
+                    format="portrait"
+                    displayWidth={PREVIEW_W}
+                  />
+                )}
                 {imgState === 'loading' && (
                   <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
                     <Loader2 className="w-7 h-7 animate-spin text-violet-600" />
@@ -403,22 +423,26 @@ export function CarouselPreview({
             >
               {activeSlide < slides.length - 1 ? (
                 <div className="rounded-xl overflow-hidden cursor-pointer border border-zinc-800/40">
-                  <FrankCard
-                    text={slides[activeSlide + 1].text}
-                    imagePath={slides[activeSlide + 1].imagePath}
-                    authorName={expert.displayName}
-                    authorHandle={expert.handle}
-                    avatarUrl={expert.avatarUrl}
-                    highlightColor={expert.highlightColor}
-                    imageHeightPercent={(slides[activeSlide + 1].imageHeightPercent ?? 0) > 40 ? 0 : (slides[activeSlide + 1].imageHeightPercent ?? 0)}
-                    imagePosition={slides[activeSlide + 1].imagePosition ?? 'bottom'}
-                    imageObjectX={slides[activeSlide + 1].imageObjectX ?? 50}
-                    imageObjectY={slides[activeSlide + 1].imageObjectY ?? 50}
-                    fontSizeOverride={slides[activeSlide + 1].fontSize}
-                    highlightEnabled={slides[activeSlide + 1].highlightEnabled !== false}
-                    format="portrait"
-                    displayWidth={200}
-                  />
+                  {isSplitSlide(slides[activeSlide + 1]) ? (
+                    <SplitCard slide={slides[activeSlide + 1] as SplitSlide} accentColor={expert.highlightColor} displayWidth={200} />
+                  ) : (
+                    <FrankCard
+                      text={slides[activeSlide + 1].text}
+                      imagePath={slides[activeSlide + 1].imagePath}
+                      authorName={expert.displayName}
+                      authorHandle={expert.handle}
+                      avatarUrl={expert.avatarUrl}
+                      highlightColor={expert.highlightColor}
+                      imageHeightPercent={(slides[activeSlide + 1].imageHeightPercent ?? 0) > 40 ? 0 : (slides[activeSlide + 1].imageHeightPercent ?? 0)}
+                      imagePosition={slides[activeSlide + 1].imagePosition ?? 'bottom'}
+                      imageObjectX={slides[activeSlide + 1].imageObjectX ?? 50}
+                      imageObjectY={slides[activeSlide + 1].imageObjectY ?? 50}
+                      fontSizeOverride={slides[activeSlide + 1].fontSize}
+                      highlightEnabled={slides[activeSlide + 1].highlightEnabled !== false}
+                      format="portrait"
+                      displayWidth={200}
+                    />
+                  )}
                 </div>
               ) : (
                 <div style={{ width: 200 }} />
@@ -439,7 +463,7 @@ export function CarouselPreview({
           {/* Controles do slide */}
           <div style={{ width: PREVIEW_W, maxWidth: '100%' }}>
             <div className="flex items-center flex-wrap gap-2">
-              {onRegenerateSlide && (
+              {!isSplitSlide(slide) && onRegenerateSlide && (
                 <>
                   <button
                     onClick={() => onRegenerateSlide(slide.num)}
@@ -453,7 +477,8 @@ export function CarouselPreview({
                 </>
               )}
 
-              {/* Tamanho da fonte */}
+              {/* Tamanho da fonte + cor de destaque (apenas FrankCard) */}
+              {!isSplitSlide(slide) && (<>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-zinc-600 select-none">Aa</span>
                 <select
@@ -471,7 +496,6 @@ export function CarouselPreview({
                 </select>
               </div>
 
-              {/* Toggle de cor de destaque */}
               <button
                 title={slide.highlightEnabled === false ? 'Ativar cor {}' : 'Desativar cor {}'}
                 onClick={() => updateSlide(activeSlide, { highlightEnabled: slide.highlightEnabled !== false ? false : true })}
@@ -489,9 +513,10 @@ export function CarouselPreview({
                 }} />
                 {'{ }'} cor
               </button>
+              </>)}
 
               {/* Posição da imagem */}
-              {hasImage && (
+              {!isSplitSlide(slide) && hasImage && (
                 <>
                   <div className="w-px h-5 bg-zinc-800 ml-auto" />
                   <button

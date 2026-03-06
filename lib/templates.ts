@@ -6,6 +6,7 @@ export interface CarouselTemplate {
   type: 'educativo' | 'vendas' | 'história' | 'comparação' | 'lista'
   tags: string[]
   available: boolean
+  layout?: 'frank' | 'split'
 }
 
 export interface TemplatePreset {
@@ -33,6 +34,16 @@ export const TEMPLATES: CarouselTemplate[] = [
     available: false,
   },
   {
+    id: 'positivo-negativo',
+    name: 'X vs Y',
+    description: 'Split layout lado a lado: abordagem errada (esquerda) vs abordagem certa (direita). Formato comparativo de alto engajamento.',
+    slideCount: 10,
+    type: 'comparação',
+    tags: ['comparação', 'split', '10 slides'],
+    available: true,
+    layout: 'split',
+  },
+  {
     id: 'comparacao-antes-depois',
     name: 'Antes e Depois',
     description: 'Compara o estado anterior com o posterior de forma visual e impactante. Perfeito para resultados e transformações.',
@@ -56,5 +67,9 @@ export const TEMPLATE_PRESETS: Record<string, TemplatePreset> = {
   'frank-costa-10': {
     textLength: 'medium',
     useFixedSlides: true,
+  },
+  'positivo-negativo': {
+    textLength: 'medium',
+    useFixedSlides: false,
   },
 }
