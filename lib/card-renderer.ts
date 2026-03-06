@@ -42,6 +42,10 @@ export interface CardRenderOpts {
   imageObjectX?: number
   /** object-position Y da imagem (0-100). Default 50. */
   imageObjectY?: number
+  /** Tamanho de fonte override (px). Se omitido usa autoFontSize. */
+  fontSize?: number
+  /** Se false, {texto} renderiza sem cor de destaque. Default true. */
+  highlightEnabled?: boolean
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -50,12 +54,16 @@ export interface CardRenderOpts {
  * Converte sintaxe markdown simplificada para HTML.
  * Idêntico ao parseText() do tweet-card-renderer.js.
  */
-function parseText(raw: string): string {
+function parseText(raw: string, highlightColor?: string): string {
   return (raw || '')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')  // **bold** primeiro
-    .replace(/\*([^*]+)\*/g,     '<strong>$1</strong>')  // *bold* compat
-    .replace(/_([^_]+)_/g,       '<em>$1</em>')          // _italic_
-    .replace(/\{([^}]+)\}/g,     '$1')                         // {destaque} → texto simples
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g,     '<strong>$1</strong>')
+    .replace(/_([^_]+)_/g,       '<em>$1</em>')
+    .replace(/\{([^}]+)\}/g,     (_, inner) =>
+      highlightColor
+        ? `<span style="color:${highlightColor};font-weight:600">${inner}</span>`
+        : inner
+    )
     .replace(/\n/g, '<br>')
 }
 
@@ -97,6 +105,7 @@ export function buildCardHTML(opts: CardRenderOpts): string {
     imagePosition = 'bottom',
     imageObjectX  = 50,
     imageObjectY  = 50,
+    highlightEnabled = true,
   } = opts
 
   const { width, height } = FORMATS[format] ?? FORMATS.portrait
@@ -114,7 +123,7 @@ export function buildCardHTML(opts: CardRenderOpts): string {
   const textExtraPct    = imageHeightPercent > 40 ? 0 : imageHeightPercent
   const textBottomPadPx = Math.round(height * textExtraPct / 100)
 
-  const fontSize = autoFontSize(text)
+  const fontSize = opts.fontSize ? `${opts.fontSize}px` : autoFontSize(text)
 
   // Padding proporcional: ~80px para 1080px de largura
   const padH = Math.round(width * 0.074)
@@ -266,7 +275,7 @@ export function buildCardHTML(opts: CardRenderOpts): string {
   ${imagePosition === 'top' ? `${imageBlockHTML}<div class="card-spacer"></div>` : ''}
 
   <div class="card-body">
-    <div class="card-text">${parseText(text)}</div>
+    <div class="card-text">${parseText(text, highlightEnabled ? highlightColor : undefined)}</div>
   </div>
 
   ${imagePosition === 'bottom' ? `<div class="card-spacer"></div>${imageBlockHTML}` : ''}

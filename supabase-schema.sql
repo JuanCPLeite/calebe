@@ -154,6 +154,17 @@ create policy "read own carousel images"
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
+create policy "update own carousel images"
+  on storage.objects for update to authenticated
+  using (
+    bucket_id = 'carousel-images'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  )
+  with check (
+    bucket_id = 'carousel-images'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
 create policy "delete own carousel images"
   on storage.objects for delete to authenticated
   using (

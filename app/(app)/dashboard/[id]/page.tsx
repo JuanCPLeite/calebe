@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { CarouselPreview, type Slide, type ExpertInfo } from '@/components/generate/carousel-preview'
 import {
   ArrowLeft, Send, Loader2, ExternalLink,
-  ImageIcon, Calendar, Check,
+  Calendar, Check,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -37,6 +37,19 @@ export default function CarouselDetailPage() {
   const reRenderTimers                    = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
   const lastRenderedSettings              = useRef<Record<number, { x: number; y: number; h: number; pos: string }>>({})
 
+  // ── Upload da imagem de fundo (Gemini) para o Storage ──────────────────────
+  async function uploadBgImageToStorage(slideNum: number, imageBase64: string): Promise<string | null> {
+    if (!userId) return null
+    const path = `${userId}/carousel-${id}/bg-${slideNum}.jpg`
+    const bytes = Uint8Array.from(atob(imageBase64), c => c.charCodeAt(0))
+    const { error } = await supabase.storage.from('carousel-images').upload(path, bytes, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    })
+    if (error) { console.error('Upload bg image falhou:', error); return null }
+    return path
+  }
+
   // ── Upload do card PNG para o Storage ──────────────────────────────────────
   async function uploadCardToStorage(slideNum: number, cardBase64: string): Promise<{ url: string; path: string } | null> {
     if (!userId) return null
@@ -51,12 +64,27 @@ export default function CarouselDetailPage() {
     return signed?.signedUrl ? { url: signed.signedUrl, path } : null
   }
 
-  // ── Re-renderiza slide usando imagem Gemini existente em memória ───────────
+  // ── Re-renderiza slide usando imagem de fundo (memória ou Storage) ─────────
   async function reRenderSlide(slide: Slide): Promise<void> {
-    if (!slide.imagePath) return
+    if (!slide.imagePath && !slide.bgImageStoragePath) return
     setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
     try {
-      const imageBase64 = slide.imagePath.replace(/^data:[^;]+;base64,/, '')
+      let imageBase64: string
+      if (slide.imagePath?.startsWith('data:')) {
+        // base64 em memória (gerado nesta sessão)
+        imageBase64 = slide.imagePath.replace(/^data:[^;]+;base64,/, '')
+      } else if (slide.bgImageStoragePath) {
+        // URL assinada do Storage — baixa e converte para base64
+        const { data: fileData, error } = await supabase.storage
+          .from('carousel-images')
+          .download(slide.bgImageStoragePath)
+        if (error || !fileData) throw new Error('Falha ao baixar imagem do storage')
+        const buffer = await fileData.arrayBuffer()
+        const bytes = new Uint8Array(buffer)
+        imageBase64 = btoa(bytes.reduce((acc, byte) => acc + String.fromCharCode(byte), ''))
+      } else {
+        return
+      }
       const cardRes = await fetch('/api/render/card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -69,6 +97,8 @@ export default function CarouselDetailPage() {
           imagePosition:      slide.imagePosition      ?? 'bottom',
           imageObjectX:       slide.imageObjectX       ?? 50,
           imageObjectY:       slide.imageObjectY       ?? 50,
+          fontSize:           slide.fontSize,
+          highlightEnabled:   slide.highlightEnabled !== false,
         }),
       })
       const cardData = await cardRes.json()
@@ -107,13 +137,15 @@ export default function CarouselDetailPage() {
         imageObjectY:  s.imageObjectY  ?? 50,
       }))
 
-      // Signed URLs dos slides e dados do expert em paralelo
-      const slidePaths = rawSlides.map(s => s.cardStoragePath).filter(Boolean) as string[]
+      // Signed URLs dos slides (card + bg image) e dados do expert em paralelo
+      const cardPaths = rawSlides.map(s => s.cardStoragePath).filter(Boolean) as string[]
+      const bgPaths   = rawSlides.map(s => s.bgImageStoragePath).filter(Boolean) as string[]
+      const allPaths  = [...cardPaths, ...bgPaths]
 
-      const [signedSlides, expertData] = await Promise.all([
-        // Batch de URLs de slides (1 request ao invés de N)
-        slidePaths.length > 0
-          ? supabase.storage.from('carousel-images').createSignedUrls(slidePaths, 3600)
+      const [signedAll, expertData] = await Promise.all([
+        // Batch de URLs (cards + bg images) — 1 request
+        allPaths.length > 0
+          ? supabase.storage.from('carousel-images').createSignedUrls(allPaths, 3600)
           : Promise.resolve({ data: [] }),
         // Expert query
         user
@@ -124,17 +156,22 @@ export default function CarouselDetailPage() {
           : Promise.resolve({ data: null }),
       ])
 
-      // Aplica URLs assinadas nos slides
+      // Mapeia paths → signed URLs
       const urlMap: Record<string, string> = {}
-      for (const item of (signedSlides.data || [])) {
+      for (const item of (signedAll.data || [])) {
         if (item.signedUrl) urlMap[item.path] = item.signedUrl
       }
-      const slidesWithUrls = rawSlides.map(s =>
-        s.cardStoragePath && urlMap[s.cardStoragePath]
-          ? { ...s, cardPath: urlMap[s.cardStoragePath] }
-          : s
-      )
+
+      // Aplica URLs nos slides — cardPath e imagePath (bg image)
+      const initialProgress: Record<number, 'loading' | 'done' | 'error'> = {}
+      const slidesWithUrls = rawSlides.map(s => {
+        const cardPath  = s.cardStoragePath  && urlMap[s.cardStoragePath]  ? urlMap[s.cardStoragePath]  : s.cardPath
+        const imagePath = s.bgImageStoragePath && urlMap[s.bgImageStoragePath] ? urlMap[s.bgImageStoragePath] : undefined
+        if (imagePath) initialProgress[s.num] = 'done'
+        return { ...s, ...(cardPath ? { cardPath } : {}), ...(imagePath ? { imagePath } : {}) }
+      })
       setSlides(slidesWithUrls)
+      if (Object.keys(initialProgress).length > 0) setImageProgress(initialProgress)
 
       setCaption(data.caption || '')
       if (data.scheduled_at) {
@@ -206,7 +243,7 @@ export default function CarouselDetailPage() {
   useEffect(() => {
     if (!carousel || carousel.ig_post_id || loading) return
     slides.forEach(slide => {
-      if (!slide.imagePath) return
+      if (!slide.imagePath && !slide.bgImageStoragePath) return
       const current = {
         x:   slide.imageObjectX       ?? 50,
         y:   slide.imageObjectY       ?? 50,
@@ -236,29 +273,45 @@ export default function CarouselDetailPage() {
     if (!imagePrompt) return
     setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
     try {
-      const imgRes  = await fetch('/api/generate/images', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slideNum: slide.num, imagePrompt }),
-      })
-      const imgData = await imgRes.json()
-      if (imgData.error) throw new Error(imgData.error)
+      let imgData: any = null
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const imgRes = await fetch('/api/generate/images', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slideNum: slide.num, imagePrompt }),
+          })
+          const data = await imgRes.json()
+          if (data.error) throw new Error(data.error)
+          imgData = data
+          break
+        } catch (err) {
+          if (attempt === 3) throw err
+        }
+      }
 
       const imageBase64 = imgData.dataUrl.replace(/^data:[^;]+;base64,/, '')
-      const cardRes  = await fetch('/api/render/card', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text:               slide.text,
-          imageBase64,
-          format:             'portrait',
-          showHeader:         true,
-          imageHeightPercent: slide.imageHeightPercent ?? 0,
-          imagePosition:      slide.imagePosition      ?? 'bottom',
-          imageObjectX:       slide.imageObjectX       ?? 50,
-          imageObjectY:       slide.imageObjectY       ?? 50,
+
+      // Render do card e upload da bg image em paralelo
+      const [cardRes, bgImageStoragePath] = await Promise.all([
+        fetch('/api/render/card', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text:               slide.text,
+            imageBase64,
+            format:             'portrait',
+            showHeader:         true,
+            imageHeightPercent: slide.imageHeightPercent ?? 0,
+            imagePosition:      slide.imagePosition      ?? 'bottom',
+            imageObjectX:       slide.imageObjectX       ?? 50,
+            imageObjectY:       slide.imageObjectY       ?? 50,
+          fontSize:           slide.fontSize,
+          highlightEnabled:   slide.highlightEnabled !== false,
+          }),
         }),
-      })
+        uploadBgImageToStorage(slide.num, imageBase64),
+      ])
       const cardData = await cardRes.json()
       if (cardData.error) throw new Error(cardData.error)
 
@@ -270,7 +323,7 @@ export default function CarouselDetailPage() {
       }
       setSlides(prev => prev.map(s =>
         s.num === slide.num
-          ? { ...s, imagePath: imgData.dataUrl, cardPath, cardStoragePath: stored?.path }
+          ? { ...s, imagePath: imgData.dataUrl, bgImageStoragePath: bgImageStoragePath ?? undefined, cardPath, cardStoragePath: stored?.path }
           : s
       ))
       setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
@@ -392,36 +445,44 @@ export default function CarouselDetailPage() {
   // ── Editor completo: rascunho ─────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 px-6 py-3 border-b border-zinc-800 flex-shrink-0">
-        <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-zinc-200" onClick={() => router.push('/dashboard')}>
-          <ArrowLeft className="w-4 h-4 mr-1.5" /> Dashboard
-        </Button>
-        <h1 className="text-sm font-medium text-zinc-300 flex-1 truncate">{carousel.topic}</h1>
+      <div className="flex items-center gap-2 px-5 py-2.5 border-b border-zinc-800/70 bg-zinc-900/30 flex-shrink-0">
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors flex-shrink-0"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <div className="w-px h-5 bg-zinc-800 flex-shrink-0" />
+        <h1 className="text-sm font-medium text-zinc-400 flex-1 truncate min-w-0">{carousel.topic}</h1>
 
         {/* Agendador */}
-        <div className="relative">
-          <Button
-            size="sm" variant="outline"
-            className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 gap-1.5"
+        <div className="relative flex-shrink-0">
+          <button
             onClick={() => setShowScheduler(v => !v)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors border',
+              scheduledAt
+                ? 'border-violet-600/50 text-violet-300 bg-violet-900/20 hover:bg-violet-900/35'
+                : 'border-zinc-700 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
+            )}
           >
             <Calendar className="w-3.5 h-3.5" />
             {scheduledAt
               ? new Date(scheduledAt).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
               : 'Agendar'
             }
-          </Button>
+          </button>
           {showScheduler && (
-            <div className="absolute right-0 top-9 z-50 bg-zinc-900 border border-zinc-700 rounded-xl p-3 shadow-xl flex flex-col gap-2 min-w-[220px]">
+            <div className="absolute right-0 top-10 z-50 bg-zinc-900 border border-zinc-700/80 rounded-xl p-4 shadow-2xl flex flex-col gap-3 min-w-[230px]">
               <p className="text-xs text-zinc-400 font-medium">Publicar automaticamente em:</p>
               <input
                 type="datetime-local"
                 value={scheduledAt}
                 onChange={e => setScheduledAt(e.target.value)}
-                className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-violet-500"
+                className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-200 outline-none focus:border-violet-500"
               />
-              <Button size="sm" className="bg-violet-600 hover:bg-violet-500 text-white gap-1" onClick={handleSchedule} disabled={!scheduledAt}>
-                <Check className="w-3 h-3" /> Confirmar
+              <Button size="sm" className="bg-violet-600 hover:bg-violet-500 text-white gap-1.5" onClick={handleSchedule} disabled={!scheduledAt}>
+                <Check className="w-3.5 h-3.5" /> Confirmar
               </Button>
             </div>
           )}
@@ -429,29 +490,16 @@ export default function CarouselDetailPage() {
 
         <Button
           size="sm"
-          className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 gap-1.5"
-          variant="outline"
-          onClick={handleGenerateImages}
-          disabled={generatingImages}
-        >
-          {generatingImages
-            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Gerando...</>
-            : <><ImageIcon className="w-3.5 h-3.5" /> Gerar imagens</>
-          }
-        </Button>
-
-        <Button
-          size="sm"
           className={cn(
-            'gap-1.5 text-white',
-            imagesReady ? 'bg-violet-600 hover:bg-violet-500' : 'bg-zinc-700 opacity-50 cursor-not-allowed',
+            'gap-1.5 text-white h-8 flex-shrink-0',
+            imagesReady ? 'bg-violet-600 hover:bg-violet-500' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed',
           )}
           onClick={handlePublish}
           disabled={!imagesReady || publishing}
         >
           {publishing
             ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Publicando...</>
-            : <><Send className="w-3.5 h-3.5" /> Publicar no Instagram</>
+            : <><Send className="w-3.5 h-3.5" /> Publicar</>
           }
         </Button>
       </div>
@@ -462,6 +510,7 @@ export default function CarouselDetailPage() {
           caption={caption}
           expert={expert}
           onSlidesChange={setSlides}
+          onCaptionChange={setCaption}
           onGenerateImages={handleGenerateImages}
           generatingImages={generatingImages}
           imageProgress={imageProgress}

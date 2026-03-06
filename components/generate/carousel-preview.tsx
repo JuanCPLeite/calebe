@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -18,14 +18,17 @@ export interface Slide {
   type: string
   text: string
   imagePrompt?: string
-  imagePath?: string       // base64 Gemini — apenas em memória, não persiste no banco
-  cardPath?: string        // URL assinada do Storage (ou base64 de fallback)
-  cardStoragePath?: string // path estável no bucket carousel-images
+  imagePath?: string
+  bgImageStoragePath?: string
+  cardPath?: string
+  cardStoragePath?: string
   approved?: boolean
   imageHeightPercent?: number
   imagePosition?: 'top' | 'bottom'
   imageObjectX?: number
   imageObjectY?: number
+  fontSize?: number
+  highlightEnabled?: boolean
 }
 
 export interface ExpertInfo {
@@ -44,8 +47,8 @@ interface CarouselPreviewProps {
   onRegenerateSlide?: (slideNum: number) => void
   generatingImages: boolean
   imageProgress: Record<number, 'loading' | 'done' | 'error'>
+  onCaptionChange?: (caption: string) => void
 }
-
 
 const TYPE_LABELS: Record<string, string> = {
   hook: 'Hook', problem: 'Problema', content: 'Conteúdo',
@@ -53,7 +56,9 @@ const TYPE_LABELS: Record<string, string> = {
   proof: 'Prova', 'cta-final': 'CTA Final',
 }
 
-const PREVIEW_W = 400
+const PREVIEW_W = 380
+
+const EMOJI_LIST = ['🔥','💡','✅','🚀','⭐','💪','📈','🎯','👉','💰','🙌','📱','💻','🧠','🎨','✨','🔑','💎','💯','❤️','👏','🤝','📣','🏆','⚡','🌟','😊','👀','💬','📝']
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -66,18 +71,48 @@ export function CarouselPreview({
   onRegenerateSlide,
   generatingImages,
   imageProgress,
+  onCaptionChange,
 }: CarouselPreviewProps) {
-  const [activeSlide, setActiveSlide]     = useState(0)
-  const [dragIndex, setDragIndex]         = useState<number | null>(null)
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-  const [showCaption, setShowCaption]     = useState(false)
+  const [activeSlide, setActiveSlide]         = useState(0)
+  const [dragIndex, setDragIndex]             = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex]     = useState<number | null>(null)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const captionRef = useRef<HTMLTextAreaElement>(null)
+
+  function wrapCaption(open: string, close: string) {
+    if (!captionRef.current || !onCaptionChange) return
+    const ta    = captionRef.current
+    const start = ta.selectionStart
+    const end   = ta.selectionEnd
+    const newVal = caption.slice(0, start) + open + caption.slice(start, end) + close + caption.slice(end)
+    onCaptionChange(newVal)
+    setTimeout(() => {
+      if (!captionRef.current) return
+      captionRef.current.selectionStart = start + open.length
+      captionRef.current.selectionEnd   = end   + open.length
+      captionRef.current.focus()
+    }, 0)
+  }
+
+  function insertCaption(text: string) {
+    if (!captionRef.current || !onCaptionChange) return
+    const ta    = captionRef.current
+    const start = ta.selectionStart
+    const newVal = caption.slice(0, start) + text + caption.slice(start)
+    onCaptionChange(newVal)
+    setTimeout(() => {
+      if (!captionRef.current) return
+      captionRef.current.selectionStart = start + text.length
+      captionRef.current.selectionEnd   = start + text.length
+      captionRef.current.focus()
+    }, 0)
+  }
 
   if (slides.length === 0) return null
 
-  const doneCount  = Object.values(imageProgress).filter(v => v === 'done').length
+  const doneCount    = Object.values(imageProgress).filter(v => v === 'done').length
   const canGenImages = !generatingImages && slides.length > 0
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
   function updateSlide(i: number, patch: Partial<Slide>) {
     onSlidesChange(slides.map((s, idx) => idx === i ? { ...s, ...patch } : s))
   }
@@ -92,7 +127,6 @@ export function CarouselPreview({
     return p === 'loading' ? 'loading' : p === 'done' ? 'done' : p === 'error' ? 'error' : 'idle'
   }
 
-  // ── Drag & Drop do strip ──────────────────────────────────────────────────
   function handleDragStart(index: number) { setDragIndex(index) }
 
   function handleDragOver(e: React.DragEvent, index: number) {
@@ -121,335 +155,376 @@ export function CarouselPreview({
 
   const isReordered = slides.some((s, i) => s.num !== i + 1)
 
+  // Dados do slide ativo
+  const slide        = slides[activeSlide]
+  const imgState     = getImgState(slide.num)
+  const slideImgPos  = slide.imagePosition  ?? 'bottom'
+  const slideExtraPct = (slide.imageHeightPercent ?? 0) > 40 ? 0 : (slide.imageHeightPercent ?? 0)
+  const slideObjX    = slide.imageObjectX   ?? 50
+  const slideObjY    = slide.imageObjectY   ?? 50
+  const hasImage     = !!(slide.imagePath || slide.bgImageStoragePath)
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0 bg-zinc-950">
 
-      {/* ══ STRIP: Sequência dos slides ══════════════════════════════════════ */}
-      <div className="flex-shrink-0 border-b border-zinc-800 bg-zinc-950/60 px-5 pt-4 pb-3">
+      {/* ══ STRIP ════════════════════════════════════════════════════════════ */}
+      <div className="flex-shrink-0 border-b border-zinc-800/70 bg-zinc-900/40 px-4 py-3">
+        <div className="flex items-center gap-3">
 
-        {/* Cabeçalho do strip */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <GripVertical className="w-3.5 h-3.5 text-zinc-600" />
-            <span className="text-xs font-medium text-zinc-400">
-              Sequência dos slides
-              <span className="text-zinc-600 ml-1">· arraste para reordenar</span>
-            </span>
-            {isReordered && (
-              <Badge className="text-[10px] bg-amber-900/30 text-amber-400 border border-amber-700/40 h-4 px-1.5">
-                reordenado
-              </Badge>
-            )}
+          <GripVertical className="w-3.5 h-3.5 text-zinc-700 flex-shrink-0" />
+
+          {/* Thumbnails */}
+          <div
+            className="flex gap-2 flex-1 overflow-x-auto select-none"
+            style={{ scrollbarWidth: 'none' }}
+          >
+            {slides.map((s, i) => {
+              const isActive   = i === activeSlide
+              const isDragging = dragIndex === i
+              const isDragOver = dragOverIndex === i && dragIndex !== i
+              const tState     = getImgState(s.num)
+              const miniText   = s.text.replace(/[*_{}\n]/g, ' ').trim()
+
+              return (
+                <button
+                  key={`${s.num}-${i}`}
+                  draggable
+                  onDragStart={() => handleDragStart(i)}
+                  onDragOver={(e) => handleDragOver(e, i)}
+                  onDrop={() => handleDrop(i)}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => setActiveSlide(i)}
+                  title={`Slide ${i + 1} — ${TYPE_LABELS[s.type] || s.type}`}
+                  className={cn(
+                    'relative rounded-lg overflow-hidden flex-shrink-0 cursor-grab active:cursor-grabbing transition-all duration-150',
+                    isActive   ? 'ring-2 ring-violet-500 shadow-lg shadow-violet-500/25' : 'ring-1 ring-zinc-800 hover:ring-zinc-600',
+                    isDragOver ? 'ring-2 ring-violet-400 scale-105' : '',
+                    isDragging ? 'opacity-20 scale-95' : '',
+                  )}
+                  style={{ width: 68, height: 85, background: '#fff', flexShrink: 0 }}
+                >
+                  {s.cardPath
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={s.cardPath} className="absolute inset-0 w-full h-full object-cover" alt="" />
+                    : (
+                      <div className="absolute inset-0 flex flex-col p-1 bg-white">
+                        <div className="flex items-center gap-0.5 mb-0.5 flex-shrink-0">
+                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: expert.highlightColor }} />
+                          <span className="text-[4.5px] text-zinc-500 truncate leading-none">{expert.displayName}</span>
+                        </div>
+                        <p className="text-[4px] text-zinc-600 leading-snug flex-1 overflow-hidden">{miniText.slice(0, 90)}</p>
+                        <div className="mt-0.5 rounded flex-shrink-0 h-6 overflow-hidden bg-zinc-100 border border-dashed border-zinc-300 flex items-center justify-center">
+                          {s.imagePath
+                            // eslint-disable-next-line @next/next/no-img-element
+                            ? <img src={s.imagePath} className="w-full h-full object-cover" alt="" />
+                            : <span className="text-[6px] text-zinc-400">📷</span>
+                          }
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  <div className="absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded bg-black/55 flex items-center justify-center z-10">
+                    <span className="text-[7px] font-bold text-white leading-none">{i + 1}</span>
+                  </div>
+
+                  {s.approved && (
+                    <div className="absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full bg-green-500 flex items-center justify-center z-10">
+                      <Check className="w-1.5 h-1.5 text-white" />
+                    </div>
+                  )}
+
+                  {tState === 'loading' && (
+                    <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-20">
+                      <Loader2 className="w-3.5 h-3.5 text-violet-500 animate-spin" />
+                    </div>
+                  )}
+                  {tState === 'error' && (
+                    <div className="absolute bottom-0.5 left-0.5 z-10">
+                      <AlertCircle className="w-2.5 h-2.5 text-red-400" />
+                    </div>
+                  )}
+                  {isActive && <div className="absolute inset-0 rounded-lg border-2 border-violet-500 pointer-events-none" />}
+                </button>
+              )
+            })}
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Ações */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             {isReordered && (
               <button
                 onClick={handleResetOrder}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-zinc-700 text-zinc-400 hover:border-amber-500 hover:text-amber-300 transition-colors bg-zinc-900"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs border border-zinc-700 text-zinc-500 hover:border-amber-500 hover:text-amber-300 transition-colors"
               >
                 <RotateCcw className="w-3 h-3" />
-                Restaurar ordem
+                Restaurar
               </button>
             )}
             <Button
               size="sm"
               className={cn(
-                'h-7 text-xs gap-1.5',
-                canGenImages ? 'bg-violet-600 hover:bg-violet-500 text-white' : 'bg-zinc-800 text-zinc-400'
+                'h-8 text-xs gap-1.5 px-3 flex-shrink-0',
+                canGenImages ? 'bg-violet-600 hover:bg-violet-500 text-white' : 'bg-zinc-800 text-zinc-500'
               )}
               onClick={onGenerateImages}
               disabled={!canGenImages}
             >
               {generatingImages
-                ? <><Loader2 className="w-3 h-3 animate-spin" /> Gerando ({doneCount}/{slides.length})</>
+                ? <><Loader2 className="w-3 h-3 animate-spin" /> {doneCount}/{slides.length}</>
                 : <><ImageIcon className="w-3 h-3" /> Gerar imagens</>
               }
             </Button>
           </div>
-        </div>
 
-        {/* Thumbnails draggáveis */}
-        <div className="flex gap-2 overflow-x-auto pb-1 select-none">
-          {slides.map((s, i) => {
-            const isActive   = i === activeSlide
-            const isDragging = dragIndex === i
-            const isDragOver = dragOverIndex === i && dragIndex !== i
-            const imgState   = getImgState(s.num)
-            const miniText   = s.text.replace(/[*_{}\n]/g, ' ').trim()
-
-            return (
-              <button
-                key={`${s.num}-${i}`}
-                draggable
-                onDragStart={() => handleDragStart(i)}
-                onDragOver={(e) => handleDragOver(e, i)}
-                onDrop={() => handleDrop(i)}
-                onDragEnd={handleDragEnd}
-                onClick={() => {
-                  setActiveSlide(i)
-                  document.getElementById(`slide-card-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                }}
-                className={cn(
-                  'relative rounded-xl overflow-hidden flex-shrink-0 cursor-grab active:cursor-grabbing transition-all duration-150',
-                  isActive   ? 'ring-2 ring-violet-500 shadow-lg shadow-violet-500/20' : 'ring-1 ring-zinc-700 hover:ring-zinc-500',
-                  isDragOver ? 'ring-2 ring-violet-400 scale-[1.06] shadow-xl' : '',
-                  isDragging ? 'opacity-25 scale-95' : '',
-                )}
-                style={{ width: 88, height: 110, background: '#fff', flexShrink: 0 }}
-              >
-                {/* Conteúdo: PNG gerado */}
-                {s.cardPath && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={s.cardPath} className="absolute inset-0 w-full h-full object-cover" alt="" />
-                )}
-
-                {/* Conteúdo: mini preview de texto */}
-                {!s.cardPath && (
-                  <div className="absolute inset-0 flex flex-col p-1.5 bg-white">
-                    <div className="flex items-center gap-1 flex-shrink-0 mb-1">
-                      <div className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ background: expert.highlightColor }} />
-                      <span className="text-[6px] text-zinc-500 truncate font-medium">{expert.displayName}</span>
-                    </div>
-                    <p className="text-[5.5px] text-zinc-600 leading-snug flex-1 overflow-hidden">
-                      {miniText.slice(0, 150)}
-                    </p>
-                    {s.imagePath ? (
-                      <div className="mt-1 rounded overflow-hidden flex-shrink-0" style={{ height: 36 }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={s.imagePath} className="w-full h-full object-cover" alt="" />
-                      </div>
-                    ) : (
-                      <div className="mt-1 rounded flex-shrink-0 flex items-center justify-center bg-zinc-100 border border-dashed border-zinc-300" style={{ height: 36 }}>
-                        <span className="text-[9px] text-zinc-400">📷</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Número */}
-                <div className="absolute top-1 left-1 min-w-[16px] h-4 px-1 rounded-sm bg-black/60 flex items-center justify-center z-10">
-                  <span className="text-[8px] font-bold text-white leading-none">{i + 1}</span>
-                </div>
-
-                {/* Tipo */}
-                {!s.cardPath && (
-                  <div className="absolute top-1 right-1 z-10">
-                    <span className="text-[5.5px] font-medium text-zinc-400 uppercase tracking-wide">
-                      {TYPE_LABELS[s.type]?.slice(0, 4) || s.type.slice(0, 4)}
-                    </span>
-                  </div>
-                )}
-
-                {/* Aprovado */}
-                {s.approved && (
-                  <div className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center z-10 shadow">
-                    <Check className="w-2.5 h-2.5 text-white" />
-                  </div>
-                )}
-
-                {/* Loading */}
-                {imgState === 'loading' && (
-                  <div className="absolute inset-0 bg-white/75 flex items-center justify-center z-20">
-                    <Loader2 className="w-4 h-4 text-violet-500 animate-spin" />
-                  </div>
-                )}
-
-                {/* Erro */}
-                {imgState === 'error' && (
-                  <div className="absolute bottom-1 left-1 z-10">
-                    <AlertCircle className="w-3 h-3 text-red-400" />
-                  </div>
-                )}
-
-                {/* Borda ativa */}
-                {isActive && (
-                  <div className="absolute inset-0 rounded-xl border-2 border-violet-500 pointer-events-none" />
-                )}
-              </button>
-            )
-          })}
         </div>
       </div>
 
-      {/* ══ ÁREA SCROLL VERTICAL: slides empilhados ══════════════════════════ */}
-      <div className="flex-1 overflow-y-auto py-6 px-4">
-        <div className="flex flex-col items-center gap-6" style={{ maxWidth: PREVIEW_W + 20, margin: '0 auto' }}>
+      {/* ══ ÁREA PRINCIPAL ════════════════════════════════════════════════════ */}
+      <div className="flex flex-1 min-h-0">
 
-          {/* Legenda colapsável */}
-          {caption && (
-            <div className="w-full border border-zinc-800 rounded-xl overflow-hidden">
-              <button
-                onClick={() => setShowCaption(v => !v)}
-                className="flex items-center justify-between w-full px-3 py-2.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors"
-              >
-                <span>📋 Legenda do post Instagram</span>
-                <span className="text-zinc-600 text-[10px]">{showCaption ? '▲ fechar' : '▼ ver'}</span>
-              </button>
-              {showCaption && (
-                <div className="px-3 pb-3">
-                  <p className="text-xs text-zinc-400 leading-relaxed whitespace-pre-wrap bg-zinc-900/50 rounded-lg p-2.5">
-                    {caption}
-                  </p>
-                </div>
+        {/* ── Coluna esquerda: slide ativo ────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto min-w-0 flex flex-col items-center py-6 px-6 gap-4">
+          <div style={{ width: PREVIEW_W, maxWidth: '100%' }}>
+
+            {/* Barra de navegação */}
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-1.5 text-sm">
+                <span className="font-semibold text-zinc-300">{activeSlide + 1}</span>
+                <span className="text-zinc-700">/</span>
+                <span className="text-zinc-600">{slides.length}</span>
+              </div>
+              <div className="w-px h-4 bg-zinc-800" />
+              <span className="text-sm text-zinc-400 font-medium">
+                {TYPE_LABELS[slide.type] || slide.type}
+              </span>
+              {slide.approved && (
+                <Badge className="text-[10px] bg-green-900/30 text-green-400 border border-green-700/40 h-5 px-2">
+                  ✓ aprovado
+                </Badge>
               )}
+
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  onClick={() => setActiveSlide(Math.max(0, activeSlide - 1))}
+                  disabled={activeSlide === 0}
+                  className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-25 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setActiveSlide(Math.min(slides.length - 1, activeSlide + 1))}
+                  disabled={activeSlide === slides.length - 1}
+                  className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-25 transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <div className="w-px h-4 bg-zinc-800 mx-1" />
+                <button
+                  onClick={() => approveSlide(activeSlide)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                    slide.approved
+                      ? 'bg-green-800/30 text-green-400 hover:bg-green-800/50'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
+                  )}
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  {slide.approved ? 'Aprovado' : 'Aprovar'}
+                </button>
+              </div>
+            </div>
+
+            {/* Card preview */}
+            <div className="relative rounded-2xl overflow-hidden border border-zinc-800/60 shadow-2xl shadow-black/50">
+              <div className="relative bg-white flex justify-center">
+                <FrankCard
+                  text={slide.text}
+                  imagePath={slide.imagePath}
+                  authorName={expert.displayName}
+                  authorHandle={expert.handle}
+                  avatarUrl={expert.avatarUrl}
+                  highlightColor={expert.highlightColor}
+                  imageHeightPercent={slideExtraPct}
+                  onImageHeightPercentChange={v => updateSlide(activeSlide, { imageHeightPercent: v })}
+                  imagePosition={slideImgPos}
+                  imageObjectX={slideObjX}
+                  imageObjectY={slideObjY}
+                  onImageObjectChange={(x, y) => updateSlide(activeSlide, { imageObjectX: x, imageObjectY: y })}
+                  onTextChange={text => updateSlide(activeSlide, { text })}
+                  fontSizeOverride={slide.fontSize}
+                  highlightEnabled={slide.highlightEnabled !== false}
+                  format="portrait"
+                  displayWidth={PREVIEW_W}
+                />
+                {imgState === 'loading' && (
+                  <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
+                    <Loader2 className="w-7 h-7 animate-spin text-violet-600" />
+                    <span className="text-sm text-zinc-600 font-medium">Gerando imagem...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Controles do slide */}
+            <div className="flex items-center flex-wrap gap-2 mt-3">
+              {onRegenerateSlide && (
+                <>
+                  <button
+                    onClick={() => onRegenerateSlide(slide.num)}
+                    disabled={imgState === 'loading'}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-700 disabled:opacity-30 transition-colors"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Refazer imagem
+                  </button>
+                  <div className="w-px h-5 bg-zinc-800" />
+                </>
+              )}
+
+              {/* Tamanho da fonte */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-600 select-none">Aa</span>
+                <select
+                  value={slide.fontSize ?? ''}
+                  onChange={e => {
+                    const v = e.target.value
+                    updateSlide(activeSlide, { fontSize: v ? Number(v) : undefined })
+                  }}
+                  className="bg-zinc-800 text-zinc-300 text-xs rounded-lg border border-zinc-700 px-2 py-1.5 outline-none focus:border-violet-500 cursor-pointer"
+                >
+                  <option value="">Auto</option>
+                  {[24, 28, 32, 36, 40, 44, 50, 58, 64, 72].map(s => (
+                    <option key={s} value={s}>{s}px</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Toggle de cor de destaque */}
+              <button
+                title={slide.highlightEnabled === false ? 'Ativar cor {}' : 'Desativar cor {}'}
+                onClick={() => updateSlide(activeSlide, { highlightEnabled: slide.highlightEnabled !== false ? false : true })}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border',
+                  slide.highlightEnabled !== false
+                    ? 'border-violet-600/50 text-violet-300 bg-violet-900/20 hover:bg-violet-900/35'
+                    : 'border-zinc-700 text-zinc-600 hover:border-zinc-600 hover:text-zinc-400'
+                )}
+              >
+                <span style={{
+                  display: 'inline-block', width: 9, height: 9, borderRadius: '50%',
+                  background: slide.highlightEnabled !== false ? expert.highlightColor : '#52525b',
+                  flexShrink: 0,
+                }} />
+                {'{ }'} cor
+              </button>
+
+              {/* Posição da imagem */}
+              {hasImage && (
+                <>
+                  <div className="w-px h-5 bg-zinc-800 ml-auto" />
+                  <button
+                    onClick={() => updateSlide(activeSlide, { imagePosition: 'top' })}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border',
+                      slideImgPos === 'top'
+                        ? 'bg-violet-600 text-white border-violet-600'
+                        : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                    )}
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" /> Topo
+                  </button>
+                  <button
+                    onClick={() => updateSlide(activeSlide, { imagePosition: 'bottom' })}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border',
+                      slideImgPos === 'bottom'
+                        ? 'bg-violet-600 text-white border-violet-600'
+                        : 'border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'
+                    )}
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" /> Base
+                  </button>
+                </>
+              )}
+            </div>
+
+          </div>
+        </div>
+
+        {/* ── Coluna direita: legenda ─────────────────────────────────────── */}
+        <div className="w-[420px] flex-shrink-0 border-l border-zinc-800/70 flex flex-col">
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800/70 flex-shrink-0">
+            <span className="text-sm font-semibold text-zinc-300">Legenda</span>
+            <span className={cn(
+              'text-xs font-mono tabular-nums px-2 py-0.5 rounded-md',
+              (caption?.length ?? 0) > 2000 ? 'text-red-400 bg-red-900/20' : 'text-zinc-600 bg-zinc-800/50'
+            )}>
+              {caption?.length ?? 0} / 2200
+            </span>
+          </div>
+
+          {/* Toolbar de formatação */}
+          {onCaptionChange && (
+            <div className="flex items-center gap-1 px-4 py-2.5 border-b border-zinc-800/70 flex-shrink-0">
+              {([
+                { label: 'B', title: 'Negrito',         open: '*',  close: '*',  style: { fontWeight: 700 } },
+                { label: 'I', title: 'Itálico',          open: '_',  close: '_',  style: { fontStyle: 'italic' as const } },
+                { label: '↵', title: 'Quebra de linha',  open: '\n', close: '',   style: {} },
+              ]).map(({ label, title, open, close, style }) => (
+                <button
+                  key={label}
+                  title={title}
+                  onMouseDown={e => { e.preventDefault(); wrapCaption(open, close) }}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-sm text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+                  style={style}
+                >
+                  {label}
+                </button>
+              ))}
+              <div className="w-px h-5 bg-zinc-800 mx-1" />
+              <div className="relative">
+                <button
+                  title="Inserir emoji"
+                  onClick={() => setShowEmojiPicker(v => !v)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-base hover:bg-zinc-800 transition-colors"
+                >
+                  😊
+                </button>
+                {showEmojiPicker && (
+                  <div className="absolute left-0 top-10 z-50 bg-zinc-900 border border-zinc-700/80 rounded-xl p-3 shadow-2xl w-60">
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {EMOJI_LIST.map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => { insertCaption(emoji); setShowEmojiPicker(false) }}
+                          className="text-lg hover:bg-zinc-800 rounded-lg p-1 transition-colors leading-none"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* Slides empilhados */}
-          {slides.map((slide, i) => {
-            const isActive        = i === activeSlide
-            const imgState        = getImgState(slide.num)
-            const slideImgPos     = slide.imagePosition ?? 'bottom'
-            // imageHeightPercent agora controla o espaço extra (0-40%); default 0
-            const slideExtraPct   = (slide.imageHeightPercent ?? 0) > 40 ? 0 : (slide.imageHeightPercent ?? 0)
-            const slideObjX       = slide.imageObjectX ?? 50
-            const slideObjY       = slide.imageObjectY ?? 50
-
-            return (
-              <div
-                key={`${slide.num}-${i}`}
-                id={`slide-card-${i}`}
-                onClick={() => setActiveSlide(i)}
-                className={cn(
-                  'w-full rounded-2xl overflow-hidden border transition-all cursor-pointer',
-                  isActive
-                    ? 'border-violet-500/70 shadow-xl shadow-violet-500/10'
-                    : 'border-zinc-800 hover:border-zinc-700'
-                )}
-              >
-                {/* ── Barra superior: badge + nav + aprovar ─────────────── */}
-                <div className="flex items-center gap-2 px-3 py-2 bg-zinc-900 border-b border-zinc-800">
-                  <span className="text-xs font-semibold text-zinc-500 w-5 flex-shrink-0">{i + 1}</span>
-                  <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400 h-5 px-1.5">
-                    {TYPE_LABELS[slide.type] || slide.type}
-                  </Badge>
-                  {slide.approved && (
-                    <Badge className="text-[10px] bg-green-600/20 text-green-400 border border-green-600/30 h-5 px-1.5">
-                      ✓
-                    </Badge>
-                  )}
-                  <div className="ml-auto flex items-center gap-0.5">
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-500"
-                      onClick={e => { e.stopPropagation(); setActiveSlide(Math.max(0, i - 1)) }}
-                      disabled={i === 0}>
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-500"
-                      onClick={e => { e.stopPropagation(); setActiveSlide(Math.min(slides.length - 1, i + 1)) }}
-                      disabled={i === slides.length - 1}>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      className={cn(
-                        'h-6 px-2 text-xs gap-1 ml-1',
-                        slide.approved ? 'bg-green-700 hover:bg-green-600' : 'bg-green-600 hover:bg-green-500',
-                        'text-white'
-                      )}
-                      onClick={e => { e.stopPropagation(); approveSlide(i) }}
-                    >
-                      <Check className="w-3 h-3" />
-                      {slide.approved ? 'OK ✓' : 'Aprovar'}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* ── Card preview — sempre editável até publicar ────────── */}
-                <div
-                  className="relative bg-zinc-950 flex justify-center"
-                  onClick={e => e.stopPropagation()}
-                >
-                  {slide.cardPath && !slide.cardPath.startsWith('data:') && !slide.imagePath ? (
-                    /* Card já renderizado carregado do banco — mostra PNG direto */
-                    <div style={{
-                      width: PREVIEW_W,
-                      height: Math.round(PREVIEW_W * 1350 / 1080),
-                      borderRadius: 12,
-                      overflow: 'hidden',
-                      flexShrink: 0,
-                    }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={slide.cardPath} alt={`Slide ${slide.num}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                  ) : (
-                    <FrankCard
-                      text={slide.text}
-                      imagePath={slide.imagePath}
-                      authorName={expert.displayName}
-                      authorHandle={expert.handle}
-                      avatarUrl={expert.avatarUrl}
-                      highlightColor={expert.highlightColor}
-                      imageHeightPercent={slideExtraPct}
-                      onImageHeightPercentChange={v => updateSlide(i, { imageHeightPercent: v })}
-                      imagePosition={slideImgPos}
-                      imageObjectX={slideObjX}
-                      imageObjectY={slideObjY}
-                      onImageObjectChange={(x, y) => updateSlide(i, { imageObjectX: x, imageObjectY: y })}
-                      onTextChange={text => updateSlide(i, { text })}
-                      format="portrait"
-                      displayWidth={PREVIEW_W}
-                    />
-                  )}
-
-                  {/* Loading overlay */}
-                  {imgState === 'loading' && (
-                    <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
-                      <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
-                      <span className="text-xs text-violet-700 font-medium">Gerando imagem...</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Barra inferior: refazer + posição imagem ──────────── */}
-                <div
-                  className="flex items-center gap-2 px-3 py-2 bg-zinc-900 border-t border-zinc-800"
-                  onClick={e => e.stopPropagation()}
-                >
-                  {onRegenerateSlide && (
-                    <Button
-                      size="sm" variant="outline"
-                      className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 gap-1.5 h-7 text-xs"
-                      onClick={() => onRegenerateSlide(slide.num)}
-                      disabled={imgState === 'loading'}
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      Refazer imagem
-                    </Button>
-                  )}
-                  <div className="flex gap-1 ml-auto items-center">
-                    {slideExtraPct > 0 && (
-                      <span className="text-[10px] text-zinc-600 mr-1">+{slideExtraPct}% espaço</span>
-                    )}
-                    <button
-                      onClick={() => updateSlide(i, { imagePosition: 'top' })}
-                      className={cn(
-                        'flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all border',
-                        slideImgPos === 'top'
-                          ? 'bg-violet-600 text-white border-violet-600'
-                          : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'
-                      )}
-                    >
-                      <ArrowUp className="w-3 h-3" /> Topo
-                    </button>
-                    <button
-                      onClick={() => updateSlide(i, { imagePosition: 'bottom' })}
-                      className={cn(
-                        'flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all border',
-                        slideImgPos === 'bottom'
-                          ? 'bg-violet-600 text-white border-violet-600'
-                          : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-500'
-                      )}
-                    >
-                      <ArrowDown className="w-3 h-3" /> Base
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-            )
-          })}
+          {/* Textarea */}
+          <textarea
+            ref={captionRef}
+            value={caption ?? ''}
+            onChange={e => onCaptionChange?.(e.target.value)}
+            readOnly={!onCaptionChange}
+            placeholder={onCaptionChange ? 'Escreva ou edite a legenda do post...' : 'Nenhuma legenda gerada ainda'}
+            className="flex-1 bg-transparent resize-none px-5 py-4 text-sm text-zinc-300 leading-relaxed outline-none placeholder:text-zinc-700 min-h-0"
+            style={{ fontFamily: 'inherit' }}
+          />
         </div>
+
       </div>
     </div>
   )

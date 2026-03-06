@@ -12,7 +12,7 @@
  * - Click no texto → abre textarea inline para edição
  */
 
-import { useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 const CARD_W = 1080
 const CARD_H = 1350
@@ -34,6 +34,8 @@ export interface FrankCardProps {
   onImageHeightPercentChange?: (v: number) => void
   onImageObjectChange?: (x: number, y: number) => void
   onTextChange?: (text: string) => void
+  fontSizeOverride?: number
+  highlightEnabled?: boolean
 }
 
 function autoFontSize(text: string): number {
@@ -47,15 +49,19 @@ function autoFontSize(text: string): number {
   return 50
 }
 
-function parseTextToJSX(text: string): React.ReactNode[] {
-  const parts = text.split(/(\*[^*]+\*|_[^_]+_|\n)/g)
+function parseTextToJSX(text: string, highlightColor: string, highlightEnabled: boolean): React.ReactNode[] {
+  const parts = text.split(/(\*[^*]+\*|_[^_]+_|\{[^}]+\}|\n)/g)
   return parts.map((part, i) => {
     if (part === '\n') return <br key={i} />
     if (part.startsWith('*') && part.endsWith('*'))
       return <strong key={i}>{part.slice(1, -1)}</strong>
     if (part.startsWith('_') && part.endsWith('_'))
       return <em key={i}>{part.slice(1, -1)}</em>
-    return part.replace(/\{([^}]+)\}/g, '$1')
+    if (part.startsWith('{') && part.endsWith('}'))
+      return highlightEnabled
+        ? <span key={i} style={{ color: highlightColor, fontWeight: 600 }}>{part.slice(1, -1)}</span>
+        : <span key={i}>{part.slice(1, -1)}</span>
+    return part
   })
 }
 
@@ -76,6 +82,8 @@ export function FrankCard({
   onImageHeightPercentChange,
   onImageObjectChange,
   onTextChange,
+  fontSizeOverride,
+  highlightEnabled = true,
 }: FrankCardProps) {
   const [handleHovered, setHandleHovered] = useState(false)
   const [editingText, setEditingText] = useState(false)
@@ -86,6 +94,9 @@ export function FrankCard({
   const imgDragStartY = useRef(0)
   const imgDragStartObjX = useRef(imageObjectX)
   const imgDragStartObjY = useRef(imageObjectY)
+  const bodyRef    = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [measuredBodyH, setMeasuredBodyH] = useState<number | null>(null)
 
   const cardW     = CARD_W
   const cardH     = format === 'square' ? CARD_W : CARD_H
@@ -110,9 +121,9 @@ export function FrankCard({
     ? Math.round(padV * 0.80) + avatarSize + Math.round(padV * 0.25)
     : 0
 
-  const fontSize   = useMemo(() => autoFontSize(text), [text])
+  const fontSize   = useMemo(() => fontSizeOverride ?? autoFontSize(text), [text, fontSizeOverride])
   const lineHeight = fontSize <= 30 ? 1.2 : fontSize <= 36 ? 1.25 : 1.3
-  const content    = useMemo(() => parseTextToJSX(text), [text])
+  const content    = useMemo(() => parseTextToJSX(text, highlightColor, highlightEnabled), [text, highlightColor, highlightEnabled])
   const initials   = authorName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
   // Estimativa da altura do bloco de texto para posicionar o handle e a textarea
@@ -126,10 +137,19 @@ export function FrankCard({
   const textContentH   = wrappedLines * fontSize * lineHeight
   const estimatedBodyH = textContentH + bodyPadV * 2
 
+  // Mede a altura real do bodyBlock para posicionar o handle com precisão
+  useLayoutEffect(() => {
+    if (!bodyRef.current) return
+    const h = bodyRef.current.offsetHeight
+    setMeasuredBodyH(prev => prev === h ? prev : h)
+  }, [text, fontSize, lineHeight, imagePosition])
+
+  const actualBodyH = measuredBodyH ?? estimatedBodyH
+
   // Y do handle em display pixels — na fronteira entre texto+spacer e imagem
   const handleY = imagePosition === 'bottom'
-    ? (headerInternalH + estimatedBodyH + textBottomPadPx) * scale
-    : (cardH - bottomPad - estimatedBodyH - textBottomPadPx) * scale
+    ? (headerInternalH + actualBodyH + textBottomPadPx) * scale
+    : (cardH - bottomPad - actualBodyH - textBottomPadPx) * scale
 
   // Coordenadas da textarea inline (em display pixels)
   const bodyTopInCard = imagePosition === 'top'
@@ -195,6 +215,22 @@ export function FrankCard({
     document.addEventListener('mouseup', onUp)
   }
 
+  // ── Formata texto selecionado na textarea ─────────────────────────────────
+  function wrapSelection(open: string, close: string) {
+    if (!textareaRef.current || !onTextChange) return
+    const ta = textareaRef.current
+    const start = ta.selectionStart
+    const end   = ta.selectionEnd
+    const newText = text.slice(0, start) + open + text.slice(start, end) + close + text.slice(end)
+    onTextChange(newText)
+    setTimeout(() => {
+      if (!textareaRef.current) return
+      textareaRef.current.selectionStart = start + open.length
+      textareaRef.current.selectionEnd   = end   + open.length
+      textareaRef.current.focus()
+    }, 0)
+  }
+
   // ── Blocos ────────────────────────────────────────────────────────────────
   const imageBlock = (
     <div
@@ -243,6 +279,7 @@ export function FrankCard({
 
   const bodyBlock = (
     <div
+      ref={bodyRef}
       onClick={() => { if (onTextChange && !editingText) setEditingText(true) }}
       style={{
         flexShrink: 0,
@@ -352,34 +389,70 @@ export function FrankCard({
         </div>
       </div>
 
-      {/* ── Textarea inline de edição ─────────────────────────────────────── */}
+      {/* ── Toolbar + Textarea inline de edição ──────────────────────────── */}
       {editingText && onTextChange && (
-        <textarea
-          autoFocus
-          value={text}
-          onChange={e => onTextChange(e.target.value)}
-          onBlur={() => setEditingText(false)}
-          style={{
+        <>
+          {/* Mini toolbar de formatação */}
+          <div style={{
             position: 'absolute',
-            top: textareaTop,
+            top: Math.max(2, textareaTop - 26),
             left: textareaLeft,
-            width: textareaWidth,
-            height: textareaHeight,
-            fontSize: textareaFontSize,
-            lineHeight,
-            fontFamily: "var(--font-dm-sans, 'DM Sans'), 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
-            fontWeight: 400,
-            color: '#1a1a1a',
-            background: 'rgba(255,255,255,0.93)',
-            border: '2px solid #7c3aed',
-            borderRadius: 8,
-            padding: `${textareaBodyPadV}px 0`,
-            resize: 'none',
-            outline: 'none',
-            zIndex: 40,
-            boxSizing: 'border-box',
-          }}
-        />
+            zIndex: 50,
+            display: 'flex',
+            gap: 3,
+            background: 'rgba(24,24,27,0.97)',
+            borderRadius: 6,
+            padding: '3px 5px',
+            border: '1px solid rgba(124,58,237,0.4)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          }}>
+            {([
+              { label: 'B', title: 'Negrito', open: '*',  close: '*',  style: { fontWeight: 700 } },
+              { label: 'I', title: 'Itálico',  open: '_',  close: '_',  style: { fontStyle: 'italic' as const } },
+              { label: '🎨', title: 'Cor da marca ({})', open: '{', close: '}', style: {} },
+            ] as const).map(({ label, title, open, close, style }) => (
+              <button
+                key={label}
+                title={title}
+                onMouseDown={e => { e.preventDefault(); wrapSelection(open, close) }}
+                style={{
+                  background: 'none', border: 'none', color: '#d4d4d8',
+                  fontSize: 11, cursor: 'pointer', padding: '1px 5px', borderRadius: 3,
+                  lineHeight: 1.5, ...style,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <textarea
+            ref={textareaRef}
+            autoFocus
+            value={text}
+            onChange={e => onTextChange(e.target.value)}
+            onBlur={() => setEditingText(false)}
+            style={{
+              position: 'absolute',
+              top: textareaTop,
+              left: textareaLeft,
+              width: textareaWidth,
+              height: textareaHeight,
+              fontSize: textareaFontSize,
+              lineHeight,
+              fontFamily: "var(--font-dm-sans, 'DM Sans'), 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+              fontWeight: 400,
+              color: '#1a1a1a',
+              background: 'rgba(255,255,255,0.93)',
+              border: '2px solid #7c3aed',
+              borderRadius: 8,
+              padding: `${textareaBodyPadV}px 0`,
+              resize: 'none',
+              outline: 'none',
+              zIndex: 40,
+              boxSizing: 'border-box',
+            }}
+          />
+        </>
       )}
     </div>
   )

@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
       imagePosition = 'bottom',
       imageObjectX,
       imageObjectY,
+      fontSize,
+      highlightEnabled,
     } = body
 
     // Dados do expert — busca do DB se autenticado
@@ -93,6 +95,8 @@ export async function POST(req: NextRequest) {
       imagePosition: imagePosition as 'top' | 'bottom',
       imageObjectX: typeof imageObjectX === 'number' ? imageObjectX : undefined,
       imageObjectY: typeof imageObjectY === 'number' ? imageObjectY : undefined,
+      fontSize: typeof fontSize === 'number' ? fontSize : undefined,
+      highlightEnabled: highlightEnabled !== false,
     })
 
     const cardBase64 = pngBuffer.toString('base64')
