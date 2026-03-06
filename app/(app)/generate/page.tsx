@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Topic } from '@/components/generate/topic-card'
 import { CarouselPreview, type Slide, type ExpertInfo } from '@/components/generate/carousel-preview'
-import { Sparkles, Mic, Loader2, ArrowLeft, Send, AlertCircle, Key, Calendar, Check } from 'lucide-react'
+import { Sparkles, Mic, Loader2, ArrowLeft, Send, AlertCircle, Key, Calendar, Check, X } from 'lucide-react'
 import { TopicDiscovery } from '@/components/generate/topic-discovery'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import { TEMPLATES, TEMPLATE_PRESETS } from '@/lib/templates'
 
 type Stage = 'discovery' | 'generating' | 'editing'
 
@@ -21,6 +23,7 @@ const DEFAULT_EXPERT: ExpertInfo = {
 
 export default function GeneratePage() {
   const supabase = createClient()
+  const searchParams = useSearchParams()
   const [stage, setStage]                 = useState<Stage>('discovery')
   const [generating, setGenerating]       = useState(false)
   const [generatingImages, setGeneratingImages] = useState(false)
@@ -42,8 +45,10 @@ export default function GeneratePage() {
   const [userId, setUserId]               = useState<string | null>(null)
   const [textLength, setTextLength]       = useState<'short' | 'medium' | 'long'>('medium')
   const [useFixedSlides, setUseFixedSlides] = useState(true)
+  const [activeTemplateName, setActiveTemplateName] = useState<string>('')
   const [scheduledAt, setScheduledAt]     = useState('')
   const [showScheduler, setShowScheduler] = useState(false)
+  const [scheduling, setScheduling]       = useState(false)
   const [savedTopicRef, setSavedTopicRef] = useState<string | null>(null)
   const autoSaveTimerRef                  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sessionIdRef                      = useRef<string>(`temp-${Date.now()}`)
@@ -122,6 +127,22 @@ export default function GeneratePage() {
 
     loadExpertAndTokens()
   }, [])
+
+  // Aplica preset automaticamente quando vem de /templates?template=...
+  useEffect(() => {
+    const templateId = searchParams.get('template')
+    if (!templateId) return
+
+    const template = TEMPLATES.find(t => t.id === templateId && t.available)
+    if (!template) return
+
+    const preset = TEMPLATE_PRESETS[templateId]
+    if (preset) {
+      setTextLength(preset.textLength)
+      setUseFixedSlides(preset.useFixedSlides)
+    }
+    setActiveTemplateName(template.name)
+  }, [searchParams])
 
   // ── Cria registro no banco ao entrar em editing ───────────────────────────
   useEffect(() => {
@@ -521,6 +542,7 @@ export default function GeneratePage() {
 
   async function handleSchedule() {
     if (!carouselId || !scheduledAt) return
+    setScheduling(true)
     try {
       await fetch(`/api/carousels/${carouselId}`, {
         method: 'PATCH',
@@ -528,8 +550,26 @@ export default function GeneratePage() {
         body: JSON.stringify({ scheduled_at: new Date(scheduledAt).toISOString() }),
       })
       setShowScheduler(false)
+    } finally {
+      setScheduling(false)
+    }
+  }
+
+  async function handleCancelSchedule() {
+    if (!carouselId) return
+    setScheduling(true)
+    try {
+      await fetch(`/api/carousels/${carouselId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_at: null }),
+      })
+      setScheduledAt('')
+      setShowScheduler(false)
     } catch (e) {
-      console.error('Falha ao agendar:', e)
+      console.error('Falha ao cancelar agendamento:', e)
+    } finally {
+      setScheduling(false)
     }
   }
 
@@ -576,9 +616,24 @@ export default function GeneratePage() {
                     onChange={e => setScheduledAt(e.target.value)}
                     className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-200 outline-none focus:border-violet-500"
                   />
-                  <Button size="sm" className="bg-violet-600 hover:bg-violet-500 text-white gap-1.5" onClick={handleSchedule} disabled={!scheduledAt}>
-                    <Check className="w-3.5 h-3.5" /> Confirmar
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" className="bg-violet-600 hover:bg-violet-500 text-white gap-1.5" onClick={handleSchedule} disabled={!scheduledAt || scheduling}>
+                      {scheduling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      {scheduledAt ? 'Reagendar' : 'Agendar'}
+                    </Button>
+                    {scheduledAt && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-zinc-700 text-zinc-300 hover:text-zinc-100 gap-1.5"
+                        onClick={handleCancelSchedule}
+                        disabled={scheduling}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Cancelar
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -667,6 +722,14 @@ export default function GeneratePage() {
         <h1 className="text-xl font-semibold text-zinc-100">Gerar Carrossel</h1>
         <p className="text-sm text-zinc-500 mt-1">Escolha um tema viral ou escreva o seu próprio</p>
       </div>
+
+      {activeTemplateName && (
+        <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3">
+          <p className="text-xs text-violet-200">
+            Template ativo: <span className="font-medium">{activeTemplateName}</span>
+          </p>
+        </div>
+      )}
 
       {/* Banner: tokens faltando */}
       {missingTokens.length > 0 && (

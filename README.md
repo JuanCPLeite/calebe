@@ -97,6 +97,11 @@ npm run start   # next start -p 8080
 - Buckets: `expert-photos`, `carousel-images`
 - Politicas RLS por usuario
 
+Cron nativo Supabase (recomendado para postagem):
+- Edge Function: `publish-scheduled`
+- Agendamento: `* * * * *` (a cada 1 minuto)
+- Precisao real: normalmente ate ~60s apos `scheduled_at`
+
 Variaveis minimas esperadas:
 
 - `NEXT_PUBLIC_SUPABASE_URL`

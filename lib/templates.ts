@@ -8,6 +8,11 @@ export interface CarouselTemplate {
   available: boolean
 }
 
+export interface TemplatePreset {
+  textLength: 'short' | 'medium' | 'long'
+  useFixedSlides: boolean
+}
+
 export const TEMPLATES: CarouselTemplate[] = [
   {
     id: 'frank-costa-10',
@@ -46,3 +51,10 @@ export const TEMPLATES: CarouselTemplate[] = [
     available: false,
   },
 ]
+
+export const TEMPLATE_PRESETS: Record<string, TemplatePreset> = {
+  'frank-costa-10': {
+    textLength: 'medium',
+    useFixedSlides: true,
+  },
+}

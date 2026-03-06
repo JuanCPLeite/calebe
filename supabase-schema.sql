@@ -73,11 +73,13 @@ alter table user_tokens   enable row level security;
 alter table carousels     enable row level security;
 
 -- experts: dono acessa tudo
+drop policy if exists "own experts" on experts;
 create policy "own experts"
   on experts for all
   using (auth.uid() = user_id);
 
 -- expert_photos: acesso via expert do usuario
+drop policy if exists "own expert photos" on expert_photos;
 create policy "own expert photos"
   on expert_photos for all
   using (
@@ -89,11 +91,13 @@ create policy "own expert photos"
   );
 
 -- user_tokens: dono acessa tudo
+drop policy if exists "own tokens" on user_tokens;
 create policy "own tokens"
   on user_tokens for all
   using (auth.uid() = user_id);
 
 -- carousels: dono acessa tudo
+drop policy if exists "own carousels" on carousels;
 create policy "own carousels"
   on carousels for all
   using  (auth.uid() = user_id)
@@ -115,6 +119,7 @@ on conflict (id) do nothing;
 -- STORAGE POLICIES — expert-photos
 -- ============================================================
 
+drop policy if exists "upload own expert photos" on storage.objects;
 create policy "upload own expert photos"
   on storage.objects for insert to authenticated
   with check (
@@ -122,6 +127,7 @@ create policy "upload own expert photos"
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
+drop policy if exists "read own expert photos" on storage.objects;
 create policy "read own expert photos"
   on storage.objects for select to authenticated
   using (
@@ -129,6 +135,7 @@ create policy "read own expert photos"
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
+drop policy if exists "delete own expert photos" on storage.objects;
 create policy "delete own expert photos"
   on storage.objects for delete to authenticated
   using (
@@ -140,6 +147,7 @@ create policy "delete own expert photos"
 -- STORAGE POLICIES — carousel-images
 -- ============================================================
 
+drop policy if exists "upload own carousel images" on storage.objects;
 create policy "upload own carousel images"
   on storage.objects for insert to authenticated
   with check (
@@ -147,6 +155,7 @@ create policy "upload own carousel images"
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
+drop policy if exists "read own carousel images" on storage.objects;
 create policy "read own carousel images"
   on storage.objects for select to authenticated
   using (
@@ -154,6 +163,7 @@ create policy "read own carousel images"
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
+drop policy if exists "update own carousel images" on storage.objects;
 create policy "update own carousel images"
   on storage.objects for update to authenticated
   using (
@@ -165,6 +175,7 @@ create policy "update own carousel images"
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
+drop policy if exists "delete own carousel images" on storage.objects;
 create policy "delete own carousel images"
   on storage.objects for delete to authenticated
   using (
@@ -173,20 +184,38 @@ create policy "delete own carousel images"
   );
 
 -- ============================================================
--- CRON — publicacao automatica de carrosseis agendados
+-- CRON NATIVO SUPABASE — publicacao automatica de carrosseis agendados
 -- ============================================================
--- Pre-requisitos antes de executar este bloco:
---   1. Habilite pg_net em: Database > Extensions > pg_net > Enable
---   2. Defina CRON_SECRET e NEXT_PUBLIC_APP_URL nas envs do Vercel
---   3. Substitua <APP_URL> e <CRON_SECRET> abaixo antes de rodar
+-- Extensoes necessarias (idempotente):
+-- create extension if not exists pg_net;
+-- create extension if not exists pg_cron;
 --
+-- Fluxo recomendado:
+--   1. Crie a Edge Function `publish-scheduled` no Supabase
+--   2. Defina o secret CRON_SECRET na Function
+--   3. Habilite as extensoes pg_net e pg_cron
+--   4. Agende o job abaixo para chamar a Function a cada 1 minuto
+--
+-- Precisao de postagem:
+--   - Com cron de 1 minuto, o post ocorre normalmente entre 0-60s apos scheduled_at
+--   - Exemplo: agendado 17:33 -> publica no ciclo de 17:33 ou 17:34 (dependendo do segundo exato)
+--   - Para "segundo exato", cron SQL nao e a ferramenta adequada
+--
+-- URL padrao de Edge Function:
+--   https://<PROJECT_REF>.functions.supabase.co/publish-scheduled
+--
+-- Headers esperados:
+--   Content-Type: application/json
+--   x-cron-secret: <CRON_SECRET_DA_FUNCTION>
+--
+-- Exemplo:
 -- SELECT cron.schedule(
 --   'publish-scheduled-carousels',
---   '*/5 * * * *',
+--   '* * * * *',
 --   $$
 --   SELECT net.http_post(
---     url     := '<APP_URL>/api/cron/publish-scheduled',
---     headers := '{"Content-Type": "application/json", "x-cron-secret": "<CRON_SECRET>"}'::jsonb,
+--     url     := 'https://<PROJECT_REF>.functions.supabase.co/publish-scheduled',
+--     headers := '{"Content-Type": "application/json", "x-cron-secret": "<CRON_SECRET_DA_FUNCTION>"}'::jsonb,
 --     body    := '{}'::jsonb
 --   );
 --   $$

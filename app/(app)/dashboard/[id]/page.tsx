@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { CarouselPreview, type Slide, type ExpertInfo } from '@/components/generate/carousel-preview'
 import {
   ArrowLeft, Send, Loader2, ExternalLink,
-  Calendar, Check,
+  Calendar, Check, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -32,6 +32,7 @@ export default function CarouselDetailPage() {
   const [publishing, setPublishing]       = useState(false)
   const [scheduledAt, setScheduledAt]     = useState('')
   const [showScheduler, setShowScheduler] = useState(false)
+  const [scheduling, setScheduling]       = useState(false)
   const [userId, setUserId]               = useState<string | null>(null)
   const autoSaveTimer                     = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reRenderTimers                    = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
@@ -383,6 +384,7 @@ export default function CarouselDetailPage() {
 
   async function handleSchedule() {
     if (!scheduledAt) return
+    setScheduling(true)
     try {
       await fetch(`/api/carousels/${id}`, {
         method: 'PATCH',
@@ -391,8 +393,26 @@ export default function CarouselDetailPage() {
       })
       setShowScheduler(false)
       setCarousel((prev: any) => ({ ...prev, scheduled_at: new Date(scheduledAt).toISOString() }))
+    } finally {
+      setScheduling(false)
+    }
+  }
+
+  async function handleCancelSchedule() {
+    setScheduling(true)
+    try {
+      await fetch(`/api/carousels/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_at: null }),
+      })
+      setScheduledAt('')
+      setShowScheduler(false)
+      setCarousel((prev: any) => ({ ...prev, scheduled_at: null }))
     } catch (e) {
-      console.error('Falha ao agendar:', e)
+      console.error('Falha ao cancelar agendamento:', e)
+    } finally {
+      setScheduling(false)
     }
   }
 
@@ -481,9 +501,24 @@ export default function CarouselDetailPage() {
                 onChange={e => setScheduledAt(e.target.value)}
                 className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-200 outline-none focus:border-violet-500"
               />
-              <Button size="sm" className="bg-violet-600 hover:bg-violet-500 text-white gap-1.5" onClick={handleSchedule} disabled={!scheduledAt}>
-                <Check className="w-3.5 h-3.5" /> Confirmar
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button size="sm" className="bg-violet-600 hover:bg-violet-500 text-white gap-1.5" onClick={handleSchedule} disabled={!scheduledAt || scheduling}>
+                  {scheduling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  {scheduledAt ? 'Reagendar' : 'Agendar'}
+                </Button>
+                {scheduledAt && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-zinc-700 text-zinc-300 hover:text-zinc-100 gap-1.5"
+                    onClick={handleCancelSchedule}
+                    disabled={scheduling}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Cancelar
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </div>
