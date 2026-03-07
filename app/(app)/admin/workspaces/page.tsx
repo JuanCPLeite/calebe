@@ -17,11 +17,17 @@ interface WorkspaceItem {
   owner_id: string | null
   active: boolean
   created_at: string
+  member_count: number
+  total_carousels: number
+  total_published: number
+  carousels_last_30d: number
+  last_activity_at: string | null
 }
 
 export default function AdminWorkspacesPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [items, setItems] = useState<WorkspaceItem[]>([])
   const [search, setSearch] = useState('')
@@ -89,19 +95,32 @@ export default function AdminWorkspacesPage() {
 
   async function patchWorkspace(id: string, payload: Record<string, unknown>) {
     setError('')
-    const res = await fetch('/api/admin/workspaces', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...payload }),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Falha ao atualizar workspace')
-    setItems((prev) => prev.map((w) => (w.id === id ? data.workspace : w)))
+    setUpdatingId(id)
+    try {
+      const res = await fetch('/api/admin/workspaces', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...payload }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Falha ao atualizar workspace')
+      setItems((prev) => prev.map((w) => (w.id === id ? { ...w, ...data.workspace } : w)))
+    } finally {
+      setUpdatingId(null)
+    }
   }
 
   async function toggleActive(item: WorkspaceItem) {
+    const nextActive = !item.active
+    const confirmed = window.confirm(
+      nextActive
+        ? `Reativar o workspace "${item.name}"?`
+        : `Suspender o workspace "${item.name}"?`
+    )
+    if (!confirmed) return
+
     try {
-      await patchWorkspace(item.id, { active: !item.active })
+      await patchWorkspace(item.id, { active: nextActive })
     } catch (err: any) {
       setError(err.message || 'Erro ao atualizar status')
     }
@@ -116,6 +135,22 @@ export default function AdminWorkspacesPage() {
   }
 
   const total = useMemo(() => items.length, [items])
+  const activeCount = useMemo(() => items.filter((w) => w.active).length, [items])
+  const totalCarousels = useMemo(
+    () => items.reduce((acc, item) => acc + (item.total_carousels || 0), 0),
+    [items]
+  )
+  const totalPublished = useMemo(
+    () => items.reduce((acc, item) => acc + (item.total_published || 0), 0),
+    [items]
+  )
+
+  function formatDateTime(dateLike: string | null) {
+    if (!dateLike) return '—'
+    const date = new Date(dateLike)
+    if (Number.isNaN(date.getTime())) return '—'
+    return date.toLocaleString('pt-BR')
+  }
 
   return (
     <div className="p-8 space-y-6">
@@ -171,7 +206,7 @@ export default function AdminWorkspacesPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nome..."
+            placeholder="Buscar por nome ou slug..."
             className="bg-zinc-800 border-zinc-700 text-zinc-100 max-w-xs"
           />
           <select
@@ -196,10 +231,32 @@ export default function AdminWorkspacesPage() {
           <Button onClick={load} variant="outline" className="border-zinc-700 text-zinc-200">
             Filtrar
           </Button>
-          <span className="text-xs text-zinc-500">Total: {total}</span>
         </div>
 
         {error && <p className="text-sm text-red-400">{error}</p>}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
+            <p className="text-xs text-zinc-500">Workspaces</p>
+            <p className="text-lg font-semibold text-zinc-100">{total}</p>
+            <p className="text-xs text-zinc-500">{activeCount} ativos</p>
+          </div>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
+            <p className="text-xs text-zinc-500">Suspensos</p>
+            <p className="text-lg font-semibold text-zinc-100">{Math.max(total - activeCount, 0)}</p>
+            <p className="text-xs text-zinc-500">Reativáveis a qualquer momento</p>
+          </div>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
+            <p className="text-xs text-zinc-500">Carrosséis gerados</p>
+            <p className="text-lg font-semibold text-zinc-100">{totalCarousels}</p>
+            <p className="text-xs text-zinc-500">Base total dos clientes</p>
+          </div>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
+            <p className="text-xs text-zinc-500">Publicações</p>
+            <p className="text-lg font-semibold text-zinc-100">{totalPublished}</p>
+            <p className="text-xs text-zinc-500">Posts enviados para IG</p>
+          </div>
+        </div>
 
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-zinc-400">
@@ -212,8 +269,10 @@ export default function AdminWorkspacesPage() {
                 <tr className="text-left text-zinc-500 border-b border-zinc-800">
                   <th className="py-2 pr-3">Nome</th>
                   <th className="py-2 pr-3">Plano</th>
+                  <th className="py-2 pr-3">Membros</th>
+                  <th className="py-2 pr-3">Uso</th>
+                  <th className="py-2 pr-3">Última atividade</th>
                   <th className="py-2 pr-3">Status</th>
-                  <th className="py-2 pr-3">Criado em</th>
                   <th className="py-2 pr-3">Ações</th>
                 </tr>
               </thead>
@@ -228,6 +287,7 @@ export default function AdminWorkspacesPage() {
                       <select
                         value={w.plan}
                         onChange={(e) => changePlan(w, e.target.value as WorkspacePlan)}
+                        disabled={updatingId === w.id}
                         className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-100"
                       >
                         <option value="starter">starter</option>
@@ -235,13 +295,20 @@ export default function AdminWorkspacesPage() {
                         <option value="agency">agency</option>
                       </select>
                     </td>
+                    <td className="py-3 pr-3 text-zinc-300">{w.member_count || 0}</td>
+                    <td className="py-3 pr-3">
+                      <p className="text-zinc-200">{w.total_carousels || 0} carrosséis</p>
+                      <p className="text-xs text-zinc-500">
+                        {w.carousels_last_30d || 0} últimos 30d • {w.total_published || 0} publicados
+                      </p>
+                    </td>
+                    <td className="py-3 pr-3">
+                      {formatDateTime(w.last_activity_at)}
+                    </td>
                     <td className="py-3 pr-3">
                       <Badge className={w.active ? 'bg-green-700/30 text-green-300' : 'bg-red-700/30 text-red-300'}>
                         {w.active ? 'Ativo' : 'Suspenso'}
                       </Badge>
-                    </td>
-                    <td className="py-3 pr-3 text-zinc-400">
-                      {new Date(w.created_at).toLocaleDateString('pt-BR')}
                     </td>
                     <td className="py-3 pr-3">
                       <div className="flex items-center gap-2">
@@ -255,6 +322,7 @@ export default function AdminWorkspacesPage() {
                           variant="outline"
                           className="border-zinc-700 text-zinc-200"
                           onClick={() => toggleActive(w)}
+                          disabled={updatingId === w.id}
                         >
                           {w.active ? 'Suspender' : 'Reativar'}
                         </Button>
@@ -264,7 +332,7 @@ export default function AdminWorkspacesPage() {
                 ))}
                 {items.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-zinc-500">
+                    <td colSpan={7} className="py-6 text-center text-zinc-500">
                       Nenhum workspace encontrado.
                     </td>
                   </tr>

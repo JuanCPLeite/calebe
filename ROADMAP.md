@@ -83,7 +83,7 @@ Data de referência: 06/03/2026
 **Frontend — Painel Admin (`/admin`):**
 - [x] `/admin` — dashboard: métricas globais + atividade recente
 - [x] `/admin/settings` — chaves de IA com mascaramento + teste de conexão
-- [ ] `/admin/workspaces` — lista de clientes com plano, uso e ações
+- [x] `/admin/workspaces` — lista de clientes com plano, uso e ações
 - [x] `/admin/workspaces/[id]` — detalhe: membros, uso, logs do workspace
 - [x] `/admin/logs` — viewer com filtros (level, evento, workspace, período)
 - [x] `/admin/users` — todos os usuários com role e workspace
@@ -151,5 +151,6 @@ Data de referência: 06/03/2026
 - `/admin/workspaces/[id]` implementado (API + UI de detalhe com membros, uso e logs).
 - `/admin` agora consome métricas reais via `/api/admin/metrics`.
 - `/admin/settings` refinado com reveal seguro e teste de conexão por provider.
+- `/admin/workspaces` evoluído para versão final: colunas de uso/membros/atividade, KPIs e confirmação de suspensão/reativação.
 - Hardening de onboarding no schema: `profiles.role` não nulo + primeiro usuário vira `owner` automaticamente.
-- Próximo passo direto: elevar `/admin/workspaces` de MVP para versão final.
+- Próximo passo direto: implementar selector de workspace no header (multi-membership).

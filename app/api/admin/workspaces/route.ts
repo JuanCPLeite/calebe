@@ -4,6 +4,15 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/logger'
 
 type WorkspacePlan = 'starter' | 'pro' | 'agency'
+type WorkspaceBase = {
+  id: string
+  name: string
+  slug: string
+  plan: WorkspacePlan
+  owner_id: string | null
+  active: boolean
+  created_at: string
+}
 
 function slugify(input: string): string {
   return input
@@ -42,6 +51,85 @@ function isValidPlan(value: unknown): value is WorkspacePlan {
   return value === 'starter' || value === 'pro' || value === 'agency'
 }
 
+function asIso(value: string | null | undefined): string | null {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}
+
+function latestDate(a: string | null, b: string | null): string | null {
+  if (!a) return b
+  if (!b) return a
+  return new Date(a).getTime() >= new Date(b).getTime() ? a : b
+}
+
+async function enrichWorkspaces(admin: ReturnType<typeof createAdminClient>, workspaces: WorkspaceBase[]) {
+  if (workspaces.length === 0) return []
+
+  const workspaceIds = workspaces.map((w) => w.id)
+  const last30Date = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const recentLogsDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+
+  const [membersRes, carouselsRes, logsRes] = await Promise.all([
+    admin.from('workspace_members').select('workspace_id').in('workspace_id', workspaceIds),
+    admin
+      .from('carousels')
+      .select('workspace_id, created_at, ig_post_id')
+      .in('workspace_id', workspaceIds),
+    admin
+      .from('system_logs')
+      .select('workspace_id, created_at')
+      .in('workspace_id', workspaceIds)
+      .gte('created_at', recentLogsDate),
+  ])
+
+  const memberCounts = new Map<string, number>()
+  for (const row of membersRes.data || []) {
+    memberCounts.set(row.workspace_id, (memberCounts.get(row.workspace_id) || 0) + 1)
+  }
+
+  const usage = new Map<
+    string,
+    { total: number; published: number; last30: number; lastActivity: string | null }
+  >()
+  for (const workspace of workspaces) {
+    usage.set(workspace.id, {
+      total: 0,
+      published: 0,
+      last30: 0,
+      lastActivity: asIso(workspace.created_at),
+    })
+  }
+
+  for (const carousel of carouselsRes.data || []) {
+    const entry = usage.get(carousel.workspace_id)
+    if (!entry) continue
+    entry.total += 1
+    if (carousel.ig_post_id) entry.published += 1
+    if (carousel.created_at && carousel.created_at >= last30Date) entry.last30 += 1
+    entry.lastActivity = latestDate(entry.lastActivity, asIso(carousel.created_at))
+  }
+
+  for (const logEntry of logsRes.data || []) {
+    const entry = usage.get(logEntry.workspace_id)
+    if (!entry) continue
+    entry.lastActivity = latestDate(entry.lastActivity, asIso(logEntry.created_at))
+  }
+
+  return workspaces.map((workspace) => {
+    const workspaceUsage = usage.get(workspace.id)
+    return {
+      ...workspace,
+      member_count: memberCounts.get(workspace.id) || 0,
+      total_carousels: workspaceUsage?.total || 0,
+      total_published: workspaceUsage?.published || 0,
+      carousels_last_30d: workspaceUsage?.last30 || 0,
+      last_activity_at: workspaceUsage?.lastActivity || null,
+    }
+  })
+}
+
 export async function GET(req: NextRequest) {
   const auth = await ensureOwner()
   if ('error' in auth) return auth.error
@@ -57,7 +145,7 @@ export async function GET(req: NextRequest) {
     .select('id, name, slug, plan, owner_id, active, created_at')
     .order('created_at', { ascending: false })
 
-  if (search) query = query.ilike('name', `%${search}%`)
+  if (search) query = query.or(`name.ilike.%${search}%,slug.ilike.%${search}%`)
   if (plan && isValidPlan(plan)) query = query.eq('plan', plan)
   if (activeParam === 'true') query = query.eq('active', true)
   if (activeParam === 'false') query = query.eq('active', false)
@@ -74,7 +162,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Falha ao listar workspaces' }, { status: 500 })
   }
 
-  return NextResponse.json({ workspaces: data || [] })
+  const workspaces = await enrichWorkspaces(admin, (data || []) as WorkspaceBase[])
+  return NextResponse.json({ workspaces })
 }
 
 export async function POST(req: NextRequest) {
@@ -154,7 +243,8 @@ export async function POST(req: NextRequest) {
     payload: { workspace_id: workspace.id, name: workspace.name, plan: workspace.plan },
   })
 
-  return NextResponse.json({ workspace }, { status: 201 })
+  const [enrichedWorkspace] = await enrichWorkspaces(admin, [workspace as WorkspaceBase])
+  return NextResponse.json({ workspace: enrichedWorkspace || workspace }, { status: 201 })
 }
 
 export async function PATCH(req: NextRequest) {
@@ -193,5 +283,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Falha ao atualizar workspace' }, { status: 500 })
   }
 
-  return NextResponse.json({ workspace })
+  const [enrichedWorkspace] = await enrichWorkspaces(admin, [workspace as WorkspaceBase])
+  return NextResponse.json({ workspace: enrichedWorkspace || workspace })
 }

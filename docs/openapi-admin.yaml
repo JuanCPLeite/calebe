@@ -108,7 +108,7 @@ paths:
             enum: ['true', 'false']
       responses:
         '200':
-          description: Lista de workspaces
+          description: Lista de workspaces com métricas agregadas (membros, uso e última atividade)
         '401':
           description: Não autenticado
         '403':
@@ -136,7 +136,7 @@ paths:
                   format: uuid
       responses:
         '201':
-          description: Workspace criado
+          description: Workspace criado (retorna também métricas agregadas)
         '400':
           description: Payload inválido
         '401':
@@ -166,7 +166,7 @@ paths:
                   type: boolean
       responses:
         '200':
-          description: Workspace atualizado
+          description: Workspace atualizado (retorna também métricas agregadas)
         '400':
           description: Payload inválido
         '401':
