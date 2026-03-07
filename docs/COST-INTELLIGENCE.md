@@ -70,6 +70,7 @@ Uso típico:
 6. Seed opcional de baseline em `/api/admin/costs/prices/seed` (valores estimados).
 7. Alertas no `/admin/costs` para pico de custo e workspaces perto/estourados no crédito.
 8. Projeção mensal de custo por workspace no `/admin/costs`.
+9. Endpoint `/api/workspace/limits` para a UI informar crédito disponível antes da geração.
 
 ---
 

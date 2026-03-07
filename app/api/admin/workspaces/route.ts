@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/logger'
-import { DEFAULT_PLAN_CONFIGS, parsePlanConfigs } from '@/lib/plan-config'
+import { DEFAULT_PLAN_CONFIGS, parsePlanConfigs, findPlanById, type PlanConfig } from '@/lib/plan-config'
 
 const APP_SETTINGS_ID = '00000000-0000-0000-0000-000000000001'
 type WorkspaceBase = {
@@ -48,15 +48,14 @@ async function ensureOwner() {
   return { user }
 }
 
-async function getAllowedPlanIds(admin: ReturnType<typeof createAdminClient>): Promise<string[]> {
+async function getPlanConfigs(admin: ReturnType<typeof createAdminClient>): Promise<PlanConfig[]> {
   const { data } = await admin
     .from('app_settings')
     .select('plan_configs')
     .eq('id', APP_SETTINGS_ID)
     .maybeSingle()
 
-  const plans = parsePlanConfigs((data as any)?.plan_configs || DEFAULT_PLAN_CONFIGS)
-  return plans.map((p) => p.id)
+  return parsePlanConfigs((data as any)?.plan_configs || DEFAULT_PLAN_CONFIGS)
 }
 
 function asIso(value: string | null | undefined): string | null {
@@ -72,14 +71,19 @@ function latestDate(a: string | null, b: string | null): string | null {
   return new Date(a).getTime() >= new Date(b).getTime() ? a : b
 }
 
-async function enrichWorkspaces(admin: ReturnType<typeof createAdminClient>, workspaces: WorkspaceBase[]) {
+async function enrichWorkspaces(
+  admin: ReturnType<typeof createAdminClient>,
+  workspaces: WorkspaceBase[],
+  plans: PlanConfig[]
+) {
   if (workspaces.length === 0) return []
 
   const workspaceIds = workspaces.map((w) => w.id)
   const last30Date = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   const recentLogsDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+  const monthStartDate = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
 
-  const [membersRes, carouselsRes, logsRes] = await Promise.all([
+  const [membersRes, carouselsRes, logsRes, monthCarouselsRes] = await Promise.all([
     admin.from('workspace_members').select('workspace_id').in('workspace_id', workspaceIds),
     admin
       .from('carousels')
@@ -90,11 +94,21 @@ async function enrichWorkspaces(admin: ReturnType<typeof createAdminClient>, wor
       .select('workspace_id, created_at')
       .in('workspace_id', workspaceIds)
       .gte('created_at', recentLogsDate),
+    admin
+      .from('carousels')
+      .select('workspace_id')
+      .in('workspace_id', workspaceIds)
+      .gte('created_at', monthStartDate),
   ])
 
   const memberCounts = new Map<string, number>()
   for (const row of membersRes.data || []) {
     memberCounts.set(row.workspace_id, (memberCounts.get(row.workspace_id) || 0) + 1)
+  }
+
+  const monthCredits = new Map<string, number>()
+  for (const row of monthCarouselsRes.data || []) {
+    monthCredits.set(row.workspace_id, (monthCredits.get(row.workspace_id) || 0) + 1)
   }
 
   const usage = new Map<
@@ -127,13 +141,21 @@ async function enrichWorkspaces(admin: ReturnType<typeof createAdminClient>, wor
 
   return workspaces.map((workspace) => {
     const workspaceUsage = usage.get(workspace.id)
+    const plan = findPlanById(plans, workspace.plan) || plans[0] || DEFAULT_PLAN_CONFIGS[0]
+    const monthlyCreditsUsed = monthCredits.get(workspace.id) || 0
+    const monthlyCreditsLimit = plan?.monthlyPostCredits || 1
+    const monthlyCreditsPercent = Math.round((monthlyCreditsUsed / Math.max(1, monthlyCreditsLimit)) * 100)
     return {
       ...workspace,
       member_count: memberCounts.get(workspace.id) || 0,
+      member_limit: plan?.memberLimit || 1,
       total_carousels: workspaceUsage?.total || 0,
       total_published: workspaceUsage?.published || 0,
       carousels_last_30d: workspaceUsage?.last30 || 0,
       last_activity_at: workspaceUsage?.lastActivity || null,
+      monthly_credits_used: monthlyCreditsUsed,
+      monthly_credits_limit: monthlyCreditsLimit,
+      monthly_credits_percent: monthlyCreditsPercent,
     }
   })
 }
@@ -143,7 +165,8 @@ export async function GET(req: NextRequest) {
   if ('error' in auth) return auth.error
 
   const admin = createAdminClient()
-  const allowedPlanIds = await getAllowedPlanIds(admin)
+  const planConfigs = await getPlanConfigs(admin)
+  const allowedPlanIds = planConfigs.map((p) => p.id)
   const url = new URL(req.url)
   const search = (url.searchParams.get('search') || '').trim()
   const plan = (url.searchParams.get('plan') || '').trim()
@@ -171,7 +194,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Falha ao listar workspaces' }, { status: 500 })
   }
 
-  const workspaces = await enrichWorkspaces(admin, (data || []) as WorkspaceBase[])
+  const workspaces = await enrichWorkspaces(admin, (data || []) as WorkspaceBase[], planConfigs)
   return NextResponse.json({ workspaces })
 }
 
@@ -188,7 +211,8 @@ export async function POST(req: NextRequest) {
   if (!name) return NextResponse.json({ error: 'name é obrigatório' }, { status: 400 })
 
   const admin = createAdminClient()
-  const allowedPlanIds = await getAllowedPlanIds(admin)
+  const planConfigs = await getPlanConfigs(admin)
+  const allowedPlanIds = planConfigs.map((p) => p.id)
   if (!plan || !allowedPlanIds.includes(plan)) {
     return NextResponse.json({ error: `plan invalido (use: ${allowedPlanIds.join(', ')})` }, { status: 400 })
   }
@@ -253,7 +277,7 @@ export async function POST(req: NextRequest) {
     payload: { workspace_id: workspace.id, name: workspace.name, plan: workspace.plan },
   })
 
-  const [enrichedWorkspace] = await enrichWorkspaces(admin, [workspace as WorkspaceBase])
+  const [enrichedWorkspace] = await enrichWorkspaces(admin, [workspace as WorkspaceBase], planConfigs)
   return NextResponse.json({ workspace: enrichedWorkspace || workspace }, { status: 201 })
 }
 
@@ -272,7 +296,8 @@ export async function PATCH(req: NextRequest) {
 
   if (typeof body.plan === 'string' && body.plan.trim()) {
     const admin = createAdminClient()
-    const allowedPlanIds = await getAllowedPlanIds(admin)
+    const planConfigs = await getPlanConfigs(admin)
+    const allowedPlanIds = planConfigs.map((p) => p.id)
     const plan = body.plan.trim().toLowerCase()
     if (!allowedPlanIds.includes(plan)) {
       return NextResponse.json({ error: `plan invalido (use: ${allowedPlanIds.join(', ')})` }, { status: 400 })
@@ -285,6 +310,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const admin = createAdminClient()
+  const planConfigs = await getPlanConfigs(admin)
   const { data: workspace, error } = await admin
     .from('workspaces')
     .update(updates)
@@ -302,6 +328,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Falha ao atualizar workspace' }, { status: 500 })
   }
 
-  const [enrichedWorkspace] = await enrichWorkspaces(admin, [workspace as WorkspaceBase])
+  const [enrichedWorkspace] = await enrichWorkspaces(admin, [workspace as WorkspaceBase], planConfigs)
   return NextResponse.json({ workspace: enrichedWorkspace || workspace })
 }

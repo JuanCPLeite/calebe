@@ -70,6 +70,7 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Enforcement inicial de limites ativo:
 - convite de equipe bloqueado ao atingir `memberLimit`
 - geração de conteúdo/imagens/publicação bloqueada ao atingir `monthlyPostCredits`
+- `/generate` mostra aviso prévio de créditos via `/api/workspace/limits`
 
 ### Roadmap
 Ver `ROADMAP.md` para o plano completo.

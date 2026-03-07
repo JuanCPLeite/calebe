@@ -89,6 +89,7 @@ Colunas:
 - Nome do workspace + slug
 - Plano (badge: starter / pro / agency)
 - Membros (count)
+- Créditos mensais (uso/limite/%)
 - Carrosséis gerados (total)
 - Último acesso (último carousel criado ou login)
 - Status (ativo / inativo)

@@ -27,6 +27,10 @@ interface WorkspaceItem {
   total_published: number
   carousels_last_30d: number
   last_activity_at: string | null
+  member_limit?: number
+  monthly_credits_used?: number
+  monthly_credits_limit?: number
+  monthly_credits_percent?: number
 }
 
 export default function AdminWorkspacesPage() {
@@ -300,6 +304,7 @@ export default function AdminWorkspacesPage() {
                   <th className="py-2 pr-3">Nome</th>
                   <th className="py-2 pr-3">Plano</th>
                   <th className="py-2 pr-3">Membros</th>
+                  <th className="py-2 pr-3">Créditos</th>
                   <th className="py-2 pr-3">Uso</th>
                   <th className="py-2 pr-3">Última atividade</th>
                   <th className="py-2 pr-3">Status</th>
@@ -328,7 +333,18 @@ export default function AdminWorkspacesPage() {
                         )}
                       </select>
                     </td>
-                    <td className="py-3 pr-3 text-zinc-300">{w.member_count || 0}</td>
+                    <td className="py-3 pr-3 text-zinc-300">
+                      {w.member_count || 0}
+                      {w.member_limit ? <span className="text-zinc-500">/{w.member_limit}</span> : null}
+                    </td>
+                    <td className="py-3 pr-3">
+                      <p className="text-zinc-200">
+                        {(w.monthly_credits_used || 0)}/{(w.monthly_credits_limit || 0)}
+                      </p>
+                      <p className={`text-xs ${(w.monthly_credits_percent || 0) >= 100 ? 'text-red-400' : (w.monthly_credits_percent || 0) >= 80 ? 'text-amber-400' : 'text-zinc-500'}`}>
+                        {w.monthly_credits_percent || 0}% do mês
+                      </p>
+                    </td>
                     <td className="py-3 pr-3">
                       <p className="text-zinc-200">{w.total_carousels || 0} carrosséis</p>
                       <p className="text-xs text-zinc-500">
@@ -365,7 +381,7 @@ export default function AdminWorkspacesPage() {
                 ))}
                 {items.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-6 text-center text-zinc-500">
+                    <td colSpan={8} className="py-6 text-center text-zinc-500">
                       Nenhum workspace encontrado.
                     </td>
                   </tr>

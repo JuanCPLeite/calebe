@@ -207,3 +207,5 @@ Data de referência: 07/03/2026
 - Alertas iniciais de custo/crédito entregues em `/admin/costs` + seed estimado de preços.
 - Enforcement de crédito expandido para `/api/generate/images` e `/api/publish`.
 - Projeção mensal por workspace entregue no `/admin/costs`.
+- `/generate` agora consulta `/api/workspace/limits` e alerta crédito antes de tentar gerar.
+- `/admin/workspaces` agora exibe uso de créditos mensais por workspace.

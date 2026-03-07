@@ -23,6 +23,16 @@ interface ModelOption {
   label: string
 }
 
+interface WorkspaceLimits {
+  planId: string
+  planLabel: string
+  monthlyPostCredits: number
+  usedCredits: number
+  remainingCredits: number
+  usagePercent: number
+  canGenerate: boolean
+}
+
 const PLAN_MODEL_OPTIONS: Record<WorkspacePlan, ModelOption[]> = {
   starter: [
     { providerId: 'anthropic', model: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
@@ -79,6 +89,7 @@ export default function GeneratePage() {
   const [scheduling, setScheduling]       = useState(false)
   const [savedTopicRef, setSavedTopicRef] = useState<string | null>(null)
   const [workspacePlan, setWorkspacePlan] = useState<WorkspacePlan>('starter')
+  const [workspaceLimits, setWorkspaceLimits] = useState<WorkspaceLimits | null>(null)
   const [selectedProviderId, setSelectedProviderId] = useState<ProviderId>('anthropic')
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-5')
   const autoSaveTimerRef                  = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -175,6 +186,31 @@ export default function GeneratePage() {
     setSelectedProviderId(fallback.providerId)
     setSelectedModel(fallback.model)
   }, [availableModels, selectedProviderId, selectedModel])
+
+  async function loadWorkspaceLimits(): Promise<WorkspaceLimits | null> {
+    try {
+      const res = await fetch('/api/workspace/limits')
+      const data = await res.json()
+      if (!res.ok) return null
+      const nextLimits: WorkspaceLimits = {
+        planId: data.planId || 'starter',
+        planLabel: data.planLabel || 'Starter',
+        monthlyPostCredits: Number(data.monthlyPostCredits) || 0,
+        usedCredits: Number(data.usedCredits) || 0,
+        remainingCredits: Number(data.remainingCredits) || 0,
+        usagePercent: Number(data.usagePercent) || 0,
+        canGenerate: Boolean(data.canGenerate),
+      }
+      setWorkspaceLimits(nextLimits)
+      return nextLimits
+    } catch {
+      return null
+    }
+  }
+
+  useEffect(() => {
+    loadWorkspaceLimits()
+  }, [])
 
   // Aplica preset automaticamente quando vem de /templates?template=...
   useEffect(() => {
@@ -273,6 +309,14 @@ export default function GeneratePage() {
 
   // ── Geração de conteúdo ──────────────────────────────────────────────────
   async function handleGenerate(topic: Topic, hook: string) {
+    const limits = await loadWorkspaceLimits()
+    if (limits && !limits.canGenerate) {
+      setGenerateError(
+        `Limite de créditos atingido no plano ${limits.planLabel} (${limits.usedCredits}/${limits.monthlyPostCredits}).`
+      )
+      return
+    }
+
     setSelectedTopic(topic.title)
     setGenerating(true)
     setStage('generating')
@@ -813,6 +857,27 @@ export default function GeneratePage() {
         </div>
       )}
 
+      {workspaceLimits && (
+        <div className={`rounded-xl border px-4 py-3 ${
+          workspaceLimits.canGenerate
+            ? workspaceLimits.usagePercent >= 80
+              ? 'border-amber-700/40 bg-amber-950/20'
+              : 'border-zinc-800 bg-zinc-900/30'
+            : 'border-red-700/40 bg-red-950/20'
+        }`}>
+          <p className={`text-xs font-medium ${
+            workspaceLimits.canGenerate
+              ? workspaceLimits.usagePercent >= 80 ? 'text-amber-300' : 'text-zinc-300'
+              : 'text-red-300'
+          }`}>
+            Créditos do mês: {workspaceLimits.usedCredits}/{workspaceLimits.monthlyPostCredits} ({workspaceLimits.usagePercent}%)
+          </p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Plano {workspaceLimits.planLabel}. Restantes: {workspaceLimits.remainingCredits}.
+          </p>
+        </div>
+      )}
+
       {/* Opções de geração */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
@@ -914,7 +979,7 @@ export default function GeneratePage() {
         <Button
           className="bg-violet-600 hover:bg-violet-500 text-white"
           onClick={handleGenerateFromCustom}
-          disabled={!customTopic.trim() || generating}
+          disabled={!customTopic.trim() || generating || (workspaceLimits ? !workspaceLimits.canGenerate : false)}
         >
           <Sparkles className="w-4 h-4 mr-2" />
           Gerar
