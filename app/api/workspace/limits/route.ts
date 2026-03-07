@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceCreditUsage } from '@/lib/credit-limits'
 import { getWorkspacePlanLimits } from '@/lib/plan-limits'
+import { getWorkspaceBudgetUsage } from '@/lib/cost-guardrails'
 
 export async function GET() {
   const supabase = await createClient()
@@ -24,9 +25,10 @@ export async function GET() {
     return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 })
   }
 
-  const [planLimits, creditUsage] = await Promise.all([
+  const [planLimits, creditUsage, budgetUsage] = await Promise.all([
     getWorkspacePlanLimits(workspaceId),
     getWorkspaceCreditUsage(workspaceId),
+    getWorkspaceBudgetUsage(workspaceId),
   ])
 
   return NextResponse.json({
@@ -39,7 +41,10 @@ export async function GET() {
     usedCredits: creditUsage.usedCredits,
     remainingCredits: creditUsage.remainingCredits,
     usagePercent: Math.round((creditUsage.usedCredits / Math.max(1, creditUsage.creditLimit)) * 100),
-    canGenerate: creditUsage.usedCredits < creditUsage.creditLimit,
+    budgetLimitUsd: budgetUsage.budgetLimitUsd,
+    usedBudgetUsd: budgetUsage.usedBudgetUsd,
+    remainingBudgetUsd: Number.isFinite(budgetUsage.remainingBudgetUsd) ? budgetUsage.remainingBudgetUsd : null,
+    budgetUsagePercent: budgetUsage.usagePercent,
+    canGenerate: creditUsage.usedCredits < creditUsage.creditLimit && !(budgetUsage.blocking && budgetUsage.exceeded),
   })
 }
-

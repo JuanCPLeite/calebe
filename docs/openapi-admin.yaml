@@ -204,6 +204,9 @@ paths:
                       id: { type: string }
                       label: { type: string }
                       expertLimit: { type: integer, minimum: 1, maximum: 100 }
+                      memberLimit: { type: integer, minimum: 1, maximum: 500 }
+                      monthlyPostCredits: { type: integer, minimum: 1, maximum: 100000 }
+                      monthlyPriceUsd: { type: number, minimum: 0 }
                       description: { type: string }
       responses:
         '200':
@@ -300,7 +303,84 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Custo total, top workspaces, top usuários, top modelos, alertas e projeção mensal
+          description: Custo total, comparativos, alertas, efetividade por modelo, orçamento e margem por plano
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+  /api/admin/costs/credit-policy:
+    get:
+      summary: Lê política de créditos por ação
+      tags: [Admin Costs]
+      responses:
+        '200':
+          description: Pesos de crédito atuais e defaults
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+    patch:
+      summary: Atualiza política de créditos por ação
+      tags: [Admin Costs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                weights:
+                  type: object
+                  properties:
+                    contentRender: { type: number, minimum: 0 }
+                    imageGenerate: { type: number, minimum: 0 }
+                    publish: { type: number, minimum: 0 }
+      responses:
+        '200':
+          description: Política atualizada
+        '400':
+          description: Payload inválido
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+  /api/admin/costs/guardrails:
+    get:
+      summary: Lê guardrails de orçamento mensal
+      tags: [Admin Costs]
+      responses:
+        '200':
+          description: Guardrails atuais e defaults
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+    patch:
+      summary: Atualiza guardrails de orçamento mensal
+      tags: [Admin Costs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                guardrails:
+                  type: object
+                  properties:
+                    defaultMonthlyBudgetUsd: { type: number, minimum: 0 }
+                    warnAtPercent: { type: integer, minimum: 1, maximum: 100 }
+                    blockOnBudgetExceeded: { type: boolean }
+                    workspaceMonthlyBudgetUsd:
+                      type: object
+                      additionalProperties:
+                        type: number
+                        minimum: 0
+      responses:
+        '200':
+          description: Guardrails atualizados
+        '400':
+          description: Payload inválido
         '401':
           description: Não autenticado
         '403':

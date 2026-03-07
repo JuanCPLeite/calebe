@@ -38,6 +38,9 @@ interface WorkspaceLimits {
   usedCredits: number
   remainingCredits: number
   usagePercent: number
+  budgetLimitUsd: number
+  usedBudgetUsd: number
+  budgetUsagePercent: number
   canGenerate: boolean
 }
 
@@ -75,6 +78,10 @@ function formatScheduled(iso: string) {
 
 function formatCreditValue(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
+}
+
+function usd(value: number): string {
+  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 })
 }
 
 // ─── Sub-componentes ────────────────────────────────────────────────────────
@@ -217,6 +224,9 @@ export default function DashboardPage() {
           usedCredits: Number(limitsJson.usedCredits) || 0,
           remainingCredits: Number(limitsJson.remainingCredits) || 0,
           usagePercent: Number(limitsJson.usagePercent) || 0,
+          budgetLimitUsd: Number(limitsJson.budgetLimitUsd) || 0,
+          usedBudgetUsd: Number(limitsJson.usedBudgetUsd) || 0,
+          budgetUsagePercent: Number(limitsJson.budgetUsagePercent) || 0,
           canGenerate: Boolean(limitsJson.canGenerate),
         })
       }
@@ -359,19 +369,32 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {workspaceLimits && workspaceLimits.usagePercent >= 80 && (
+      {workspaceLimits && (workspaceLimits.usagePercent >= 80 || (workspaceLimits.budgetLimitUsd > 0 && workspaceLimits.budgetUsagePercent >= 80)) && (
         <div className={`rounded-xl border px-4 py-3 ${
-          workspaceLimits.usagePercent >= 100 ? 'border-red-700/40 bg-red-950/20' : 'border-amber-700/40 bg-amber-950/20'
+          workspaceLimits.usagePercent >= 100 || (workspaceLimits.budgetLimitUsd > 0 && workspaceLimits.budgetUsagePercent >= 100)
+            ? 'border-red-700/40 bg-red-950/20'
+            : 'border-amber-700/40 bg-amber-950/20'
         }`}>
           <p className={`text-xs font-medium ${
-            workspaceLimits.usagePercent >= 100 ? 'text-red-300' : 'text-amber-300'
+            workspaceLimits.usagePercent >= 100 || (workspaceLimits.budgetLimitUsd > 0 && workspaceLimits.budgetUsagePercent >= 100)
+              ? 'text-red-300'
+              : 'text-amber-300'
           }`}>
-            {workspaceLimits.usagePercent >= 100 ? 'Créditos do mês esgotados.' : 'Uso de créditos alto.'}
+            {workspaceLimits.usagePercent >= 100
+              ? 'Créditos do mês esgotados.'
+              : workspaceLimits.budgetLimitUsd > 0 && workspaceLimits.budgetUsagePercent >= 100
+                ? 'Orçamento mensal de custo esgotado.'
+                : 'Uso de créditos/custo alto.'}
           </p>
           <p className="text-xs text-zinc-400 mt-0.5">
             {formatCreditValue(workspaceLimits.usedCredits)}/{formatCreditValue(workspaceLimits.monthlyPostCredits)} usados no plano {workspaceLimits.planLabel}.
             {workspaceLimits.usagePercent >= 80 ? ' Upgrade recomendado.' : ''}
           </p>
+          {workspaceLimits.budgetLimitUsd > 0 && (
+            <p className="text-xs text-zinc-400 mt-0.5">
+              {usd(workspaceLimits.usedBudgetUsd)}/{usd(workspaceLimits.budgetLimitUsd)} de orçamento ({workspaceLimits.budgetUsagePercent}%).
+            </p>
+          )}
         </div>
       )}
 

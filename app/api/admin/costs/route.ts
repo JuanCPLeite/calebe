@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/logger'
 import { findPlanById, parsePlanConfigs, DEFAULT_PLAN_CONFIGS } from '@/lib/plan-config'
 import { parseCreditWeights, toWeightedCredits } from '@/lib/credit-limits'
+import { parseCostGuardrails } from '@/lib/cost-guardrails'
 
 async function ensureOwner() {
   const supabase = await createClient()
@@ -58,9 +59,15 @@ export async function GET(req: NextRequest) {
       .limit(5000)
 
     if (workspaceId) usageQuery = usageQuery.eq('workspace_id', workspaceId)
+    let periodCarouselsQuery = admin
+      .from('carousels')
+      .select('workspace_id, provider_used, model_used, ig_post_id, published_at, created_at')
+      .gte('created_at', from)
+      .limit(20000)
+    if (workspaceId) periodCarouselsQuery = periodCarouselsQuery.eq('workspace_id', workspaceId)
 
     const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
-    const [usageRes, prevUsageRes, workspacesRes, profilesRes, settingsRes, monthCarouselsRes, monthUsageRes, monthCostRes] = await Promise.all([
+    const [usageRes, prevUsageRes, workspacesRes, profilesRes, settingsRes, monthCarouselsRes, monthUsageRes, monthCostRes, periodCarouselsRes] = await Promise.all([
       usageQuery,
       admin
         .from('usage_events')
@@ -70,7 +77,7 @@ export async function GET(req: NextRequest) {
         .limit(5000),
       admin.from('workspaces').select('id, name, plan').order('name', { ascending: true }),
       admin.from('profiles').select('id, full_name'),
-      admin.from('app_settings').select('plan_configs, credit_weights_json').eq('id', '00000000-0000-0000-0000-000000000001').maybeSingle(),
+      admin.from('app_settings').select('plan_configs, credit_weights_json, cost_guardrails_json').eq('id', '00000000-0000-0000-0000-000000000001').maybeSingle(),
       admin
         .from('carousels')
         .select('workspace_id, created_at')
@@ -88,6 +95,7 @@ export async function GET(req: NextRequest) {
         .select('workspace_id, total_cost_usd')
         .gte('created_at', monthStart)
         .limit(50000),
+      periodCarouselsQuery,
     ])
 
     if (usageRes.error) {
@@ -96,12 +104,16 @@ export async function GET(req: NextRequest) {
     if (prevUsageRes.error) {
       throw new Error(prevUsageRes.error.message || 'Falha ao consultar usage_events do período anterior')
     }
+    if (periodCarouselsRes.error) {
+      throw new Error(periodCarouselsRes.error.message || 'Falha ao consultar carousels do período')
+    }
 
     const usage = usageRes.data || []
     const workspaces = workspacesRes.data || []
     const profiles = profilesRes.data || []
     const plans = parsePlanConfigs((settingsRes.data as any)?.plan_configs || DEFAULT_PLAN_CONFIGS)
     const creditWeights = parseCreditWeights((settingsRes.data as any)?.credit_weights_json)
+    const costGuardrails = parseCostGuardrails((settingsRes.data as any)?.cost_guardrails_json)
     const wsNameById = new Map(workspaces.map((w) => [w.id, w.name || w.id]))
     const userNameById = new Map(profiles.map((p) => [p.id, p.full_name || p.id]))
 
@@ -199,6 +211,26 @@ export async function GET(req: NextRequest) {
         totalCostUsd: item.cost,
         totalQuantity: item.quantity,
       }))
+    const byModelEffectiveness = new Map<string, { provider: string; model: string; generatedCount: number; publishedCount: number }>()
+    for (const row of periodCarouselsRes.data || []) {
+      const provider = row.provider_used || 'unknown'
+      const model = row.model_used || 'unknown'
+      const key = `${provider}:${model}`
+      const current = byModelEffectiveness.get(key) || { provider, model, generatedCount: 0, publishedCount: 0 }
+      current.generatedCount += 1
+      if (row.ig_post_id || row.published_at) current.publishedCount += 1
+      byModelEffectiveness.set(key, current)
+    }
+    const modelEffectiveness = Array.from(byModelEffectiveness.values())
+      .map((item) => ({
+        provider: item.provider,
+        model: item.model,
+        generatedCount: item.generatedCount,
+        publishedCount: item.publishedCount,
+        publishRatePct: item.generatedCount > 0 ? Number(((item.publishedCount / item.generatedCount) * 100).toFixed(2)) : 0,
+      }))
+      .sort((a, b) => b.generatedCount - a.generatedCount || b.publishedCount - a.publishedCount)
+      .slice(0, 20)
 
     const userCreditBreakdown = Array.from(userBreakdown.values())
       .sort((a, b) => b.totalCredits - a.totalCredits || b.totalCostUsd - a.totalCostUsd)
@@ -300,6 +332,76 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.projectedMonthCostUsd - a.projectedMonthCostUsd)
       .slice(0, 20)
 
+    const budgetUsage = workspaces.map((w) => {
+      const monthCostUsd = Number((monthCostByWorkspace.get(w.id) || 0).toFixed(8))
+      const override = costGuardrails.workspaceMonthlyBudgetUsd[w.id]
+      const budgetLimitUsd = Number((override ?? costGuardrails.defaultMonthlyBudgetUsd ?? 0).toFixed(2))
+      const hasBudget = budgetLimitUsd > 0
+      const usagePercent = hasBudget ? Math.round((monthCostUsd / Math.max(0.00000001, budgetLimitUsd)) * 100) : 0
+      const exceeded = hasBudget ? monthCostUsd >= budgetLimitUsd : false
+      const warning = hasBudget ? usagePercent >= costGuardrails.warnAtPercent : false
+      return {
+        workspaceId: w.id,
+        workspaceName: w.name || w.id,
+        planId: w.plan || 'starter',
+        monthCostUsd,
+        budgetLimitUsd,
+        usagePercent,
+        exceeded,
+        warning,
+      }
+    })
+      .sort((a, b) => b.usagePercent - a.usagePercent)
+      .slice(0, 30)
+
+    const planStats = new Map<string, {
+      planId: string
+      planLabel: string
+      workspaceCount: number
+      planPriceUsd: number
+      monthCostUsd: number
+      projectedMonthCostUsd: number
+    }>()
+    for (const workspace of workspaces) {
+      const plan = findPlanById(plans, workspace.plan) || plans[0]
+      const planId = plan?.id || workspace.plan || 'starter'
+      const current = planStats.get(planId) || {
+        planId,
+        planLabel: plan?.label || planId,
+        workspaceCount: 0,
+        planPriceUsd: Number((plan?.monthlyPriceUsd || 0).toFixed(2)),
+        monthCostUsd: 0,
+        projectedMonthCostUsd: 0,
+      }
+      const monthCostUsd = monthCostByWorkspace.get(workspace.id) || 0
+      const projectedMonthCostUsd = dayOfMonth > 0 ? (monthCostUsd / dayOfMonth) * daysInMonth : monthCostUsd
+      current.workspaceCount += 1
+      current.monthCostUsd += monthCostUsd
+      current.projectedMonthCostUsd += projectedMonthCostUsd
+      planStats.set(planId, current)
+    }
+    const planMarginSimulation = Array.from(planStats.values())
+      .map((item) => {
+        const revenueUsd = Number((item.workspaceCount * item.planPriceUsd).toFixed(2))
+        const projectedMonthCostUsd = Number(item.projectedMonthCostUsd.toFixed(8))
+        const projectedMarginUsd = Number((revenueUsd - projectedMonthCostUsd).toFixed(8))
+        const projectedMarginPct = revenueUsd > 0
+          ? Number(((projectedMarginUsd / revenueUsd) * 100).toFixed(2))
+          : null
+        return {
+          planId: item.planId,
+          planLabel: item.planLabel,
+          workspaceCount: item.workspaceCount,
+          planPriceUsd: item.planPriceUsd,
+          revenueUsd,
+          monthCostUsd: Number(item.monthCostUsd.toFixed(8)),
+          projectedMonthCostUsd,
+          projectedMarginUsd,
+          projectedMarginPct,
+        }
+      })
+      .sort((a, b) => a.projectedMarginUsd - b.projectedMarginUsd)
+
     for (const item of creditUsage) {
       if (item.usagePercent >= 100) {
         alerts.push({
@@ -310,6 +412,20 @@ export async function GET(req: NextRequest) {
         alerts.push({
           level: 'warn',
           message: `Workspace ${item.workspaceName} perto do limite (${item.usedCredits}/${item.creditLimit}).`,
+        })
+      }
+    }
+    for (const item of budgetUsage) {
+      if (!item.budgetLimitUsd || item.budgetLimitUsd <= 0) continue
+      if (item.exceeded) {
+        alerts.push({
+          level: 'warn',
+          message: `Workspace ${item.workspaceName} estourou orçamento de custo (${item.monthCostUsd.toFixed(4)}/${item.budgetLimitUsd.toFixed(2)} USD).`,
+        })
+      } else if (item.warning) {
+        alerts.push({
+          level: 'warn',
+          message: `Workspace ${item.workspaceName} perto do orçamento de custo (${item.monthCostUsd.toFixed(4)}/${item.budgetLimitUsd.toFixed(2)} USD).`,
         })
       }
     }
@@ -355,10 +471,14 @@ export async function GET(req: NextRequest) {
       topWorkspaces,
       topUsers,
       topModels,
+      modelEffectiveness,
       userCreditBreakdown,
       daily,
       creditUsage,
+      budgetUsage,
+      costGuardrails,
       monthlyProjection,
+      planMarginSimulation,
       alerts: alerts.slice(0, 12),
     })
   } catch (err: any) {

@@ -132,7 +132,7 @@ Data de referência: 07/03/2026
 - [x] Expandir `Admin Plans` com limites adicionais por plano:
 - [x] limite de usuários/membros
 - [x] limite de créditos de postagem (mensal)
-- [ ] políticas de excedente (bloquear e alertar entregues; cobrança extra pendente)
+- [x] políticas de excedente (bloquear e alertar entregues; cobrança extra pendente)
 - [ ] Medição de custo por geração/publicação:
 - [ ] custo por provider/modelo (input/output tokens, imagens, publicação)
 - [ ] custo por carrossel salvo/publicado
@@ -143,12 +143,12 @@ Data de referência: 07/03/2026
 - [ ] Analytics de modelos:
 - [ ] modelo mais usado por período
 - [ ] custo médio por modelo
-- [ ] efetividade por modelo (publicado x gerado, quando aplicável)
+- [x] efetividade por modelo (publicado x gerado, quando aplicável)
 - [ ] Alertas operacionais:
-- [ ] alerta de estouro de orçamento mensal
+- [x] alerta de estouro de orçamento mensal
 - [ ] alerta de uso anômalo (picos de custo)
 - [ ] Base para precificação:
-- [ ] simulação de margem por plano
+- [x] simulação de margem por plano
 - [ ] recomendação automática de upgrade de plano por uso
 
 ---
@@ -218,3 +218,8 @@ Data de referência: 07/03/2026
 - Política de créditos por ação agora configurável no admin (`/api/admin/costs/credit-policy` + UI em `/admin/costs`).
 - `/admin/costs` ampliado com breakdown de créditos por usuário e por tipo de ação.
 - `/admin/costs` ampliado com comparativo de período (janela atual vs anterior).
+- `/admin/costs` agora mostra efetividade por modelo (gerado x publicado).
+- Guardrails de custo mensais entregues: orçamento padrão/override por workspace e bloqueio opcional ao estourar.
+- Bloqueio de excedente expandido para custo mensal em `/api/generate/content`, `/api/generate/images` e `/api/publish`.
+- `/api/workspace/limits` passou a expor também uso de orçamento (USD) para UI.
+- Simulação de margem por plano entregue em `/admin/costs` com base em `monthlyPriceUsd` do `Admin Plans`.

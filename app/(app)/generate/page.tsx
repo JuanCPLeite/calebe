@@ -30,6 +30,10 @@ interface WorkspaceLimits {
   usedCredits: number
   remainingCredits: number
   usagePercent: number
+  budgetLimitUsd: number
+  usedBudgetUsd: number
+  remainingBudgetUsd: number | null
+  budgetUsagePercent: number
   canGenerate: boolean
 }
 
@@ -61,6 +65,10 @@ const DEFAULT_EXPERT: ExpertInfo = {
 
 function formatCreditValue(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
+}
+
+function usd(value: number): string {
+  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 })
 }
 
 export default function GeneratePage() {
@@ -203,6 +211,10 @@ export default function GeneratePage() {
         usedCredits: Number(data.usedCredits) || 0,
         remainingCredits: Number(data.remainingCredits) || 0,
         usagePercent: Number(data.usagePercent) || 0,
+        budgetLimitUsd: Number(data.budgetLimitUsd) || 0,
+        usedBudgetUsd: Number(data.usedBudgetUsd) || 0,
+        remainingBudgetUsd: data.remainingBudgetUsd === null ? null : Number(data.remainingBudgetUsd || 0),
+        budgetUsagePercent: Number(data.budgetUsagePercent) || 0,
         canGenerate: Boolean(data.canGenerate),
       }
       setWorkspaceLimits(nextLimits)
@@ -315,8 +327,11 @@ export default function GeneratePage() {
   async function handleGenerate(topic: Topic, hook: string) {
     const limits = await loadWorkspaceLimits()
     if (limits && !limits.canGenerate) {
+      const blockedByBudget = limits.budgetLimitUsd > 0 && limits.usedBudgetUsd >= limits.budgetLimitUsd
       setGenerateError(
-        `Limite de créditos atingido no plano ${limits.planLabel} (${formatCreditValue(limits.usedCredits)}/${formatCreditValue(limits.monthlyPostCredits)}).`
+        blockedByBudget
+          ? `Orçamento mensal de custo atingido no plano ${limits.planLabel} (${usd(limits.usedBudgetUsd)}/${usd(limits.budgetLimitUsd)}).`
+          : `Limite de créditos atingido no plano ${limits.planLabel} (${formatCreditValue(limits.usedCredits)}/${formatCreditValue(limits.monthlyPostCredits)}).`
       )
       return
     }
@@ -879,6 +894,11 @@ export default function GeneratePage() {
           <p className="text-xs text-zinc-500 mt-0.5">
             Plano {workspaceLimits.planLabel}. Restantes: {workspaceLimits.remainingCredits}.
           </p>
+          {workspaceLimits.budgetLimitUsd > 0 && (
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Orçamento: {usd(workspaceLimits.usedBudgetUsd)}/{usd(workspaceLimits.budgetLimitUsd)} ({workspaceLimits.budgetUsagePercent}%).
+            </p>
+          )}
         </div>
       )}
 

@@ -11,6 +11,7 @@ interface PlanItem {
   expertLimit: number
   memberLimit: number
   monthlyPostCredits: number
+  monthlyPriceUsd: number
   description: string
 }
 
@@ -20,6 +21,7 @@ const DEFAULT_NEW_PLAN: PlanItem = {
   expertLimit: 1,
   memberLimit: 1,
   monthlyPostCredits: 30,
+  monthlyPriceUsd: 0,
   description: '',
 }
 
@@ -82,6 +84,7 @@ export default function AdminPlansPage() {
       expertLimit: Math.max(1, Math.min(100, Math.floor(Number(newPlan.expertLimit) || 1))),
       memberLimit: Math.max(1, Math.min(500, Math.floor(Number(newPlan.memberLimit) || 1))),
       monthlyPostCredits: Math.max(1, Math.min(100000, Math.floor(Number(newPlan.monthlyPostCredits) || 1))),
+      monthlyPriceUsd: Math.max(0, Number((Number(newPlan.monthlyPriceUsd) || 0).toFixed(2))),
       description: newPlan.description.trim(),
     }
     setPlans((prev) => [...prev, plan])
@@ -120,7 +123,7 @@ export default function AdminPlansPage() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">Admin Plans</h1>
-          <p className="text-sm text-zinc-500 mt-1">Crie e ajuste tipos de plano e limite de experts</p>
+          <p className="text-sm text-zinc-500 mt-1">Crie e ajuste tipos de plano, limites e preço mensal</p>
         </div>
         <Button onClick={() => setShowTips(true)} variant="outline" className="border-zinc-700 text-zinc-200">
           <Info className="w-4 h-4" /> Dicas
@@ -143,7 +146,7 @@ export default function AdminPlansPage() {
         <>
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
             <p className="text-sm font-medium text-zinc-100">Adicionar plano</p>
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
               <Input
                 value={newPlan.id}
                 onChange={(e) => setNewPlan((p) => ({ ...p, id: normalizeId(e.target.value) }))}
@@ -184,6 +187,15 @@ export default function AdminPlansPage() {
                 className="bg-zinc-800 border-zinc-700 text-zinc-100"
               />
               <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={newPlan.monthlyPriceUsd}
+                onChange={(e) => setNewPlan((p) => ({ ...p, monthlyPriceUsd: Number(e.target.value) || 0 }))}
+                placeholder="Preco mensal USD"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100"
+              />
+              <Input
                 value={newPlan.description}
                 onChange={(e) => setNewPlan((p) => ({ ...p, description: e.target.value }))}
                 placeholder="Descricao (opcional)"
@@ -200,18 +212,19 @@ export default function AdminPlansPage() {
             <p className="text-xs text-zinc-500">
               Para editar: altere nome/limite/descricao e clique em <strong className="text-zinc-300">Salvar planos</strong>.
             </p>
-            <div className="hidden md:grid md:grid-cols-14 gap-2 px-1 text-[11px] uppercase tracking-wide text-zinc-500">
+            <div className="hidden md:grid md:grid-cols-16 gap-2 px-1 text-[11px] uppercase tracking-wide text-zinc-500">
               <p className="md:col-span-2">ID</p>
               <p className="md:col-span-2">Nome</p>
               <p className="md:col-span-2">Limite Experts</p>
               <p className="md:col-span-2">Limite Usuarios</p>
               <p className="md:col-span-2">Creditos/mes</p>
-              <p className="md:col-span-5">Descricao</p>
+              <p className="md:col-span-2">Preco USD/mes</p>
+              <p className="md:col-span-4">Descricao</p>
               <p className="md:col-span-1">Acao</p>
             </div>
             <div className="space-y-2">
               {plans.map((item, index) => (
-                <div key={item.id} className="grid grid-cols-1 md:grid-cols-14 gap-2 rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+                <div key={item.id} className="grid grid-cols-1 md:grid-cols-16 gap-2 rounded-lg border border-zinc-800 bg-zinc-900 p-3">
                   <Input value={item.id} disabled className="md:col-span-2 bg-zinc-800 border-zinc-700 text-zinc-400" />
                   <Input
                     value={item.label}
@@ -247,9 +260,18 @@ export default function AdminPlansPage() {
                     disabled={readonly}
                   />
                   <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={item.monthlyPriceUsd}
+                    onChange={(e) => updatePlan(index, { monthlyPriceUsd: Math.max(0, Number(e.target.value) || 0) })}
+                    className="md:col-span-2 bg-zinc-800 border-zinc-700 text-zinc-100"
+                    disabled={readonly}
+                  />
+                  <Input
                     value={item.description || ''}
                     onChange={(e) => updatePlan(index, { description: e.target.value })}
-                    className="md:col-span-5 bg-zinc-800 border-zinc-700 text-zinc-100"
+                    className="md:col-span-4 bg-zinc-800 border-zinc-700 text-zinc-100"
                     disabled={readonly}
                   />
                   <Button

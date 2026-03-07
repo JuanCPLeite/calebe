@@ -1,7 +1,7 @@
 # Cost Intelligence — Especificação Inicial
 
 > Objetivo: medir custo real de geração/publicação e suportar limites por plano (usuários, créditos, orçamento).
-> Status: schema + instrumentação inicial + dashboard owner de custos (`/admin/costs`) + alertas de crédito em telas de workspace.
+> Status: schema + instrumentação inicial + dashboard owner de custos (`/admin/costs`) + alertas de crédito/custo em telas de workspace.
 > Data: 2026-03-07
 
 ---
@@ -81,12 +81,21 @@ Uso típico:
 17. Política de crédito por ação ficou configurável no admin (`/admin/costs`) com persistência em `app_settings.credit_weights_json`.
 18. `/admin/costs` agora mostra consumo por usuário com breakdown de créditos por ação (texto/imagem/publicação).
 19. `/admin/costs` mostra comparativo de período (atual vs anterior) para custo, eventos e créditos.
+20. `/admin/costs` mostra efetividade por modelo (gerado x publicado).
+21. Guardrails de custo por mês (`cost_guardrails_json` em `app_settings`) com:
+   - orçamento padrão em USD;
+   - override por workspace;
+   - limite de alerta (%);
+   - bloqueio opcional ao estourar.
+22. Bloqueio de excedente de custo aplicado em `/api/generate/content`, `/api/generate/images` e `/api/publish`.
+23. `/api/workspace/limits` agora retorna também uso de orçamento mensal (USD) para a UI.
+24. Simulação de margem por plano entregue em `/admin/costs` com base no preço mensal configurável (`monthlyPriceUsd`) do `Admin Plans`.
 
 ---
 
 ## Próximas entregas
 
 1. Refinar cálculo de custo real por provider/modelo com telemetria de tokens nativos por API (reduzir estimativa).
-2. Evoluir regra de excedente por plano (cobrança extra/overage) além do bloqueio/alerta atual.
+2. Evoluir regra de excedente por plano para cobrança extra/overage (hoje já existe bloqueio/alerta).
 3. Entregar painel admin com custo por usuário e tendência temporal comparativa por modelo.
 4. Avaliar soft delete de carrossel para retenção operacional sem perder histórico visual.

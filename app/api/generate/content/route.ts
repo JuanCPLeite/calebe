@@ -6,6 +6,7 @@ import { getWorkspaceContext, getAppKeys } from '@/lib/workspace'
 import { log } from '@/lib/logger'
 import { recordUsageEvent } from '@/lib/usage-events'
 import { assertWorkspaceCreditsAvailable } from '@/lib/credit-limits'
+import { assertWorkspaceBudgetAvailable } from '@/lib/cost-guardrails'
 import type { ProviderId } from '@/lib/providers/types'
 
 type WorkspacePlan = 'starter' | 'pro' | 'agency'
@@ -79,6 +80,16 @@ export async function POST(req: NextRequest) {
       return new Response(
         JSON.stringify({
           error: `Limite mensal de créditos do plano ${creditCheck.usage.planLabel} atingido (${creditCheck.usage.usedCredits}/${creditCheck.usage.creditLimit}).`,
+        }),
+        { status: 403 }
+      )
+    }
+
+    const budgetCheck = await assertWorkspaceBudgetAvailable(workspaceId)
+    if (!budgetCheck.ok) {
+      return new Response(
+        JSON.stringify({
+          error: `Orçamento mensal de custo atingido (${budgetCheck.usage.usedBudgetUsd.toFixed(4)}/${budgetCheck.usage.budgetLimitUsd.toFixed(2)} USD).`,
         }),
         { status: 403 }
       )

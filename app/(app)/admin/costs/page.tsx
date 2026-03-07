@@ -25,6 +25,13 @@ interface CostData {
   topWorkspaces: Array<{ workspaceId: string; workspaceName: string; totalCostUsd: number }>
   topUsers: Array<{ userId: string; userName: string; totalCostUsd: number }>
   topModels: Array<{ provider: string; model: string; totalCostUsd: number; totalQuantity: number }>
+  modelEffectiveness: Array<{
+    provider: string
+    model: string
+    generatedCount: number
+    publishedCount: number
+    publishRatePct: number
+  }>
   userCreditBreakdown: Array<{
     userId: string
     userName: string
@@ -46,12 +53,39 @@ interface CostData {
     creditLimit: number
     usagePercent: number
   }>
+  budgetUsage: Array<{
+    workspaceId: string
+    workspaceName: string
+    planId: string
+    monthCostUsd: number
+    budgetLimitUsd: number
+    usagePercent: number
+    exceeded: boolean
+    warning: boolean
+  }>
+  costGuardrails?: {
+    defaultMonthlyBudgetUsd: number
+    warnAtPercent: number
+    blockOnBudgetExceeded: boolean
+    workspaceMonthlyBudgetUsd: Record<string, number>
+  }
   monthlyProjection: Array<{
     workspaceId: string
     workspaceName: string
     planId: string
     monthCostUsd: number
     projectedMonthCostUsd: number
+  }>
+  planMarginSimulation: Array<{
+    planId: string
+    planLabel: string
+    workspaceCount: number
+    planPriceUsd: number
+    revenueUsd: number
+    monthCostUsd: number
+    projectedMonthCostUsd: number
+    projectedMarginUsd: number
+    projectedMarginPct: number | null
   }>
   alerts: Array<{ level: 'info' | 'warn'; message: string }>
 }
@@ -70,6 +104,13 @@ interface CreditPolicy {
   contentRender: number
   imageGenerate: number
   publish: number
+}
+
+interface CostGuardrails {
+  defaultMonthlyBudgetUsd: number
+  warnAtPercent: number
+  blockOnBudgetExceeded: boolean
+  workspaceMonthlyBudgetUsd: Record<string, number>
 }
 
 function usd(value: number): string {
@@ -96,7 +137,14 @@ export default function AdminCostsPage() {
   const [savingPrice, setSavingPrice] = useState(false)
   const [seedingPrice, setSeedingPrice] = useState(false)
   const [savingPolicy, setSavingPolicy] = useState(false)
+  const [savingGuardrails, setSavingGuardrails] = useState(false)
   const [creditPolicy, setCreditPolicy] = useState<CreditPolicy>({ contentRender: 1, imageGenerate: 0.25, publish: 0 })
+  const [guardrails, setGuardrails] = useState<CostGuardrails>({
+    defaultMonthlyBudgetUsd: 0,
+    warnAtPercent: 80,
+    blockOnBudgetExceeded: true,
+    workspaceMonthlyBudgetUsd: {},
+  })
   const [priceForm, setPriceForm] = useState({
     provider: 'anthropic',
     model: '',
@@ -128,6 +176,7 @@ export default function AdminCostsPage() {
     load()
     loadPrices()
     loadCreditPolicy()
+    loadGuardrails()
   }, [])
 
   const avgPerEvent = useMemo(() => {
@@ -155,6 +204,22 @@ export default function AdminCostsPage() {
         contentRender: Number(json?.weights?.contentRender) || 0,
         imageGenerate: Number(json?.weights?.imageGenerate) || 0,
         publish: Number(json?.weights?.publish) || 0,
+      })
+    } catch {
+      // noop
+    }
+  }
+
+  async function loadGuardrails() {
+    try {
+      const res = await fetch('/api/admin/costs/guardrails')
+      const json = await res.json()
+      if (!res.ok) return
+      setGuardrails({
+        defaultMonthlyBudgetUsd: Number(json?.guardrails?.defaultMonthlyBudgetUsd) || 0,
+        warnAtPercent: Number(json?.guardrails?.warnAtPercent) || 80,
+        blockOnBudgetExceeded: json?.guardrails?.blockOnBudgetExceeded !== false,
+        workspaceMonthlyBudgetUsd: json?.guardrails?.workspaceMonthlyBudgetUsd || {},
       })
     } catch {
       // noop
@@ -233,6 +298,33 @@ export default function AdminCostsPage() {
       setError(err.message || 'Erro ao salvar política de créditos')
     } finally {
       setSavingPolicy(false)
+    }
+  }
+
+  async function saveGuardrails() {
+    setSavingGuardrails(true)
+    try {
+      const payload = {
+        guardrails: {
+          defaultMonthlyBudgetUsd: Number(guardrails.defaultMonthlyBudgetUsd || 0),
+          warnAtPercent: Number(guardrails.warnAtPercent || 80),
+          blockOnBudgetExceeded: Boolean(guardrails.blockOnBudgetExceeded),
+          workspaceMonthlyBudgetUsd: guardrails.workspaceMonthlyBudgetUsd || {},
+        },
+      }
+      const res = await fetch('/api/admin/costs/guardrails', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Falha ao salvar guardrails')
+      await loadGuardrails()
+      await load()
+    } catch (err: any) {
+      setError(err.message || 'Erro ao salvar guardrails')
+    } finally {
+      setSavingGuardrails(false)
     }
   }
 
@@ -400,6 +492,37 @@ export default function AdminCostsPage() {
           </div>
 
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <p className="text-sm font-semibold text-zinc-100 mb-3">Efetividade por modelo (gerado x publicado)</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                    <th className="py-2 pr-3">Provider</th>
+                    <th className="py-2 pr-3">Modelo</th>
+                    <th className="py-2 pr-3">Gerados</th>
+                    <th className="py-2 pr-3">Publicados</th>
+                    <th className="py-2 pr-3">Taxa de publicação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.modelEffectiveness || []).map((item, idx) => (
+                    <tr key={`${item.provider}:${item.model}:${idx}`} className="border-b border-zinc-900">
+                      <td className="py-2 pr-3 text-zinc-300">{item.provider}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.model || '—'}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.generatedCount}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.publishedCount}</td>
+                      <td className="py-2 pr-3 text-zinc-100 font-medium">{item.publishRatePct.toFixed(2)}%</td>
+                    </tr>
+                  ))}
+                  {(data.modelEffectiveness || []).length === 0 && (
+                    <tr><td colSpan={5} className="py-4 text-center text-zinc-500">Sem dados no período.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
             <p className="text-sm font-semibold text-zinc-100 mb-3">Uso por usuário (créditos por ação)</p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -461,6 +584,157 @@ export default function AdminCostsPage() {
                   ))}
                   {data.creditUsage.length === 0 && (
                     <tr><td colSpan={4} className="py-4 text-center text-zinc-500">Sem dados no período.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <p className="text-sm font-semibold text-zinc-100 mb-3">Uso de orçamento mensal por workspace (USD)</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                    <th className="py-2 pr-3">Workspace</th>
+                    <th className="py-2 pr-3">Plano</th>
+                    <th className="py-2 pr-3">Custo mês</th>
+                    <th className="py-2 pr-3">Orçamento</th>
+                    <th className="py-2 pr-3">%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.budgetUsage || []).map((item) => (
+                    <tr key={item.workspaceId} className="border-b border-zinc-900">
+                      <td className="py-2 pr-3 text-zinc-300">{item.workspaceName}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.planId}</td>
+                      <td className="py-2 pr-3 text-zinc-100">{usd(item.monthCostUsd)}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.budgetLimitUsd > 0 ? usd(item.budgetLimitUsd) : '—'}</td>
+                      <td className={`py-2 pr-3 font-medium ${item.exceeded ? 'text-red-400' : item.warning ? 'text-amber-400' : 'text-zinc-100'}`}>
+                        {item.budgetLimitUsd > 0 ? `${item.usagePercent}%` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                  {(data.budgetUsage || []).length === 0 && (
+                    <tr><td colSpan={5} className="py-4 text-center text-zinc-500">Sem dados no período.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-sm font-semibold text-zinc-100">Guardrails de orçamento mensal</p>
+              <Button onClick={saveGuardrails} disabled={savingGuardrails} className="bg-violet-600 hover:bg-violet-500">
+                {savingGuardrails ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar guardrails'}
+              </Button>
+            </div>
+            <p className="text-xs text-zinc-500">
+              Defina orçamento padrão e override por workspace. Com bloqueio ativo, geração/publicação para ao estourar.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={guardrails.defaultMonthlyBudgetUsd}
+                onChange={(e) => setGuardrails((p) => ({ ...p, defaultMonthlyBudgetUsd: Number(e.target.value) || 0 }))}
+                placeholder="Orçamento padrão USD/mês (0 = sem limite)"
+                className="h-9 rounded-md border border-zinc-700 bg-zinc-800 px-3 text-sm text-zinc-100"
+              />
+              <input
+                type="number"
+                step="1"
+                min="1"
+                max="100"
+                value={guardrails.warnAtPercent}
+                onChange={(e) => setGuardrails((p) => ({ ...p, warnAtPercent: Number(e.target.value) || 80 }))}
+                placeholder="Alerta em %"
+                className="h-9 rounded-md border border-zinc-700 bg-zinc-800 px-3 text-sm text-zinc-100"
+              />
+              <label className="h-9 rounded-md border border-zinc-700 bg-zinc-800 px-3 text-sm text-zinc-100 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={guardrails.blockOnBudgetExceeded}
+                  onChange={(e) => setGuardrails((p) => ({ ...p, blockOnBudgetExceeded: e.target.checked }))}
+                />
+                Bloquear ao estourar orçamento
+              </label>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                    <th className="py-2 pr-3">Workspace</th>
+                    <th className="py-2 pr-3">Override USD/mês</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.workspaces || []).map((item) => (
+                    <tr key={item.id} className="border-b border-zinc-900">
+                      <td className="py-2 pr-3 text-zinc-300">{item.name}</td>
+                      <td className="py-2 pr-3">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={guardrails.workspaceMonthlyBudgetUsd[item.id] ?? ''}
+                          onChange={(e) => {
+                            const raw = e.target.value.trim()
+                            setGuardrails((prev) => {
+                              const next = { ...prev.workspaceMonthlyBudgetUsd }
+                              if (!raw) {
+                                delete next[item.id]
+                              } else {
+                                next[item.id] = Math.max(0, Number(raw) || 0)
+                              }
+                              return { ...prev, workspaceMonthlyBudgetUsd: next }
+                            })
+                          }}
+                          placeholder="vazio = usa padrão"
+                          className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-100 w-full md:w-56"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {(data.workspaces || []).length === 0 && (
+                    <tr><td colSpan={2} className="py-4 text-center text-zinc-500">Sem workspaces.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <p className="text-sm font-semibold text-zinc-100 mb-3">Simulação de margem por plano</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                    <th className="py-2 pr-3">Plano</th>
+                    <th className="py-2 pr-3">Workspaces</th>
+                    <th className="py-2 pr-3">Preço USD/mês</th>
+                    <th className="py-2 pr-3">Receita mês</th>
+                    <th className="py-2 pr-3">Custo projetado</th>
+                    <th className="py-2 pr-3">Margem projetada</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.planMarginSimulation || []).map((item) => (
+                    <tr key={item.planId} className="border-b border-zinc-900">
+                      <td className="py-2 pr-3 text-zinc-300">{item.planLabel}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.workspaceCount}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{usd(item.planPriceUsd)}</td>
+                      <td className="py-2 pr-3 text-zinc-100">{usd(item.revenueUsd)}</td>
+                      <td className="py-2 pr-3 text-zinc-100">{usd(item.projectedMonthCostUsd)}</td>
+                      <td className={`py-2 pr-3 font-medium ${item.projectedMarginUsd < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {usd(item.projectedMarginUsd)} {item.projectedMarginPct === null ? '' : `(${item.projectedMarginPct.toFixed(2)}%)`}
+                      </td>
+                    </tr>
+                  ))}
+                  {(data.planMarginSimulation || []).length === 0 && (
+                    <tr><td colSpan={6} className="py-4 text-center text-zinc-500">Sem dados para simulação.</td></tr>
                   )}
                 </tbody>
               </table>

@@ -46,6 +46,7 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] API `GET/POST/DELETE /api/admin/costs/prices` (owner only) para catálogo de preços
 - [x] API `POST /api/admin/costs/prices/seed` para preencher baseline de preços estimados
 - [x] API `GET/PATCH /api/admin/costs/credit-policy` para política de crédito por ação
+- [x] API `GET/PATCH /api/admin/costs/guardrails` para orçamento mensal (padrão + override por workspace)
 - [x] UI `/admin/costs` com custo total, top workspaces, top usuários e modelos mais caros
 - [x] Workspace `/team` exibe limites de membros/créditos e bloqueia convite ao atingir limite
 - [x] Workspace `/dashboard` exibe alerta de risco/esgotamento de créditos para upgrade
@@ -193,6 +194,9 @@ Filtros:
 - Modelos/provedores com maior custo agregado
 - Alertas automáticos (pico de custo e uso alto de créditos)
 - Projeção mensal de custo por workspace
+- Efetividade por modelo (gerado x publicado)
+- Uso de orçamento mensal por workspace (USD)
+- Simulação de margem por plano (receita estimada x custo projetado)
 
 ### Filtros
 
@@ -215,6 +219,16 @@ Filtros:
   - `image.generate/image = 0.25`
   - `publish/publish = 0.00`
 - Persistida em `app_settings.credit_weights_json`.
+
+### Guardrails de Custo (Orçamento Mensal)
+
+- Configurável no próprio `/admin/costs`.
+- Persistido em `app_settings.cost_guardrails_json`.
+- Campos:
+  - `defaultMonthlyBudgetUsd` (orçamento padrão por workspace; `0` desativa)
+  - `workspaceMonthlyBudgetUsd` (override por workspace)
+  - `warnAtPercent` (limiar de alerta)
+  - `blockOnBudgetExceeded` (bloqueia geração/publicação ao estourar)
 
 ---
 
@@ -287,6 +301,7 @@ Cada plano pode configurar:
 - `expertLimit` (quantos experts por workspace)
 - `memberLimit` (quantos usuários por workspace)
 - `monthlyPostCredits` (créditos mensais de geração)
+- `monthlyPriceUsd` (preço mensal para simulação de margem)
 
 Enforcement inicial ativo:
 - convite de membro bloqueia ao atingir `memberLimit`
