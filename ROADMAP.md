@@ -217,3 +217,4 @@ Data de referência: 07/03/2026
 - Régua inicial de créditos por ação entregue (texto/imagem/publicação) via `usage_events`.
 - Política de créditos por ação agora configurável no admin (`/api/admin/costs/credit-policy` + UI em `/admin/costs`).
 - `/admin/costs` ampliado com breakdown de créditos por usuário e por tipo de ação.
+- `/admin/costs` ampliado com comparativo de período (janela atual vs anterior).

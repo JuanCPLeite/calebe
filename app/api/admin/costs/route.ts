@@ -31,6 +31,11 @@ function startDateFromDays(days: number): string {
   return new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString()
 }
 
+function percentDelta(current: number, previous: number): number | null {
+  if (previous === 0) return current === 0 ? 0 : null
+  return Number((((current - previous) / previous) * 100).toFixed(2))
+}
+
 export async function GET(req: NextRequest) {
   const auth = await ensureOwner()
   if ('error' in auth) return auth.error
@@ -41,6 +46,9 @@ export async function GET(req: NextRequest) {
     const days = Number(url.searchParams.get('days') || '30')
     const workspaceId = (url.searchParams.get('workspaceId') || '').trim()
     const from = startDateFromDays(days)
+    const parsedDays = Number.isFinite(days) ? Math.min(365, Math.max(1, Math.floor(days))) : 30
+    const prevTo = from
+    const prevFrom = new Date(new Date(from).getTime() - parsedDays * 24 * 60 * 60 * 1000).toISOString()
 
     let usageQuery = admin
       .from('usage_events')
@@ -52,8 +60,14 @@ export async function GET(req: NextRequest) {
     if (workspaceId) usageQuery = usageQuery.eq('workspace_id', workspaceId)
 
     const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
-    const [usageRes, workspacesRes, profilesRes, settingsRes, monthCarouselsRes, monthUsageRes, monthCostRes] = await Promise.all([
+    const [usageRes, prevUsageRes, workspacesRes, profilesRes, settingsRes, monthCarouselsRes, monthUsageRes, monthCostRes] = await Promise.all([
       usageQuery,
+      admin
+        .from('usage_events')
+        .select('event_type, unit, quantity, total_cost_usd, created_at')
+        .gte('created_at', prevFrom)
+        .lt('created_at', prevTo)
+        .limit(5000),
       admin.from('workspaces').select('id, name, plan').order('name', { ascending: true }),
       admin.from('profiles').select('id, full_name'),
       admin.from('app_settings').select('plan_configs, credit_weights_json').eq('id', '00000000-0000-0000-0000-000000000001').maybeSingle(),
@@ -78,6 +92,9 @@ export async function GET(req: NextRequest) {
 
     if (usageRes.error) {
       throw new Error(usageRes.error.message || 'Falha ao consultar usage_events')
+    }
+    if (prevUsageRes.error) {
+      throw new Error(prevUsageRes.error.message || 'Falha ao consultar usage_events do período anterior')
     }
 
     const usage = usageRes.data || []
@@ -195,6 +212,19 @@ export async function GET(req: NextRequest) {
       .map(([date, cost]) => ({ date, totalCostUsd: cost }))
       .sort((a, b) => a.date.localeCompare(b.date))
 
+    let prevTotalCostUsd = 0
+    let prevTotalCredits = 0
+    const prevRows = prevUsageRes.data || []
+    for (const row of prevRows) {
+      prevTotalCostUsd += Number(row.total_cost_usd || 0)
+      prevTotalCredits += toWeightedCredits([{
+        event_type: row.event_type,
+        unit: row.unit,
+        quantity: Number((row as any).quantity || 0),
+      }], creditWeights)
+    }
+    prevTotalCredits = Number(prevTotalCredits.toFixed(2))
+
     const alerts: Array<{ level: 'info' | 'warn'; message: string }> = []
     const dailyCosts = daily.map((d) => d.totalCostUsd)
     const avgDaily = dailyCosts.length > 0 ? dailyCosts.reduce((a, b) => a + b, 0) / dailyCosts.length : 0
@@ -285,8 +315,40 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      days: Number.isFinite(days) ? Math.min(365, Math.max(1, Math.floor(days))) : 30,
+      days: parsedDays,
       from,
+      compare: {
+        previousFrom: prevFrom,
+        previousTo: prevTo,
+        current: {
+          totalCostUsd: Number(totalCostUsd.toFixed(8)),
+          eventCount: usage.length,
+          totalCredits: Number(
+            usage.reduce((acc, row) => acc + toWeightedCredits([{
+              event_type: row.event_type,
+              unit: row.unit,
+              quantity: Number((row as any).quantity || 0),
+            }], creditWeights), 0).toFixed(2)
+          ),
+        },
+        previous: {
+          totalCostUsd: Number(prevTotalCostUsd.toFixed(8)),
+          eventCount: prevRows.length,
+          totalCredits: prevTotalCredits,
+        },
+        deltaPct: {
+          totalCostUsd: percentDelta(totalCostUsd, prevTotalCostUsd),
+          eventCount: percentDelta(usage.length, prevRows.length),
+          totalCredits: percentDelta(
+            usage.reduce((acc, row) => acc + toWeightedCredits([{
+              event_type: row.event_type,
+              unit: row.unit,
+              quantity: Number((row as any).quantity || 0),
+            }], creditWeights), 0),
+            prevTotalCredits
+          ),
+        },
+      },
       totalCostUsd,
       eventCount: usage.length,
       workspaces,

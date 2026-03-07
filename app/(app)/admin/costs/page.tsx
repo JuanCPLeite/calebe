@@ -12,6 +12,13 @@ interface WorkspaceOption {
 interface CostData {
   days: number
   from: string
+  compare?: {
+    previousFrom: string
+    previousTo: string
+    current: { totalCostUsd: number; eventCount: number; totalCredits: number }
+    previous: { totalCostUsd: number; eventCount: number; totalCredits: number }
+    deltaPct: { totalCostUsd: number | null; eventCount: number | null; totalCredits: number | null }
+  }
   totalCostUsd: number
   eventCount: number
   workspaces: WorkspaceOption[]
@@ -71,6 +78,12 @@ function usd(value: number): string {
 
 function credit(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
+}
+
+function deltaLabel(value: number | null): string {
+  if (value === null) return 'novo período'
+  const sign = value > 0 ? '+' : ''
+  return `${sign}${value.toFixed(2)}%`
 }
 
 export default function AdminCostsPage() {
@@ -280,6 +293,43 @@ export default function AdminCostsPage() {
               <p className="text-lg font-semibold text-zinc-100">{usd(avgPerEvent)}</p>
             </div>
           </div>
+
+          {data.compare && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
+              <p className="text-sm font-semibold text-zinc-100">
+                Comparativo: últimos {data.days} dias vs período anterior
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                  <p className="text-xs text-zinc-500">Custo (delta)</p>
+                  <p className="text-sm text-zinc-100 font-semibold">
+                    {usd(data.compare.current.totalCostUsd)} / {usd(data.compare.previous.totalCostUsd)}
+                  </p>
+                  <p className={`text-xs ${data.compare.deltaPct.totalCostUsd !== null && data.compare.deltaPct.totalCostUsd > 0 ? 'text-amber-400' : 'text-zinc-400'}`}>
+                    {deltaLabel(data.compare.deltaPct.totalCostUsd)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                  <p className="text-xs text-zinc-500">Eventos (delta)</p>
+                  <p className="text-sm text-zinc-100 font-semibold">
+                    {data.compare.current.eventCount} / {data.compare.previous.eventCount}
+                  </p>
+                  <p className={`text-xs ${data.compare.deltaPct.eventCount !== null && data.compare.deltaPct.eventCount > 0 ? 'text-amber-400' : 'text-zinc-400'}`}>
+                    {deltaLabel(data.compare.deltaPct.eventCount)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                  <p className="text-xs text-zinc-500">Créditos (delta)</p>
+                  <p className="text-sm text-zinc-100 font-semibold">
+                    {credit(data.compare.current.totalCredits)} / {credit(data.compare.previous.totalCredits)}
+                  </p>
+                  <p className={`text-xs ${data.compare.deltaPct.totalCredits !== null && data.compare.deltaPct.totalCredits > 0 ? 'text-amber-400' : 'text-zinc-400'}`}>
+                    {deltaLabel(data.compare.deltaPct.totalCredits)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {data.alerts.length > 0 && (
             <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 p-4 space-y-2">
