@@ -77,6 +77,7 @@ Uso típico:
 13. Métricas de geração em `/api/admin/workspaces` e `/api/admin/workspaces/[id]` também priorizam ledger de `usage_events`.
 14. `supabase-schema.sql` inclui backfill idempotente de `carousels.workspace_id` para bases legadas.
 15. Exclusão de carrossel migrou para soft delete, sem perder histórico financeiro/uso.
+16. Consumo de créditos mensal passou a ser ponderado por ação: `content.generate/render=1`, `image.generate/image=0.25`, `publish/publish=0`.
 
 ---
 

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/logger'
 import { DEFAULT_PLAN_CONFIGS, parsePlanConfigs, findPlanById, type PlanConfig } from '@/lib/plan-config'
+import { toWeightedCredits } from '@/lib/credit-limits'
 
 const APP_SETTINGS_ID = '00000000-0000-0000-0000-000000000001'
 type WorkspaceBase = {
@@ -91,10 +92,10 @@ async function enrichWorkspaces(
       .in('workspace_id', workspaceIds),
     admin
       .from('usage_events')
-      .select('workspace_id, created_at, event_type, unit')
+      .select('workspace_id, created_at, event_type, unit, quantity')
       .in('workspace_id', workspaceIds)
-      .in('event_type', ['content.generate', 'publish'])
-      .in('unit', ['render', 'publish']),
+      .in('event_type', ['content.generate', 'image.generate', 'publish'])
+      .in('unit', ['render', 'image', 'publish']),
     admin
       .from('system_logs')
       .select('workspace_id, created_at')
@@ -112,13 +113,14 @@ async function enrichWorkspaces(
     memberCounts.set(row.workspace_id, (memberCounts.get(row.workspace_id) || 0) + 1)
   }
 
-  const usageByWorkspace = new Map<string, { generatedTotal: number; generatedLast30: number; generatedThisMonth: number; publishedTotal: number }>()
+  const usageByWorkspace = new Map<string, { generatedTotal: number; generatedLast30: number; generatedThisMonth: number; publishedTotal: number; creditsThisMonth: number }>()
   for (const workspaceId of workspaceIds) {
     usageByWorkspace.set(workspaceId, {
       generatedTotal: 0,
       generatedLast30: 0,
       generatedThisMonth: 0,
       publishedTotal: 0,
+      creditsThisMonth: 0,
     })
   }
 
@@ -135,6 +137,13 @@ async function enrichWorkspaces(
     }
     if (isPublished) {
       entry.publishedTotal += 1
+    }
+    if (row.created_at && row.created_at >= monthStartDate) {
+      entry.creditsThisMonth = Number((entry.creditsThisMonth + toWeightedCredits([{
+        event_type: row.event_type,
+        unit: row.unit,
+        quantity: Number((row as any).quantity || 0),
+      }])).toFixed(2))
     }
   }
 
@@ -179,7 +188,7 @@ async function enrichWorkspaces(
     const generatedTotal = Math.max(usageEvents?.generatedTotal || 0, workspaceUsage?.total || 0)
     const generatedLast30 = Math.max(usageEvents?.generatedLast30 || 0, workspaceUsage?.last30 || 0)
     const publishedTotal = Math.max(usageEvents?.publishedTotal || 0, workspaceUsage?.published || 0)
-    const monthlyCreditsUsed = Math.max(usageEvents?.generatedThisMonth || 0, monthCarouselFallback.get(workspace.id) || 0)
+    const monthlyCreditsUsed = Math.max(usageEvents?.creditsThisMonth || 0, monthCarouselFallback.get(workspace.id) || 0)
     const monthlyCreditsLimit = plan?.monthlyPostCredits || 1
     const monthlyCreditsPercent = Math.round((monthlyCreditsUsed / Math.max(1, monthlyCreditsLimit)) * 100)
     return {

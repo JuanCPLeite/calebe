@@ -59,6 +59,10 @@ const DEFAULT_EXPERT: ExpertInfo = {
   highlightColor: '#9B59FF',
 }
 
+function formatCreditValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2)
+}
+
 export default function GeneratePage() {
   const supabase = createClient()
   const searchParams = useSearchParams()
@@ -312,7 +316,7 @@ export default function GeneratePage() {
     const limits = await loadWorkspaceLimits()
     if (limits && !limits.canGenerate) {
       setGenerateError(
-        `Limite de créditos atingido no plano ${limits.planLabel} (${limits.usedCredits}/${limits.monthlyPostCredits}).`
+        `Limite de créditos atingido no plano ${limits.planLabel} (${formatCreditValue(limits.usedCredits)}/${formatCreditValue(limits.monthlyPostCredits)}).`
       )
       return
     }
@@ -870,7 +874,7 @@ export default function GeneratePage() {
               ? workspaceLimits.usagePercent >= 80 ? 'text-amber-300' : 'text-zinc-300'
               : 'text-red-300'
           }`}>
-            Créditos do mês: {workspaceLimits.usedCredits}/{workspaceLimits.monthlyPostCredits} ({workspaceLimits.usagePercent}%)
+            Créditos do mês: {formatCreditValue(workspaceLimits.usedCredits)}/{formatCreditValue(workspaceLimits.monthlyPostCredits)} ({workspaceLimits.usagePercent}%)
           </p>
           <p className="text-xs text-zinc-500 mt-0.5">
             Plano {workspaceLimits.planLabel}. Restantes: {workspaceLimits.remainingCredits}.

@@ -9,21 +9,55 @@ export interface WorkspaceCreditUsage {
   remainingCredits: number
 }
 
+type UsageRow = {
+  event_type: string
+  unit: string
+  quantity: number | null
+}
+
+// Regua inicial de credito por acao (pode evoluir para configuracao em app_settings).
+export const CREDIT_WEIGHTS = {
+  contentRender: 1,
+  imageGenerate: 0.25,
+  publish: 0,
+} as const
+
 function monthStartIso(): string {
   const now = new Date()
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)).toISOString()
 }
 
+export function toWeightedCredits(rows: UsageRow[]): number {
+  let credits = 0
+  for (const row of rows || []) {
+    const qty = Number(row.quantity || 0)
+    if (qty <= 0) continue
+    if (row.event_type === 'content.generate' && row.unit === 'render') {
+      credits += qty * CREDIT_WEIGHTS.contentRender
+      continue
+    }
+    if (row.event_type === 'image.generate' && row.unit === 'image') {
+      credits += qty * CREDIT_WEIGHTS.imageGenerate
+      continue
+    }
+    if (row.event_type === 'publish' && row.unit === 'publish') {
+      credits += qty * CREDIT_WEIGHTS.publish
+      continue
+    }
+  }
+  return Number(credits.toFixed(2))
+}
+
 export async function getWorkspaceCreditUsage(workspaceId: string): Promise<WorkspaceCreditUsage> {
   const admin = createAdminClient()
-  const [limits, usageCountRes, legacyCarouselCountRes] = await Promise.all([
+  const [limits, usageRes, legacyCarouselCountRes] = await Promise.all([
     getWorkspacePlanLimits(workspaceId),
     admin
       .from('usage_events')
-      .select('id', { count: 'exact', head: true })
+      .select('event_type, unit, quantity')
       .eq('workspace_id', workspaceId)
-      .eq('event_type', 'content.generate')
-      .eq('unit', 'render')
+      .in('event_type', ['content.generate', 'image.generate', 'publish'])
+      .in('unit', ['render', 'image', 'publish'])
       .gte('created_at', monthStartIso()),
     admin
       .from('carousels')
@@ -33,9 +67,10 @@ export async function getWorkspaceCreditUsage(workspaceId: string): Promise<Work
   ])
 
   // usage_events e o ledger oficial. Fallback legado: carousels antigos sem evento.
-  const usedCredits = Math.max(usageCountRes.count || 0, legacyCarouselCountRes.count || 0)
+  const weightedUsage = toWeightedCredits((usageRes.data || []) as UsageRow[])
+  const usedCredits = Math.max(weightedUsage, legacyCarouselCountRes.count || 0)
   const creditLimit = limits.monthlyPostCredits
-  const remainingCredits = Math.max(0, creditLimit - usedCredits)
+  const remainingCredits = Number(Math.max(0, creditLimit - usedCredits).toFixed(2))
 
   return {
     planId: limits.planId,

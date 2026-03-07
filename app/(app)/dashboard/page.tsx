@@ -73,6 +73,10 @@ function formatScheduled(iso: string) {
   return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+function formatCreditValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2)
+}
+
 // ─── Sub-componentes ────────────────────────────────────────────────────────
 
 function StatusBadge({ c }: { c: Carousel }) {
@@ -365,7 +369,7 @@ export default function DashboardPage() {
             {workspaceLimits.usagePercent >= 100 ? 'Créditos do mês esgotados.' : 'Uso de créditos alto.'}
           </p>
           <p className="text-xs text-zinc-400 mt-0.5">
-            {workspaceLimits.usedCredits}/{workspaceLimits.monthlyPostCredits} usados no plano {workspaceLimits.planLabel}.
+            {formatCreditValue(workspaceLimits.usedCredits)}/{formatCreditValue(workspaceLimits.monthlyPostCredits)} usados no plano {workspaceLimits.planLabel}.
             {workspaceLimits.usagePercent >= 80 ? ' Upgrade recomendado.' : ''}
           </p>
         </div>

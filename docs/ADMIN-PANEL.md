@@ -279,6 +279,7 @@ Cada plano pode configurar:
 Enforcement inicial ativo:
 - convite de membro bloqueia ao atingir `memberLimit`
 - geração de conteúdo/imagens/publicação bloqueia ao atingir `monthlyPostCredits`
+- consumo de créditos ponderado por ação (texto/imagem/publicação)
 
 ### Seção: Configurações do Sistema
 

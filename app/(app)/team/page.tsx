@@ -35,6 +35,10 @@ interface MemberRow {
   isCurrentUser: boolean
 }
 
+function formatCreditValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2)
+}
+
 export default function TeamPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -157,7 +161,7 @@ export default function TeamPage() {
               <>
                 <Badge className="bg-zinc-800 text-zinc-200">Membros: {members.length}/{limits.memberLimit}</Badge>
                 <Badge className={limits.usagePercent >= 100 ? 'bg-red-700/30 text-red-300' : limits.usagePercent >= 80 ? 'bg-amber-700/30 text-amber-300' : 'bg-zinc-800 text-zinc-200'}>
-                  Créditos: {limits.usedCredits}/{limits.monthlyPostCredits} ({limits.usagePercent}%)
+                  Créditos: {formatCreditValue(limits.usedCredits)}/{formatCreditValue(limits.monthlyPostCredits)} ({limits.usagePercent}%)
                 </Badge>
               </>
             )}
@@ -171,7 +175,7 @@ export default function TeamPage() {
             {limits.usagePercent >= 100 ? 'Créditos do mês esgotados.' : 'Uso de créditos alto para este mês.'}
           </p>
           <p className="text-xs text-zinc-400 mt-0.5">
-            {limits.usedCredits}/{limits.monthlyPostCredits} usados. Considere upgrade de plano para evitar bloqueio.
+            {formatCreditValue(limits.usedCredits)}/{formatCreditValue(limits.monthlyPostCredits)} usados. Considere upgrade de plano para evitar bloqueio.
           </p>
         </div>
       )}
