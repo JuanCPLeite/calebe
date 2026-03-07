@@ -313,12 +313,12 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
           <div className="flex-1">
             <p className="text-xs text-amber-200 font-medium mb-1">Configure uma chave para buscar tendências reais</p>
             <p className="text-xs text-amber-400/80">
-              Adicione sua{' '}
-              <Link href="/tokens" className="underline underline-offset-2 font-medium hover:text-amber-200">
-                chave Anthropic (Claude) em Tokens & APIs
-              </Link>{' '}
-              para busca via IA — ou EXA Search para busca neural avançada.
-                      Enquanto isso, nenhum tema será exibido.
+              As chaves da plataforma são gerenciadas no painel admin em{' '}
+              <Link href="/admin/settings" className="underline underline-offset-2 font-medium hover:text-amber-200">
+                Admin Settings
+              </Link>
+              . Se você nao for owner/admin, solicite a configuracao para o responsavel do workspace.
+              Enquanto isso, nenhum tema sera exibido.
             </p>
           </div>
         </div>

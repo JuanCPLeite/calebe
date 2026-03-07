@@ -78,7 +78,7 @@ Data de referência: 06/03/2026
   - [x] `app/api/meta/*`
   - [x] `app/api/cron/publish-scheduled`
   - [x] `app/api/debug`
-  - [ ] `app/(app)/tokens` (tela legada: remover após UI admin/workspace ficar pronta)
+  - [x] `app/(app)/tokens` removida (fluxo legado encerrado)
 
 **Frontend — Painel Admin (`/admin`):**
 - [x] `/admin` — dashboard: métricas globais + atividade recente
@@ -91,7 +91,7 @@ Data de referência: 06/03/2026
 **Frontend — Workspace:**
 - [x] Selector de workspace no header (para quem é membro de múltiplos)
 - [x] `/team` — gerenciar membros (admin only): convidar, alterar role, remover
-- [ ] Remover `/tokens` (tokens são da plataforma agora)
+- [x] Remover `/tokens` (tokens são da plataforma agora)
 
 ### Fase 4 — Multi-Provider UI
 > Objetivo: usuário escolhe qual modelo de IA usar para gerar.
@@ -131,7 +131,7 @@ Data de referência: 06/03/2026
 ## Backlog técnico (qualquer fase)
 - [ ] Hardening do cron para execução 100% confiável sem sessão de usuário
 - [ ] Idempotência forte em publicação (evitar duplicidade)
-- [ ] Migrar `middleware.ts` para `proxy.ts` (Next 16)
+- [x] Migrar `middleware.ts` para `proxy.ts` (Next 16)
 - [ ] Fontes locais para build offline
 - [ ] Retenção automática de logs (pg_cron deletar logs info > 90 dias)
 
@@ -156,3 +156,12 @@ Data de referência: 06/03/2026
 - `/team` implementado com API `/api/team/members` (listar, convidar, alterar role e remover).
 - Hardening de onboarding no schema: `profiles.role` não nulo + primeiro usuário vira `owner` automaticamente.
 - Próximo passo direto: remover `/tokens` (fluxo legado de chaves por usuário).
+
+### 2026-03-07 — revisão técnica do projeto
+- Build de produção executado com sucesso (`npm run build`) sem erros de compilação.
+- Rotas admin e team confirmadas no build: `/admin/*`, `/team`, `/api/team/members`, `/api/workspace/context`.
+- Repositório local com branch `master` 9 commits à frente de `calebe/master`.
+- Script `lint` adicionado no `package.json` (`tsc --noEmit`) e validado com sucesso.
+- Migração Next.js 16 concluída: `middleware.ts` substituído por `proxy.ts`.
+- `turbopack.root` configurado no `next.config.ts` para fixar a raiz correta do workspace.
+- Fluxo legado `/tokens` removido (rota, pagina e links da UI).

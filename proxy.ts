@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -27,25 +27,39 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   const isPublicPath = pathname.startsWith('/login') || pathname.startsWith('/auth/callback')
-  const isApiRoute   = pathname.startsWith('/api/')
+  const isApiRoute = pathname.startsWith('/api/')
   const isAdminRoute = pathname.startsWith('/admin')
-  const isTeamRoute  = pathname.startsWith('/team')
+  const isTeamRoute = pathname.startsWith('/team')
+  const isLegacyTokensRoute = pathname === '/tokens'
 
-  // Não autenticado → login (exceto rotas públicas e API)
+  // Nao autenticado -> login (exceto rotas publicas e API)
   if (!user && !isPublicPath && !isApiRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // Já logado tentando acessar /login → redireciona para /generate
+  // Ja logado tentando acessar /login -> redireciona para /generate
   if (user && pathname === '/login') {
     const url = request.nextUrl.clone()
     url.pathname = '/generate'
     return NextResponse.redirect(url)
   }
 
-  // Rotas /admin/* e /team/* → autorização por role
+  // /tokens foi removido: owner vai para admin settings, demais para generate
+  if (user && isLegacyTokensRoute) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const url = request.nextUrl.clone()
+    url.pathname = profile?.role === 'owner' ? '/admin/settings' : '/generate'
+    return NextResponse.redirect(url)
+  }
+
+  // Rotas /admin/* e /team/* -> autorizacao por role
   if (user && (isAdminRoute || isTeamRoute) && !isApiRoute) {
     const { data: profile } = await supabase
       .from('profiles')

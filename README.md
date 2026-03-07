@@ -40,7 +40,7 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 
 ---
 
-## Estado atual (06/03/2026)
+## Estado atual (07/03/2026)
 
 ### Implementado
 - Auth Supabase (rotas privadas + callback)
@@ -54,8 +54,8 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Content Hub DB: platforms, content_formats, templates, template_prompts
 
 ### Em andamento
-- Multi-tenant: workspaces, roles, app_settings (chaves da plataforma)
-- Painel admin: métricas, logs, gestão de workspaces e clientes
+- Fase 3 concluída no escopo admin/workspace (tokens centralizados na plataforma)
+- Fase 4 em aberto: selector de modelo + suporte multi-provider na UI de geração
 
 ### Roadmap
 Ver `ROADMAP.md` para o plano completo.

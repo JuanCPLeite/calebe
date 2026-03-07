@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   Sparkles, LayoutDashboard, Dna, ImageIcon, Users,
-  Key, LayoutTemplate, ChevronRight, Zap, LogOut, Shield, Settings, FileText, UserCog,
+  LayoutTemplate, ChevronRight, Zap, LogOut, Shield, Settings, FileText, UserCog,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -17,7 +17,6 @@ const nav = [
   { label: 'Fotos Referência', href: '/expert/photos',   icon: ImageIcon },
   { label: 'Perfil & Público', href: '/expert/audience', icon: Users },
   { label: 'Equipe',          href: '/team',            icon: Users },
-  { label: 'Tokens & APIs',    href: '/tokens',          icon: Key },
   { label: 'Templates',        href: '/templates',       icon: LayoutTemplate },
 ]
 
