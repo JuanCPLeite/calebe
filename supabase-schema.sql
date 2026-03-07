@@ -184,6 +184,228 @@ create policy "delete own carousel images"
   );
 
 -- ============================================================
+-- MULTI-TENANT — WORKSPACES, ROLES, SETTINGS E LOGS
+-- Fase 3: arquitetura SaaS com owner, clientes e membros de equipe.
+-- Tokens de IA ficam em app_settings (owner gerencia).
+-- Usuários apenas escolhem o modelo.
+-- ============================================================
+
+-- Workspaces (um por cliente/time)
+create table if not exists workspaces (
+  id         uuid        primary key default gen_random_uuid(),
+  name       text        not null,
+  slug       text        not null unique,
+  plan       text        not null default 'starter', -- 'starter' | 'pro' | 'agency'
+  owner_id   uuid        references auth.users(id) on delete set null,
+  active     boolean     not null default true,
+  created_at timestamptz not null default now()
+);
+
+-- Membros por workspace
+create table if not exists workspace_members (
+  id           uuid        primary key default gen_random_uuid(),
+  workspace_id uuid        not null references workspaces(id) on delete cascade,
+  user_id      uuid        not null references auth.users(id) on delete cascade,
+  role         text        not null default 'member', -- 'admin' | 'member'
+  invited_by   uuid        references auth.users(id) on delete set null,
+  created_at   timestamptz not null default now(),
+  unique(workspace_id, user_id)
+);
+
+-- Perfil público de cada usuário autenticado (1:1 com auth.users)
+create table if not exists profiles (
+  id           uuid        primary key references auth.users(id) on delete cascade,
+  role         text        not null default 'member', -- 'owner' | 'admin' | 'member'
+  workspace_id uuid        references workspaces(id) on delete set null,
+  created_at   timestamptz not null default now()
+);
+
+-- Trigger: criar profile automaticamente ao cadastrar usuário
+create or replace function handle_new_user()
+returns trigger language plpgsql security definer as $$
+begin
+  insert into profiles (id, role)
+  values (new.id, 'member')
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();
+
+-- Configurações globais da plataforma (somente owner acessa)
+create table if not exists app_settings (
+  id            uuid        primary key default gen_random_uuid(),
+  anthropic_key text        default '',
+  google_key    text        default '',
+  openai_key    text        default '',
+  exa_key       text        default '',
+  updated_at    timestamptz not null default now(),
+  updated_by    uuid        references auth.users(id) on delete set null
+);
+
+-- Garante que só existe 1 linha de settings
+insert into app_settings (id) values ('00000000-0000-0000-0000-000000000001')
+on conflict (id) do nothing;
+
+-- Logs de sistema (append-only — somente owner lê, service_role insere)
+create table if not exists system_logs (
+  id           uuid        primary key default gen_random_uuid(),
+  workspace_id uuid        references workspaces(id) on delete set null,
+  user_id      uuid        references auth.users(id) on delete set null,
+  event        text        not null,
+  level        text        not null default 'info', -- 'info' | 'warn' | 'error'
+  payload      jsonb       not null default '{}',
+  created_at   timestamptz not null default now()
+);
+
+-- Índices para performance do log viewer
+create index if not exists system_logs_created_at_idx    on system_logs (created_at desc);
+create index if not exists system_logs_workspace_idx     on system_logs (workspace_id, created_at desc);
+create index if not exists system_logs_level_idx         on system_logs (level, created_at desc);
+create index if not exists system_logs_event_idx         on system_logs (event, created_at desc);
+
+-- ─── Colunas novas em tabelas existentes (idempotente) ────────────────────────
+
+-- experts: adiciona workspace_id (mantém user_id para compatibilidade)
+alter table experts add column if not exists workspace_id uuid references workspaces(id) on delete cascade;
+
+-- carousels: adiciona workspace_id e created_by (mantém user_id para compatibilidade)
+alter table carousels add column if not exists workspace_id uuid references workspaces(id) on delete cascade;
+alter table carousels add column if not exists created_by   uuid references auth.users(id) on delete set null;
+
+-- ─── Funções auxiliares de RLS ────────────────────────────────────────────────
+
+create or replace function is_owner()
+returns boolean language sql stable security definer as $$
+  select coalesce(
+    (select role = 'owner' from profiles where id = auth.uid()),
+    false
+  )
+$$;
+
+create or replace function current_workspace_id()
+returns uuid language sql stable security definer as $$
+  select workspace_id from profiles where id = auth.uid()
+$$;
+
+create or replace function user_workspace_role(wid uuid)
+returns text language sql stable security definer as $$
+  select role from workspace_members
+  where workspace_id = wid and user_id = auth.uid()
+$$;
+
+-- ─── RLS — novas tabelas ──────────────────────────────────────────────────────
+
+alter table workspaces        enable row level security;
+alter table workspace_members enable row level security;
+alter table profiles          enable row level security;
+alter table app_settings      enable row level security;
+alter table system_logs       enable row level security;
+
+-- workspaces: owner vê tudo; membros veem o seu
+drop policy if exists "select workspaces" on workspaces;
+create policy "select workspaces" on workspaces for select
+  using (
+    is_owner()
+    or owner_id = auth.uid()
+    or exists (
+      select 1 from workspace_members
+      where workspace_id = workspaces.id and user_id = auth.uid()
+    )
+  );
+
+drop policy if exists "owner manages workspaces" on workspaces;
+create policy "owner manages workspaces" on workspaces for all
+  using (is_owner())
+  with check (is_owner());
+
+-- workspace_members: owner vê tudo; admin do workspace gerencia; member lê
+drop policy if exists "select workspace members" on workspace_members;
+create policy "select workspace members" on workspace_members for select
+  using (
+    is_owner()
+    or workspace_id = current_workspace_id()
+  );
+
+drop policy if exists "admin manages members" on workspace_members;
+create policy "admin manages members" on workspace_members for all
+  using (
+    is_owner()
+    or user_workspace_role(workspace_id) = 'admin'
+  )
+  with check (
+    is_owner()
+    or user_workspace_role(workspace_id) = 'admin'
+  );
+
+-- profiles: cada usuário vê e edita o próprio; owner vê todos
+drop policy if exists "select profiles" on profiles;
+create policy "select profiles" on profiles for select
+  using (is_owner() or id = auth.uid());
+
+drop policy if exists "update own profile" on profiles;
+create policy "update own profile" on profiles for update
+  using (id = auth.uid())
+  with check (id = auth.uid());
+
+-- app_settings: somente owner lê e escreve
+drop policy if exists "owner manages app_settings" on app_settings;
+create policy "owner manages app_settings" on app_settings for all
+  using (is_owner())
+  with check (is_owner());
+
+-- system_logs: somente owner lê; inserts via service_role no servidor
+drop policy if exists "owner reads logs" on system_logs;
+create policy "owner reads logs" on system_logs for select
+  using (is_owner());
+
+-- ─── RLS — tabelas existentes atualizadas para workspace ─────────────────────
+
+-- experts: owner vê tudo; workspace members veem o seu
+drop policy if exists "own experts" on experts;
+create policy "workspace experts" on experts for all
+  using (
+    is_owner()
+    or user_id = auth.uid()
+    or workspace_id = current_workspace_id()
+  )
+  with check (
+    is_owner()
+    or user_id = auth.uid()
+    or workspace_id = current_workspace_id()
+  );
+
+-- expert_photos: owner vê tudo; acesso via expert do workspace
+drop policy if exists "own expert photos" on expert_photos;
+create policy "workspace expert photos" on expert_photos for all
+  using (
+    is_owner()
+    or exists (
+      select 1 from experts e
+      where e.id = expert_photos.expert_id
+        and (e.user_id = auth.uid() or e.workspace_id = current_workspace_id())
+    )
+  );
+
+-- carousels: owner vê tudo; workspace members veem os seus
+drop policy if exists "own carousels" on carousels;
+create policy "workspace carousels" on carousels for all
+  using (
+    is_owner()
+    or user_id = auth.uid()
+    or workspace_id = current_workspace_id()
+  )
+  with check (
+    is_owner()
+    or user_id = auth.uid()
+    or workspace_id = current_workspace_id()
+  );
+
+-- ============================================================
 -- CONTENT HUB — PLATAFORMAS, FORMATOS, TEMPLATES E PROMPTS
 -- Fase 1: estrutura de dados para escalar para N templates, N IAs, N plataformas.
 -- O frontend continua usando fallback hardcoded ate a Fase 2 (Template Engine).
