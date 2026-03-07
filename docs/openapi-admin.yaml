@@ -182,6 +182,17 @@ paths:
           description: Não autenticado
         '403':
           description: Acesso negado
+  /api/admin/metrics:
+    get:
+      summary: Métricas e atividade recente do dashboard admin
+      tags: [Admin Dashboard]
+      responses:
+        '200':
+          description: Cards de métricas + erros 24h + atividade recente
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
   /api/admin/users:
     get:
       summary: Lista usuários da plataforma

@@ -81,7 +81,7 @@ Data de referência: 06/03/2026
   - [ ] `app/(app)/tokens` (tela legada: remover após UI admin/workspace ficar pronta)
 
 **Frontend — Painel Admin (`/admin`):**
-- [ ] `/admin` — dashboard: métricas globais + atividade recente
+- [x] `/admin` — dashboard: métricas globais + atividade recente
 - [ ] `/admin/settings` — chaves de IA com mascaramento + teste de conexão
 - [ ] `/admin/workspaces` — lista de clientes com plano, uso e ações
 - [x] `/admin/workspaces/[id]` — detalhe: membros, uso, logs do workspace
@@ -149,5 +149,6 @@ Data de referência: 06/03/2026
 - `/admin/logs` refinado com modal de detalhe por linha e copy JSON.
 - `/admin/users` implementado (API + UI para listar/filtrar/editar role/workspace).
 - `/admin/workspaces/[id]` implementado (API + UI de detalhe com membros, uso e logs).
+- `/admin` agora consome métricas reais via `/api/admin/metrics`.
 - Hardening de onboarding no schema: `profiles.role` não nulo + primeiro usuário vira `owner` automaticamente.
-- Próximo passo direto: completar dashboard `/admin` com métricas reais e elevar `/admin/settings`/`/admin/workspaces` de MVP para versão final.
+- Próximo passo direto: elevar `/admin/settings` e `/admin/workspaces` de MVP para versão final.
