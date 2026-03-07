@@ -56,7 +56,8 @@ async function graphPost(path: string, body: Json, token: string): Promise<Json>
 }
 
 async function graphGet(path: string, token: string): Promise<Json> {
-  const res = await fetch(`${GRAPH_BASE}/${path}?access_token=${encodeURIComponent(token)}`)
+  const joiner = path.includes("?") ? "&" : "?"
+  const res = await fetch(`${GRAPH_BASE}/${path}${joiner}access_token=${encodeURIComponent(token)}`)
   const data = await res.json()
   if (!res.ok || data?.error) {
     throw new Error(`Graph API: ${data?.error?.message || res.statusText}`)
