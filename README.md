@@ -51,6 +51,7 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Publicação no Instagram via Meta Graph API
 - Agendamento com cron nativo Supabase
 - Dashboard: lista/grid, filtros, métricas, thumbnails ao vivo, duplicar, excluir
+- Admin owner: visão global de postagens em `/admin/carousels` com ações operacionais
 - Content Hub DB: platforms, content_formats, templates, template_prompts
 
 ### Em andamento

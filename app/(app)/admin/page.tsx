@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Building2, Settings, FileText, UserCog, Loader2, AlertTriangle } from 'lucide-react'
+import { Building2, Settings, FileText, UserCog, Loader2, AlertTriangle, Images } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 
 interface MetricPayload {
@@ -146,6 +146,17 @@ export default function AdminHomePage() {
             <h2 className="text-sm font-semibold text-zinc-100">Workspaces</h2>
           </div>
           <p className="text-xs text-zinc-500">Listar, criar e suspender clientes.</p>
+        </Link>
+
+        <Link
+          href="/admin/carousels"
+          className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 hover:border-zinc-700 transition-colors"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <Images className="w-5 h-5 text-violet-400" />
+            <h2 className="text-sm font-semibold text-zinc-100">Postagens</h2>
+          </div>
+          <p className="text-xs text-zinc-500">Visão global de drafts, agendados e publicados.</p>
         </Link>
 
         <Link

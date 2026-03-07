@@ -274,6 +274,7 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 - [ ] Login funcionando
 - [ ] Owner definido via SQL (`UPDATE profiles SET role = 'owner'`)
 - [ ] Chaves de IA configuradas em `/admin/settings`
+- [ ] Validar visão owner em `/admin` e `/admin/carousels`
 
 ### Para geração de conteúdo
 

@@ -14,6 +14,7 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 /admin                  ← Dashboard geral
 /admin/workspaces       ← Lista de clientes/workspaces
 /admin/workspaces/[id]  ← Detalhe de um workspace
+/admin/carousels        ← Postagens globais (draft/scheduled/published)
 /admin/users            ← Todos os usuários
 /admin/logs             ← System logs viewer
 /admin/settings         ← Chaves de IA, configurações globais
@@ -27,6 +28,7 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] API `GET /api/admin/logs` (owner only) com filtros por nível/evento/workspace/período
 - [x] API `GET/PATCH /api/admin/users` (owner only) para role/workspace do usuário
 - [x] API `GET /api/admin/metrics` (owner only) para cards e atividade recente
+- [x] API `GET/PATCH /api/admin/carousels` (owner only) para visão e ações de postagens
 - [x] OpenAPI inicial das rotas admin em `docs/openapi-admin.yaml`
 - [x] UI MVP de `/admin/settings` (carrega/salva chaves)
 - [x] `/admin/settings` com reveal seguro de chave e teste de conexão por provider
@@ -35,6 +37,7 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] UI de `/admin` com métricas reais + atividade recente
 - [x] UI MVP de `/admin/logs` (tabela + filtros + payload + modal de detalhe)
 - [x] UI MVP de `/admin/users` (listar/filtrar/editar role/workspace)
+- [x] UI de `/admin/carousels` com filtros globais + ações operacionais
 - [ ] Refinos finais de UX nas telas admin (próximo foco: selector de workspace no header)
 
 ---
@@ -127,6 +130,35 @@ Ações:
 - Ver perfil
 - Alterar role
 - Desativar conta
+
+---
+
+## /admin/carousels — Postagens Globais
+
+### Tabela de Postagens
+
+Colunas:
+- Tópico + preview de legenda
+- Status (rascunho / agendado / publicado)
+- Workspace
+- Expert usado
+- Usuário (email)
+- Modelo/provedor usado
+- Criado em
+
+Filtros:
+- Status
+- Workspace
+- Período (7d / 30d / 90d)
+- Busca (tópico, legenda, email)
+
+### Ações do Owner
+
+- Detalhe rápido (modal)
+- Duplicar carrossel
+- Cancelar agendamento
+- Reenfileirar publicação (limpa `ig_post_id/published_at` e agenda para agora)
+- Excluir carrossel
 
 ---
 

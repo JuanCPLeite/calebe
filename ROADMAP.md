@@ -168,3 +168,5 @@ Data de referência: 06/03/2026
 - Multi-expert iniciado: selector de expert no header + API `/api/experts` (listar/criar/trocar ativo).
 - Schema atualizado para `profiles.active_expert_id` e `carousels.expert_id`.
 - Onboarding automático reforçado no schema: novo usuário já recebe workspace padrão + membership admin.
+- Painel owner ampliado com módulo global de postagens `/admin/carousels` (filtros por status/workspace/período).
+- `/admin/carousels` recebeu ações operacionais: detalhe, duplicar, cancelar agendamento, reenfileirar, excluir.
