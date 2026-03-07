@@ -323,9 +323,13 @@ create table if not exists app_settings (
   google_key    text        default '',
   openai_key    text        default '',
   exa_key       text        default '',
+  plan_configs  jsonb       not null default '[]'::jsonb,
   updated_at    timestamptz not null default now(),
   updated_by    uuid        references auth.users(id) on delete set null
 );
+
+-- Compatibilidade para bases antigas
+alter table app_settings add column if not exists plan_configs jsonb not null default '[]'::jsonb;
 
 -- Garante que só existe 1 linha de settings
 insert into app_settings (id) values ('00000000-0000-0000-0000-000000000001')
@@ -347,6 +351,51 @@ create index if not exists system_logs_created_at_idx    on system_logs (created
 create index if not exists system_logs_workspace_idx     on system_logs (workspace_id, created_at desc);
 create index if not exists system_logs_level_idx         on system_logs (level, created_at desc);
 create index if not exists system_logs_event_idx         on system_logs (event, created_at desc);
+
+-- Cost intelligence: catalogo de preco por provider/modelo/unidade
+create table if not exists provider_price_catalog (
+  id              uuid        primary key default gen_random_uuid(),
+  provider        text        not null, -- anthropic | openai | google | meta | internal
+  model           text        not null default '', -- ex: claude-sonnet-4-5
+  unit            text        not null, -- token_in | token_out | image | publish | render
+  price_per_unit  numeric(18,8) not null default 0,
+  currency        text        not null default 'USD',
+  effective_from  timestamptz not null default now(),
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  updated_by      uuid        references auth.users(id) on delete set null
+);
+
+create unique index if not exists provider_price_catalog_unique_idx
+  on provider_price_catalog (provider, model, unit, effective_from);
+create index if not exists provider_price_catalog_provider_idx
+  on provider_price_catalog (provider, model);
+
+-- Cost intelligence: evento granular de consumo/custo
+create table if not exists usage_events (
+  id               uuid        primary key default gen_random_uuid(),
+  workspace_id     uuid        references workspaces(id) on delete set null,
+  user_id          uuid        references auth.users(id) on delete set null,
+  carousel_id      uuid        references carousels(id) on delete set null,
+  provider         text        not null, -- anthropic | openai | google | meta | internal
+  model            text        not null default '',
+  event_type       text        not null, -- content.generate | image.generate | publish | render
+  unit             text        not null, -- token_in | token_out | image | publish | render
+  quantity         numeric(18,6) not null default 0,
+  unit_cost_usd    numeric(18,8) not null default 0,
+  total_cost_usd   numeric(18,8) not null default 0,
+  metadata         jsonb       not null default '{}'::jsonb,
+  created_at       timestamptz not null default now()
+);
+
+create index if not exists usage_events_created_at_idx
+  on usage_events (created_at desc);
+create index if not exists usage_events_workspace_idx
+  on usage_events (workspace_id, created_at desc);
+create index if not exists usage_events_user_idx
+  on usage_events (user_id, created_at desc);
+create index if not exists usage_events_provider_model_idx
+  on usage_events (provider, model, created_at desc);
 
 -- ─── Colunas novas em tabelas existentes (idempotente) ────────────────────────
 
@@ -382,15 +431,19 @@ on conflict (slug) do nothing;
 
 -- Liga profile ao workspace padrão
 update profiles p
-set workspace_id = w.id
-from lateral (
+set workspace_id = (
   select w.id
   from workspaces w
   where w.owner_id = p.id
   order by w.created_at asc
   limit 1
-) w
-where p.workspace_id is null;
+)
+where p.workspace_id is null
+  and exists (
+    select 1
+    from workspaces w
+    where w.owner_id = p.id
+  );
 
 -- Garante membership admin do próprio usuário no próprio workspace
 insert into workspace_members (workspace_id, user_id, role, invited_by)
@@ -414,16 +467,20 @@ where e.user_id = p.id
 
 -- Define expert ativo padrão para usuários sem active_expert_id
 update profiles p
-set active_expert_id = e.id
-from lateral (
+set active_expert_id = (
   select e.id
   from experts e
   where e.workspace_id = p.workspace_id
   order by e.updated_at desc nulls last, e.created_at desc nulls last
   limit 1
-) e
+)
 where p.workspace_id is not null
-  and p.active_expert_id is null;
+  and p.active_expert_id is null
+  and exists (
+    select 1
+    from experts e
+    where e.workspace_id = p.workspace_id
+  );
 
 -- ─── Funções auxiliares de RLS ────────────────────────────────────────────────
 
@@ -453,6 +510,8 @@ alter table workspace_members enable row level security;
 alter table profiles          enable row level security;
 alter table app_settings      enable row level security;
 alter table system_logs       enable row level security;
+alter table provider_price_catalog enable row level security;
+alter table usage_events      enable row level security;
 
 -- workspaces: owner vê tudo; membros veem o seu
 drop policy if exists "select workspaces" on workspaces;
@@ -510,6 +569,20 @@ create policy "owner manages app_settings" on app_settings for all
 drop policy if exists "owner reads logs" on system_logs;
 create policy "owner reads logs" on system_logs for select
   using (is_owner());
+
+-- provider_price_catalog: owner gerencia e consulta
+drop policy if exists "owner manages provider price catalog" on provider_price_catalog;
+create policy "owner manages provider price catalog" on provider_price_catalog for all
+  using (is_owner())
+  with check (is_owner());
+
+-- usage_events: owner ve tudo; admin/member ve o proprio workspace (somente leitura)
+drop policy if exists "read usage events" on usage_events;
+create policy "read usage events" on usage_events for select
+  using (
+    is_owner()
+    or workspace_id = current_workspace_id()
+  );
 
 -- ─── RLS — tabelas existentes atualizadas para workspace ─────────────────────
 

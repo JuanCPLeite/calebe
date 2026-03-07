@@ -1,6 +1,6 @@
 # Roadmap — Carousel Studio SaaS
 
-Data de referência: 06/03/2026
+Data de referência: 07/03/2026
 
 ---
 
@@ -126,6 +126,31 @@ Data de referência: 06/03/2026
 - [ ] Onboarding guiado para novos clientes
 - [ ] Emails transacionais (convite de membro, confirmação de plano)
 
+### Fase 8 — Cost Intelligence e Créditos
+> Objetivo: medir custo real por geração e controlar consumo por plano/workspace.
+
+- [ ] Expandir `Admin Plans` com limites adicionais por plano:
+- [ ] limite de usuários/membros
+- [ ] limite de créditos de postagem (mensal)
+- [ ] políticas de excedente (bloquear, alertar, cobrar extra)
+- [ ] Medição de custo por geração/publicação:
+- [ ] custo por provider/modelo (input/output tokens, imagens, publicação)
+- [ ] custo por carrossel salvo/publicado
+- [ ] Custo por workspace e por usuário:
+- [ ] dashboard `/admin/costs` com filtros por período, workspace e usuário
+- [ ] ranking de workspaces mais caros
+- [ ] ranking de usuários com maior consumo
+- [ ] Analytics de modelos:
+- [ ] modelo mais usado por período
+- [ ] custo médio por modelo
+- [ ] efetividade por modelo (publicado x gerado, quando aplicável)
+- [ ] Alertas operacionais:
+- [ ] alerta de estouro de orçamento mensal
+- [ ] alerta de uso anômalo (picos de custo)
+- [ ] Base para precificação:
+- [ ] simulação de margem por plano
+- [ ] recomendação automática de upgrade de plano por uso
+
 ---
 
 ## Backlog técnico (qualquer fase)
@@ -171,3 +196,9 @@ Data de referência: 06/03/2026
 - Painel owner ampliado com módulo global de postagens `/admin/carousels` (filtros por status/workspace/período).
 - `/admin/carousels` recebeu ações operacionais: detalhe, duplicar, cancelar agendamento, reenfileirar, excluir.
 - Fluxo de experts refinado: criação centralizada no DNA; Fotos Referência agora seleciona expert existente via modal.
+- UX de expert refinada: `DNA Expert` abre na lista e só mostra formulário após seleção.
+- UX de Fotos refinada: `Fotos de Referência` abre na lista, botão `Novo` abre modal de experts do DNA, sem redirecionar.
+- Owner ganhou `Admin Plans` para cadastrar tipos de plano e limites de experts via `app_settings.plan_configs`.
+- Planejada Fase 8 de Cost Intelligence: limites de usuários/créditos + custos por token/modelo/workspace/usuário.
+- Schema recebeu base de Cost Intelligence: tabelas `provider_price_catalog` e `usage_events` com RLS.
+- MVP de custos entregue: instrumentação de `usage_events` em content/images/publish + `/api/admin/costs` + `/admin/costs`.

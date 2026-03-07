@@ -2,7 +2,7 @@
 
 > Para instalar uma nova instância do sistema do zero.
 > Inclui configuração do Supabase, variáveis de ambiente e primeiro acesso.
-> Versão: 2.0 — 2026-03-06
+> Versão: 2.1 — 2026-03-07
 
 ---
 
@@ -58,6 +58,7 @@ O schema cria automaticamente:
 - Tabelas de usuários: `profiles`, `experts`, `expert_photos`, `user_tokens`, `carousels`
 - Tabelas multi-tenant: `workspaces`, `workspace_members`
 - Tabelas admin: `app_settings`, `system_logs`
+- Tabelas de custo: `provider_price_catalog`, `usage_events`
 - Tabelas Content Hub: `platforms`, `content_formats`, `templates`, `template_prompts`
 - Buckets de storage: `expert-photos`, `carousel-images`
 - Todas as RLS policies
@@ -191,6 +192,8 @@ WHERE id = (
    - Google Key
    - EXA Key (opcional)
 4. Clique em "Testar conexão" para validar cada chave
+5. Acesse `/admin/plans` para ajustar tipos de plano e limite de experts por plano
+6. (Opcional) cadastre preços em `provider_price_catalog` e acompanhe `/admin/costs`
 
 > Em desenvolvimento, as chaves do `.env.local` são usadas como fallback.
 > Em produção, as chaves ficam exclusivamente no painel admin (banco), nunca no servidor de deploy.
@@ -203,6 +206,15 @@ WHERE id = (
 npm run dev
 # Acesse: http://localhost:8080
 ```
+
+### Fluxo inicial recomendado após primeiro login
+
+1. Acesse `Expert > DNA`.
+2. Na entrada da tela, escolha um DNA existente da lista ou clique em `Novo`.
+3. No detalhe do DNA, use `Ver exemplo` se precisar de referência e salve.
+4. Acesse `Expert > Fotos Referência`.
+5. Clique em `Novo` para abrir o modal de experts já cadastrados no DNA e selecione um.
+6. Envie as fotos e use `Voltar` para retornar à lista quando necessário.
 
 ---
 
@@ -282,6 +294,7 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 - [ ] Expert DNA configurado pelo cliente (nome, nicho, CTA)
 - [ ] Expert ativo selecionado no header (quando houver múltiplos experts)
 - [ ] Se houver múltiplos experts, gerenciar a troca no próprio `DNA Expert` (lista de experts)
+- [ ] Em `DNA Expert`, selecionar um expert da lista para abrir/editar os dados
 
 ### Para geração de imagens
 

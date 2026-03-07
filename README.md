@@ -52,11 +52,18 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Agendamento com cron nativo Supabase
 - Dashboard: lista/grid, filtros, métricas, thumbnails ao vivo, duplicar, excluir
 - Admin owner: visão global de postagens em `/admin/carousels` com ações operacionais
+- Admin owner: gestão de tipos de plano em `/admin/plans` (planos customizados + limite de experts)
+- Base de Cost Intelligence no schema: catálogo de preços + eventos de consumo/custo
+- Admin owner: visão de custos em `/admin/costs` (top workspaces, top usuários e modelos)
 - Content Hub DB: platforms, content_formats, templates, template_prompts
+- UX DNA Expert em duas etapas: lista primeiro; formulário só após selecionar um DNA ou clicar em `Novo`
+- UX Fotos de Referência em duas etapas: lista primeiro; detalhes/fotos após selecionar expert
+- Em `Fotos de Referência`, botão `Novo` abre modal simples com experts já cadastrados no DNA (sem redirecionar)
 
 ### Em andamento
 - Fase 3 concluída no escopo admin/workspace (tokens centralizados na plataforma)
 - Fase 4 em aberto: selector de modelo + suporte multi-provider na UI de geração
+- Cost Intelligence em progresso: eventos de custo já instrumentados em geração de conteúdo, imagens e publicação
 
 ### Roadmap
 Ver `ROADMAP.md` para o plano completo.
@@ -77,8 +84,12 @@ npm run dev
 1. Em `Expert > DNA`, crie/salve o expert primeiro.
 2. Em `DNA Expert`, use a lista de experts do workspace para alternar entre perfis.
 3. O botão `Novo` no DNA respeita o limite do plano (starter/pro/agency).
-4. Depois vá em `Expert > Fotos Referência` para subir fotos desse expert.
-5. Em `Fotos Referência`, o botão `Novo` abre um modal para escolher qual expert já criado no DNA será vinculado às fotos.
+4. Em `DNA Expert`, a entrada da tela é sempre lista de DNAs + botão `Novo`.
+5. Ao entrar em um DNA (existente ou novo), aparecem os detalhes, o botão `Ver exemplo` e o botão `Voltar`.
+6. Depois vá em `Expert > Fotos Referência` para subir fotos desse expert.
+7. Em `Fotos Referência`, o botão `Novo` abre um modal com os experts já cadastrados no DNA (sem redirecionar).
+8. Ao abrir um expert em `Fotos Referência`, a tela de detalhes mostra upload/grade e botão `Voltar`.
+9. O owner pode criar/editar tipos de plano em `Admin > Plans` e definir limite de experts por plano.
 
 ---
 
@@ -89,6 +100,7 @@ npm run dev
 | `docs/INSTALLATION.md` | Guia completo de instalação do zero |
 | `docs/MULTI-TENANT-ARCHITECTURE.md` | Arquitetura multi-tenant: roles, workspaces, RLS |
 | `docs/ADMIN-PANEL.md` | Especificação do painel de administração |
+| `docs/COST-INTELLIGENCE.md` | Estratégia de custos, créditos e telemetria de uso |
 | `docs/SYSTEM-LOGS.md` | Sistema de logs: eventos, queries, retenção |
 | `docs/CONTENT-HUB-ARCHITECTURE.md` | Content Hub: plataformas, formatos, template engine |
 | `ROADMAP.md` | Fases de implementação passadas e futuras |

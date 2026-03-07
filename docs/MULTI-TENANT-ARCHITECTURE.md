@@ -48,9 +48,16 @@ workspaces (1 por cliente/time)
 
 app_settings (global — 1 linha)
   └── chaves de IA da plataforma
+  └── plan_configs (tipos de plano customizados)
 
 system_logs (append-only)
   └── eventos de geração, erros, publicação, auth
+
+provider_price_catalog
+  └── preços por provider/modelo/unidade
+
+usage_events (append-only)
+  └── consumo e custo por workspace/usuário/modelo
 ```
 
 ### Tabelas Detalhadas
@@ -95,6 +102,7 @@ app_settings (
   google_key     text,  -- chave Gemini da plataforma
   openai_key     text,  -- chave GPT-4o (fase 3)
   exa_key        text,  -- chave EXA Search
+  plan_configs   jsonb, -- tipos de plano e limites customizados
   updated_at     timestamptz,
   updated_by     uuid FK → auth.users
 )
@@ -108,6 +116,35 @@ system_logs (
   level        text,      -- 'info' | 'warn' | 'error'
   payload      jsonb,     -- dados do evento (topic, model, tokens_used, error_message, etc.)
   created_at   timestamptz DEFAULT now()
+)
+
+provider_price_catalog (
+  id             uuid PK,
+  provider       text,
+  model          text,
+  unit           text, -- token_in | token_out | image | publish | render
+  price_per_unit numeric,
+  currency       text, -- USD
+  effective_from timestamptz,
+  created_at     timestamptz,
+  updated_at     timestamptz,
+  updated_by     uuid FK → auth.users
+)
+
+usage_events (
+  id             uuid PK,
+  workspace_id   uuid FK → workspaces,
+  user_id        uuid FK → auth.users,
+  carousel_id    uuid FK → carousels,
+  provider       text,
+  model          text,
+  event_type     text, -- content.generate | image.generate | publish | render
+  unit           text, -- token_in | token_out | image | publish | render
+  quantity       numeric,
+  unit_cost_usd  numeric,
+  total_cost_usd numeric,
+  metadata       jsonb,
+  created_at     timestamptz
 )
 
 -- experts e carousels: trocar user_id → workspace_id
@@ -140,7 +177,7 @@ Usuário gera conteúdo:
   1. Escolhe o modelo (Claude Opus / Claude Sonnet / GPT-4o / Gemini)
   2. API busca a chave em app_settings (server-side, nunca exposta)
   3. Chama a IA com a chave da plataforma
-  4. Debita uso do workspace (para controle de plano — futuro)
+  4. Registra uso/custo em usage_events (base para limites e billing por uso)
 ```
 
 ---
@@ -171,7 +208,7 @@ Usuário publica:
 | `pro` | 1 | 3 | Claude Opus + Sonnet | 100 |
 | `agency` | 5 | 10 | Todos | Ilimitado |
 
-> O campo `plan` existe no schema desde o início. A lógica de limites vem com Stripe (fase futura).
+> O campo `plan` existe no schema desde o início e os tipos de plano ficam em `app_settings.plan_configs`.
 
 ---
 
@@ -261,6 +298,7 @@ app/
     admin/
       page.tsx          ← dashboard geral (métricas globais)
       workspaces/       ← lista de clientes
+      costs/            ← custos por workspace/usuário/modelo
       logs/             ← system_logs viewer
       settings/         ← app_settings (chaves de IA)
       users/            ← todos os usuários
@@ -295,3 +333,4 @@ app/
 | 2026-03-06 | Trigger cria profile automaticamente | Onboarding automático sem ação manual |
 | 2026-03-07 | Selector global de workspace no header | Usuário com múltiplos memberships alterna contexto sem sair da sessão |
 | 2026-03-07 | API `/api/team/members` para gestão de equipe | Centraliza regra de permissão admin/owner no workspace atual |
+| 2026-03-07 | Base de Cost Intelligence no schema (`provider_price_catalog`, `usage_events`) | Medir custo real por modelo/workspace e preparar billing |

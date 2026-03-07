@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Save, Wand2, Plus, X, Sparkles, Camera, Loader2, Copy, Check } from 'lucide-react'
+import { Save, Wand2, Plus, X, Sparkles, Camera, Loader2, Copy, Check, ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getActiveExpertContext } from '@/lib/expert-client'
 
@@ -21,7 +21,7 @@ interface FormData {
   style_rules: string[]
 }
 
-type WorkspacePlan = 'starter' | 'pro' | 'agency'
+type WorkspacePlan = string
 
 interface ExpertListItem {
   id: string
@@ -150,6 +150,8 @@ function DnaForm() {
   const [expertLimit, setExpertLimit] = useState(1)
   const [activeExpertId, setActiveExpertId] = useState<string | null>(null)
   const [switchingExpertId, setSwitchingExpertId] = useState<string | null>(null)
+  const [selectedExpertId, setSelectedExpertId] = useState<string | null>(null)
+  const [expertLoadError, setExpertLoadError] = useState('')
 
   const [avatarUrl, setAvatarUrl]             = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
@@ -163,48 +165,69 @@ function DnaForm() {
 
       const ctx = await getActiveExpertContext(supabase, user.id)
       setWorkspaceId(ctx.workspaceId)
-      const expertRes = await fetch('/api/experts')
-      const expertJson = await expertRes.json().catch(() => null)
-      if (expertRes.ok && expertJson) {
+      const expertRes = await fetch('/api/experts').catch(() => null)
+      const expertJson = expertRes ? await expertRes.json().catch(() => null) : null
+      if (expertRes?.ok && expertJson) {
         setExperts(expertJson.experts || [])
         setWorkspacePlan((expertJson.workspacePlan as WorkspacePlan) || 'starter')
         setExpertLimit(Number(expertJson.expertLimit) || 1)
         setActiveExpertId(expertJson.activeExpertId || null)
+        setExpertLoadError('')
+      } else {
+        // Fallback: busca direto no client se a API falhar.
+        if (ctx.workspaceId) {
+          const { data: fallbackExperts } = await supabase
+            .from('experts')
+            .select('id, display_name, handle')
+            .eq('workspace_id', ctx.workspaceId)
+            .order('updated_at', { ascending: false })
+          setExperts((fallbackExperts || []).map((e: { id: string; display_name: string; handle: string }) => ({ ...e, photos_count: 0 })))
+          setActiveExpertId((ctx.activeExpertId as string | null) || null)
+          setExpertLoadError('Falha ao carregar lista via API. Mostrando fallback local.')
+        }
       }
       if (isCreatingNew) {
         setExpertId(null)
+        setSelectedExpertId('new')
         setForm(EMPTY)
         setAvatarUrl(null)
         return
       }
-
-      const expert = ctx.expert
-      setExpertId(ctx.activeExpertId)
-
-      if (expert) {
-        setForm({
-          display_name:           expert.display_name || '',
-          handle:                 expert.handle || '',
-          ig_account_id:          expert.ig_account_id || '',
-          ig_access_token:        expert.ig_access_token || '',
-          niche:                  expert.niche || '',
-          bio_short:              expert.bio_short || '',
-          product_name:           expert.product_name || '',
-          product_cta:            expert.product_cta || '',
-          highlight_color:        expert.highlight_color || '#9B59FF',
-          author_slide_template:  expert.author_slide_template || '',
-          cta_final_template:     expert.cta_final_template || '',
-          style_rules:            expert.style_rules || [],
-        })
-        setAvatarUrl((expert as any).avatar_url || null)
-      }
+      setSelectedExpertId(null)
     }
     load()
   }, [isCreatingNew])
 
+  async function loadExpertFormById(nextExpertId: string) {
+    const { data: expert } = await supabase
+      .from('experts')
+      .select('*')
+      .eq('id', nextExpertId)
+      .maybeSingle()
+    if (!expert) return
+
+    setExpertId(nextExpertId)
+    setForm({
+      display_name:           expert.display_name || '',
+      handle:                 expert.handle || '',
+      ig_account_id:          expert.ig_account_id || '',
+      ig_access_token:        expert.ig_access_token || '',
+      niche:                  expert.niche || '',
+      bio_short:              expert.bio_short || '',
+      product_name:           expert.product_name || '',
+      product_cta:            expert.product_cta || '',
+      highlight_color:        expert.highlight_color || '#9B59FF',
+      author_slide_template:  expert.author_slide_template || '',
+      cta_final_template:     expert.cta_final_template || '',
+      style_rules:            expert.style_rules || [],
+    })
+    setAvatarUrl((expert as any).avatar_url || null)
+    setSelectedExpertId(nextExpertId)
+  }
+
   async function ensureExpertId(forceCreate = false): Promise<string | null> {
     if (!userId || !workspaceId) return null
-    if (expertId && !forceCreate) return expertId
+    if (selectedExpertId && selectedExpertId !== 'new' && !forceCreate) return selectedExpertId
 
     const { data: created, error } = await supabase
       .from('experts')
@@ -226,6 +249,8 @@ function DnaForm() {
       .eq('id', userId)
 
     setExpertId(created.id)
+    setSelectedExpertId(created.id)
+    setActiveExpertId(created.id)
     return created.id
   }
 
@@ -258,28 +283,38 @@ function DnaForm() {
   }
 
   async function handleSave() {
-    const currentExpertId = await ensureExpertId(isCreatingNew)
+    const currentExpertId = await ensureExpertId(selectedExpertId === 'new')
     if (!userId || !workspaceId || !currentExpertId) return
     setSaving(true)
-    if (isCreatingNew) {
-      await supabase
-        .from('experts')
-        .update({ ...form, updated_at: new Date().toISOString() })
-        .eq('id', currentExpertId)
+    await supabase
+      .from('experts')
+      .update({ ...form, updated_at: new Date().toISOString() })
+      .eq('id', currentExpertId)
+
+    if (selectedExpertId === 'new') {
       window.history.replaceState(null, '', '/expert/dna')
-    } else {
-      await supabase
-        .from('experts')
-        .update({ ...form, updated_at: new Date().toISOString() })
-        .eq('id', currentExpertId)
     }
+
+    const expertRes = await fetch('/api/experts')
+    const expertJson = await expertRes.json().catch(() => null)
+    if (expertRes.ok && expertJson) {
+      setExperts(expertJson.experts || [])
+      setWorkspacePlan((expertJson.workspacePlan as WorkspacePlan) || 'starter')
+      setExpertLimit(Number(expertJson.expertLimit) || 1)
+      setActiveExpertId(expertJson.activeExpertId || currentExpertId)
+    }
+
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }
 
   async function handleSwitchExpert(nextExpertId: string) {
-    if (!nextExpertId || nextExpertId === activeExpertId) return
+    if (!nextExpertId) return
+    if (nextExpertId === activeExpertId) {
+      await loadExpertFormById(nextExpertId)
+      return
+    }
     setSwitchingExpertId(nextExpertId)
     try {
       const res = await fetch('/api/experts', {
@@ -290,8 +325,7 @@ function DnaForm() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Falha ao trocar expert')
       setActiveExpertId(nextExpertId)
-      router.push('/expert/dna')
-      router.refresh()
+      await loadExpertFormById(nextExpertId)
     } catch (err) {
       console.error(err)
     } finally {
@@ -345,25 +379,109 @@ function DnaForm() {
     .split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?'
   const canCreateMore = experts.length < expertLimit
 
+  function startNewExpert() {
+    if (!canCreateMore) return
+    setSelectedExpertId('new')
+    setExpertId(null)
+    setForm(EMPTY)
+    setAvatarUrl(null)
+    setSaved(false)
+  }
+
   return (
     <div className="p-8 max-w-2xl">
-      {isOnboarding && (
-        <div className="flex items-start gap-3 bg-violet-950/50 border border-violet-700 rounded-xl p-4 mb-6">
-          <Sparkles className="w-5 h-5 text-violet-400 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-violet-200">Configure seu perfil para começar</p>
-            <p className="text-xs text-violet-400 mt-0.5">
-              Clique em <strong>Ver exemplo</strong> para ver um perfil de referência,
-              depois preencha com seus dados reais e salve.
-            </p>
+      {!selectedExpertId ? (
+        <>
+          <div className="mb-4">
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Voltar
+            </button>
           </div>
-        </div>
-      )}
+          {isOnboarding && (
+            <div className="flex items-start gap-3 bg-violet-950/50 border border-violet-700 rounded-xl p-4 mb-6">
+              <Sparkles className="w-5 h-5 text-violet-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-violet-200">Configure seu perfil para começar</p>
+                <p className="text-xs text-violet-400 mt-0.5">
+                  Escolha um DNA existente ou clique em <strong>Novo</strong> para criar um.
+                </p>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-zinc-100">DNA Expert</h1>
+              <p className="text-zinc-400 text-sm mt-1">Selecione um DNA para editar ou crie um novo</p>
+            </div>
+            <button
+              onClick={startNewExpert}
+              disabled={!canCreateMore}
+              className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed border border-zinc-700 text-zinc-200 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              title={canCreateMore ? 'Criar novo expert' : 'Limite do plano atingido'}
+            >
+              <Plus className="w-4 h-4" />
+              Novo
+            </button>
+          </div>
+          <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-zinc-100">DNAs do workspace</p>
+              <p className="text-xs text-zinc-500">
+                Plano: {workspacePlan} · {experts.length}/{expertLimit} experts
+              </p>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {experts.map((item) => {
+                const isActive = item.id === activeExpertId
+                const isSwitching = switchingExpertId === item.id
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSwitchExpert(item.id)}
+                    disabled={isSwitching}
+                    className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                      isActive
+                        ? 'border-violet-500/60 bg-violet-900/20'
+                        : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'
+                    }`}
+                  >
+                    <p className="text-sm text-zinc-100 font-medium truncate">{item.display_name || 'Sem nome'}</p>
+                    <p className="text-xs text-zinc-500 truncate">{item.handle || 'sem @'} · {item.photos_count || 0} fotos</p>
+                    {isSwitching && <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400 mt-1" />}
+                  </button>
+                )
+              })}
+              {experts.length === 0 && (
+                <p className="text-xs text-zinc-500">Nenhum expert criado ainda. Clique em Novo para começar.</p>
+              )}
+            </div>
+            {expertLoadError && (
+              <p className="text-xs text-amber-400">{expertLoadError}</p>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+      <div className="mb-4">
+        <button
+          onClick={() => setSelectedExpertId(null)}
+          className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Voltar para lista de DNAs
+        </button>
+      </div>
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">DNA Expert</h1>
-          <p className="text-zinc-400 text-sm mt-1">Tom de voz, estilo e dados do seu perfil</p>
+          <p className="text-zinc-400 text-sm mt-1">
+            {selectedExpertId === 'new' ? 'Preencha os dados para criar um novo DNA' : 'Ajuste os dados do DNA selecionado'}
+          </p>
         </div>
         <button
           onClick={() => setShowExample(true)}
@@ -372,52 +490,6 @@ function DnaForm() {
           <Wand2 className="w-4 h-4" />
           Ver exemplo
         </button>
-      </div>
-
-      <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-zinc-100">Experts do workspace</p>
-            <p className="text-xs text-zinc-500">
-              Plano: {workspacePlan} · {experts.length}/{expertLimit} experts
-            </p>
-          </div>
-          <button
-            onClick={() => router.push('/expert/dna?new=1')}
-            disabled={!canCreateMore}
-            className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed border border-zinc-700 text-zinc-200 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-            title={canCreateMore ? 'Criar novo expert' : 'Limite do plano atingido'}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Novo
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {experts.map((item) => {
-            const isActive = item.id === activeExpertId
-            const isSwitching = switchingExpertId === item.id
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleSwitchExpert(item.id)}
-                disabled={isSwitching}
-                className={`text-left rounded-lg border px-3 py-2 transition-colors ${
-                  isActive
-                    ? 'border-violet-500/60 bg-violet-900/20'
-                    : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'
-                }`}
-              >
-                <p className="text-sm text-zinc-100 font-medium truncate">{item.display_name || 'Sem nome'}</p>
-                <p className="text-xs text-zinc-500 truncate">{item.handle || 'sem @'} · {item.photos_count || 0} fotos</p>
-                {isSwitching && <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400 mt-1" />}
-              </button>
-            )
-          })}
-          {experts.length === 0 && (
-            <p className="text-xs text-zinc-500">Nenhum expert criado ainda. Clique em Novo para começar.</p>
-          )}
-        </div>
       </div>
 
       {/* ── Avatar ─────────────────────────────────────────────────── */}
@@ -574,8 +646,10 @@ function DnaForm() {
         className="mt-8 flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-lg transition-colors text-sm"
       >
         <Save className="w-4 h-4" />
-        {saved ? '✓ Salvo!' : saving ? 'Salvando...' : 'Salvar DNA'}
+        {saved ? '✓ Salvo!' : saving ? 'Salvando...' : selectedExpertId === 'new' ? 'Criar Expert' : 'Salvar DNA'}
       </button>
+      </>
+      )}
 
       {showExample && <ExampleModal onClose={() => setShowExample(false)} />}
     </div>

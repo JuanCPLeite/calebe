@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { generateWithTemplate } from '@/lib/template-engine'
 import { getWorkspaceContext, getAppKeys } from '@/lib/workspace'
 import { log } from '@/lib/logger'
+import { recordUsageEvent } from '@/lib/usage-events'
 import type { ProviderId } from '@/lib/providers/types'
 
 type WorkspacePlan = 'starter' | 'pro' | 'agency'
@@ -37,6 +38,10 @@ function normalizePlan(value: string | null | undefined): WorkspacePlan {
 function normalizeProviderId(value: unknown): ProviderId {
   if (value === 'openai' || value === 'google' || value === 'anthropic') return value
   return 'anthropic'
+}
+
+function estimateTokensFromCharCount(charCount: number): number {
+  return Math.max(1, Math.ceil(Math.max(0, charCount) / 4))
 }
 
 export async function POST(req: NextRequest) {
@@ -133,7 +138,7 @@ export async function POST(req: NextRequest) {
 
         if ('done' in event && event.done) {
           // Salva no histórico com workspace_id
-          supabase.from('carousels').insert({
+          const { data: insertedCarousel } = await supabase.from('carousels').insert({
             user_id:      user.id,
             workspace_id: workspaceId,
             created_by:   user.id,
@@ -143,7 +148,62 @@ export async function POST(req: NextRequest) {
             slides:       event.slides,
             provider_used: selectedProviderId,
             model_used: event.modelUsed,
-          }).then(() => {})
+          }).select('id').maybeSingle()
+
+          const carouselId = insertedCarousel?.id || null
+
+          // Estimativa inicial de tokens para analise de custo.
+          const expertText = [
+            expert.displayName,
+            expert.handle,
+            expert.niche,
+            expert.bioShort,
+            expert.productName,
+            expert.productCta,
+            expert.authorSlideTemplate,
+            expert.ctaFinalTemplate,
+            ...(expert.styleRules || []),
+          ].join(' ')
+          const inputChars = [String(topic || ''), String(hook || ''), expertText].join(' ').length
+          const outputChars = [String(event.caption || ''), JSON.stringify(event.slides || [])].join(' ').length
+          const estimatedInputTokens = estimateTokensFromCharCount(inputChars)
+          const estimatedOutputTokens = estimateTokensFromCharCount(outputChars)
+
+          await Promise.all([
+            recordUsageEvent({
+              workspaceId,
+              userId: user.id,
+              carouselId,
+              provider: selectedProviderId,
+              model: event.modelUsed,
+              eventType: 'content.generate',
+              unit: 'render',
+              quantity: 1,
+              metadata: { topic, templateId: resolvedTemplateId },
+            }),
+            recordUsageEvent({
+              workspaceId,
+              userId: user.id,
+              carouselId,
+              provider: selectedProviderId,
+              model: event.modelUsed,
+              eventType: 'content.generate',
+              unit: 'token_in',
+              quantity: estimatedInputTokens,
+              metadata: { estimated: true },
+            }),
+            recordUsageEvent({
+              workspaceId,
+              userId: user.id,
+              carouselId,
+              provider: selectedProviderId,
+              model: event.modelUsed,
+              eventType: 'content.generate',
+              unit: 'token_out',
+              quantity: estimatedOutputTokens,
+              metadata: { estimated: true },
+            }),
+          ])
 
           // Log de sucesso
           log({

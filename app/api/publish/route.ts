@@ -4,6 +4,7 @@ import { publishCarousel } from '@/lib/instagram'
 import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceContext } from '@/lib/workspace'
 import { log } from '@/lib/logger'
+import { recordUsageEvent } from '@/lib/usage-events'
 
 export async function POST(req: NextRequest) {
   try {
@@ -58,6 +59,18 @@ export async function POST(req: NextRequest) {
       workspaceId,
       userId: user.id,
       payload: { carousel_id: carouselId ?? null, ig_post_id: postId, platform: 'instagram' },
+    })
+
+    await recordUsageEvent({
+      workspaceId,
+      userId: user.id,
+      carouselId: typeof carouselId === 'string' ? carouselId : null,
+      provider: 'meta',
+      model: 'instagram-carousel',
+      eventType: 'publish',
+      unit: 'publish',
+      quantity: 1,
+      metadata: { igPostId: postId },
     })
 
     return NextResponse.json({

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   Sparkles, LayoutDashboard, Dna, ImageIcon, Users,
-  LayoutTemplate, ChevronRight, Zap, LogOut, Shield, Settings, FileText, UserCog, Images,
+  LayoutTemplate, ChevronRight, Zap, LogOut, Shield, Settings, FileText, UserCog, Images, Layers3, ReceiptText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -129,6 +129,30 @@ export function Sidebar() {
             >
               <Images className="w-4 h-4 flex-shrink-0" />
               <span className="flex-1">Admin Posts</span>
+            </Link>
+            <Link
+              href="/admin/plans"
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group',
+                pathname.startsWith('/admin/plans')
+                  ? 'bg-zinc-800 text-zinc-100'
+                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
+              )}
+            >
+              <Layers3 className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">Admin Plans</span>
+            </Link>
+            <Link
+              href="/admin/costs"
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group',
+                pathname.startsWith('/admin/costs')
+                  ? 'bg-zinc-800 text-zinc-100'
+                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
+              )}
+            >
+              <ReceiptText className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">Admin Costs</span>
             </Link>
             <Link
               href="/admin/settings"

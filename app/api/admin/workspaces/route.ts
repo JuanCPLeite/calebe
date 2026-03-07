@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/logger'
+import { DEFAULT_PLAN_CONFIGS, parsePlanConfigs } from '@/lib/plan-config'
 
-type WorkspacePlan = 'starter' | 'pro' | 'agency'
+const APP_SETTINGS_ID = '00000000-0000-0000-0000-000000000001'
 type WorkspaceBase = {
   id: string
   name: string
   slug: string
-  plan: WorkspacePlan
+  plan: string
   owner_id: string | null
   active: boolean
   created_at: string
@@ -47,8 +48,15 @@ async function ensureOwner() {
   return { user }
 }
 
-function isValidPlan(value: unknown): value is WorkspacePlan {
-  return value === 'starter' || value === 'pro' || value === 'agency'
+async function getAllowedPlanIds(admin: ReturnType<typeof createAdminClient>): Promise<string[]> {
+  const { data } = await admin
+    .from('app_settings')
+    .select('plan_configs')
+    .eq('id', APP_SETTINGS_ID)
+    .maybeSingle()
+
+  const plans = parsePlanConfigs((data as any)?.plan_configs || DEFAULT_PLAN_CONFIGS)
+  return plans.map((p) => p.id)
 }
 
 function asIso(value: string | null | undefined): string | null {
@@ -135,6 +143,7 @@ export async function GET(req: NextRequest) {
   if ('error' in auth) return auth.error
 
   const admin = createAdminClient()
+  const allowedPlanIds = await getAllowedPlanIds(admin)
   const url = new URL(req.url)
   const search = (url.searchParams.get('search') || '').trim()
   const plan = (url.searchParams.get('plan') || '').trim()
@@ -146,7 +155,7 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
 
   if (search) query = query.or(`name.ilike.%${search}%,slug.ilike.%${search}%`)
-  if (plan && isValidPlan(plan)) query = query.eq('plan', plan)
+  if (plan && allowedPlanIds.includes(plan)) query = query.eq('plan', plan)
   if (activeParam === 'true') query = query.eq('active', true)
   if (activeParam === 'false') query = query.eq('active', false)
 
@@ -173,15 +182,16 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({} as Record<string, unknown>))
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   const providedSlug = typeof body.slug === 'string' ? body.slug.trim() : ''
-  const plan = body.plan
+  const plan = typeof body.plan === 'string' ? body.plan.trim().toLowerCase() : ''
   const ownerUserId = typeof body.ownerUserId === 'string' ? body.ownerUserId.trim() : ''
 
   if (!name) return NextResponse.json({ error: 'name é obrigatório' }, { status: 400 })
-  if (!isValidPlan(plan)) {
-    return NextResponse.json({ error: 'plan inválido (use starter|pro|agency)' }, { status: 400 })
-  }
 
   const admin = createAdminClient()
+  const allowedPlanIds = await getAllowedPlanIds(admin)
+  if (!plan || !allowedPlanIds.includes(plan)) {
+    return NextResponse.json({ error: `plan invalido (use: ${allowedPlanIds.join(', ')})` }, { status: 400 })
+  }
   const baseSlug = slugify(providedSlug || name) || 'workspace'
 
   let finalSlug = baseSlug
@@ -258,8 +268,17 @@ export async function PATCH(req: NextRequest) {
 
   const updates: Record<string, unknown> = {}
   if (typeof body.active === 'boolean') updates.active = body.active
-  if (isValidPlan(body.plan)) updates.plan = body.plan
   if (typeof body.name === 'string' && body.name.trim()) updates.name = body.name.trim()
+
+  if (typeof body.plan === 'string' && body.plan.trim()) {
+    const admin = createAdminClient()
+    const allowedPlanIds = await getAllowedPlanIds(admin)
+    const plan = body.plan.trim().toLowerCase()
+    if (!allowedPlanIds.includes(plan)) {
+      return NextResponse.json({ error: `plan invalido (use: ${allowedPlanIds.join(', ')})` }, { status: 400 })
+    }
+    updates.plan = plan
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'Nenhum campo válido para atualização' }, { status: 400 })

@@ -1,0 +1,84 @@
+# Cost Intelligence — Especificação Inicial
+
+> Objetivo: medir custo real de geração/publicação e suportar limites por plano (usuários, créditos, orçamento).
+> Status: schema + instrumentação inicial + dashboard owner de custos (`/admin/costs`).
+> Data: 2026-03-07
+
+---
+
+## Escopo desta fase
+
+- Definir catálogo de preços por provider/modelo/unidade.
+- Registrar eventos granulares de consumo e custo.
+- Habilitar consultas por workspace, usuário, provider e modelo.
+- Preparar base para dashboards e billing (fase seguinte).
+
+---
+
+## Tabelas
+
+### `provider_price_catalog`
+
+Catálogo versionado de preço unitário em USD.
+
+- `provider`: `anthropic` | `openai` | `google` | `meta` | `internal`
+- `model`: ex. `claude-sonnet-4-5`, `gpt-4o`
+- `unit`: `token_in` | `token_out` | `image` | `publish` | `render`
+- `price_per_unit`
+- `effective_from`
+
+Uso típico:
+- atualizar preços de token/modelo sem alterar código;
+- manter histórico de mudanças de preço no tempo.
+
+### `usage_events`
+
+Evento granular de consumo/custo por ação.
+
+- `workspace_id`, `user_id`, `carousel_id`
+- `provider`, `model`
+- `event_type`: `content.generate` | `image.generate` | `publish` | `render`
+- `unit`, `quantity`
+- `unit_cost_usd`, `total_cost_usd`
+- `metadata` (jsonb)
+
+Uso típico:
+- custo por carrossel;
+- custo por workspace/usuário;
+- modelo mais usado e custo médio por modelo.
+
+---
+
+## RLS
+
+- `provider_price_catalog`: owner gerencia (leitura/escrita).
+- `usage_events`: owner vê tudo; workspace vê somente o próprio (`select`).
+- inserções de telemetria continuam sendo responsabilidade das rotas server-side com contexto seguro.
+
+---
+
+## Entregas já implementadas
+
+1. Instrumentação de `usage_events` em:
+   - `/api/generate/content` (eventos `render`, `token_in`, `token_out` estimados)
+   - `/api/generate/images` (evento `image`)
+   - `/api/publish` (evento `publish`)
+2. Endpoint owner `/api/admin/costs` com agregados por período/workspace.
+3. Tela owner `/admin/costs` com top workspaces, top usuários e top modelos.
+
+---
+
+## Próximas entregas
+
+1. Instrumentar rotas para gravar `usage_events` reais:
+   - `/api/generate/content`
+   - `/api/generate/images`
+   - `/api/publish`
+2. Criar `/admin/costs` com:
+   - total USD por período
+   - top workspaces e top usuários por custo
+   - custo médio por modelo
+3. Integrar limites por plano:
+   - `member_limit`
+   - `monthly_post_credits`
+   - regra de excedente (bloquear/avisar/cobrar extra)

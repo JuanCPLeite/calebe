@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Save, Wand2, X, Copy, Check } from 'lucide-react'
+import { Save, Wand2, X, Copy, Check, ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getActiveExpertContext } from '@/lib/expert-client'
+import { useRouter } from 'next/navigation'
 
 interface AudienceProfile {
   pain_points: string
@@ -115,6 +116,7 @@ function ExampleModal({ onClose }: { onClose: () => void }) {
 
 export default function AudiencePage() {
   const supabase = createClient()
+  const router = useRouter()
   const [form, setForm]           = useState<AudienceProfile>(EMPTY)
   const [saving, setSaving]       = useState(false)
   const [saved, setSaved]         = useState(false)
@@ -203,6 +205,15 @@ export default function AudiencePage() {
 
   return (
     <div className="p-8 max-w-2xl">
+      <div className="mb-4">
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Voltar
+        </button>
+      </div>
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">Perfil & Público</h1>

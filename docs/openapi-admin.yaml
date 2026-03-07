@@ -100,7 +100,7 @@ paths:
           name: plan
           schema:
             type: string
-            enum: [starter, pro, agency]
+          description: ID de plano cadastrado em /api/admin/plans
         - in: query
           name: active
           schema:
@@ -130,7 +130,7 @@ paths:
                   type: string
                 plan:
                   type: string
-                  enum: [starter, pro, agency]
+                  description: ID de plano cadastrado em /api/admin/plans
                 ownerUserId:
                   type: string
                   format: uuid
@@ -161,12 +161,53 @@ paths:
                   type: string
                 plan:
                   type: string
-                  enum: [starter, pro, agency]
+                  description: ID de plano cadastrado em /api/admin/plans
                 active:
                   type: boolean
       responses:
         '200':
           description: Workspace atualizado (retorna também métricas agregadas)
+        '400':
+          description: Payload inválido
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+  /api/admin/plans:
+    get:
+      summary: Lista planos configurados pela plataforma
+      tags: [Admin Plans]
+      responses:
+        '200':
+          description: Lista de planos com limites
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+    patch:
+      summary: Atualiza planos e limites
+      tags: [Admin Plans]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plans]
+              properties:
+                plans:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, label, expertLimit]
+                    properties:
+                      id: { type: string }
+                      label: { type: string }
+                      expertLimit: { type: integer, minimum: 1, maximum: 100 }
+                      description: { type: string }
+      responses:
+        '200':
+          description: Planos atualizados
         '400':
           description: Payload inválido
         '401':
@@ -237,6 +278,29 @@ paths:
       responses:
         '200':
           description: Cards de métricas + erros 24h + atividade recente
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+  /api/admin/costs:
+    get:
+      summary: Agregados de custo por período/workspace
+      tags: [Admin Costs]
+      parameters:
+        - in: query
+          name: days
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+        - in: query
+          name: workspaceId
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Custo total, top workspaces, top usuários e top modelos
         '401':
           description: Não autenticado
         '403':

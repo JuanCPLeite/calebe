@@ -7,7 +7,12 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
-type WorkspacePlan = 'starter' | 'pro' | 'agency'
+type WorkspacePlan = string
+
+interface PlanOption {
+  id: string
+  label: string
+}
 
 interface WorkspaceItem {
   id: string
@@ -30,6 +35,11 @@ export default function AdminWorkspacesPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [items, setItems] = useState<WorkspaceItem[]>([])
+  const [plans, setPlans] = useState<PlanOption[]>([
+    { id: 'starter', label: 'Starter' },
+    { id: 'pro', label: 'Pro' },
+    { id: 'agency', label: 'Agency' },
+  ])
   const [search, setSearch] = useState('')
   const [planFilter, setPlanFilter] = useState<'all' | WorkspacePlan>('all')
   const [activeFilter, setActiveFilter] = useState<'all' | 'true' | 'false'>('all')
@@ -60,7 +70,27 @@ export default function AdminWorkspacesPage() {
     }
   }
 
+  async function loadPlans() {
+    try {
+      const res = await fetch('/api/admin/plans')
+      const data = await res.json()
+      if (!res.ok) return
+      const options = ((data.plans || []) as Array<{ id: string; label: string }>)
+        .map((p) => ({ id: p.id, label: p.label || p.id }))
+      if (options.length > 0) {
+        setPlans(options)
+        setForm((prev) => ({
+          ...prev,
+          plan: options.some((p) => p.id === prev.plan) ? prev.plan : options[0].id,
+        }))
+      }
+    } catch {
+      // fallback para lista padrao local
+    }
+  }
+
   useEffect(() => {
+    loadPlans()
     load()
   }, [])
 
@@ -184,9 +214,9 @@ export default function AdminWorkspacesPage() {
             onChange={(e) => setForm((p) => ({ ...p, plan: e.target.value as WorkspacePlan }))}
             className="h-9 rounded-md border border-zinc-700 bg-zinc-800 px-3 text-sm text-zinc-100"
           >
-            <option value="starter">starter</option>
-            <option value="pro">pro</option>
-            <option value="agency">agency</option>
+            {plans.map((plan) => (
+              <option key={plan.id} value={plan.id}>{plan.id}</option>
+            ))}
           </select>
           <Input
             value={form.ownerUserId}
@@ -215,9 +245,9 @@ export default function AdminWorkspacesPage() {
             className="h-9 rounded-md border border-zinc-700 bg-zinc-800 px-3 text-sm text-zinc-100"
           >
             <option value="all">Plano: todos</option>
-            <option value="starter">starter</option>
-            <option value="pro">pro</option>
-            <option value="agency">agency</option>
+            {plans.map((plan) => (
+              <option key={plan.id} value={plan.id}>{plan.id}</option>
+            ))}
           </select>
           <select
             value={activeFilter}
@@ -290,9 +320,12 @@ export default function AdminWorkspacesPage() {
                         disabled={updatingId === w.id}
                         className="h-8 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-100"
                       >
-                        <option value="starter">starter</option>
-                        <option value="pro">pro</option>
-                        <option value="agency">agency</option>
+                        {plans.map((plan) => (
+                          <option key={plan.id} value={plan.id}>{plan.id}</option>
+                        ))}
+                        {!plans.some((plan) => plan.id === w.plan) && (
+                          <option value={w.plan}>{w.plan}</option>
+                        )}
                       </select>
                     </td>
                     <td className="py-3 pr-3 text-zinc-300">{w.member_count || 0}</td>

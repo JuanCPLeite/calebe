@@ -3,6 +3,8 @@ import { generateSlideImage } from '@/lib/image-generator'
 import { createClient } from '@/lib/supabase/server'
 import { getAppKeys } from '@/lib/workspace'
 import { getActiveExpertRow } from '@/lib/expert-config'
+import { getWorkspaceContext } from '@/lib/workspace'
+import { recordUsageEvent } from '@/lib/usage-events'
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,6 +48,18 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await generateSlideImage(slideNum, imagePrompt, expertPhotoBase64, googleKey)
+
+    const { workspaceId } = await getWorkspaceContext(user.id, supabase)
+    await recordUsageEvent({
+      workspaceId,
+      userId: user.id,
+      provider: 'google',
+      model: 'gemini-2.5-flash-image',
+      eventType: 'image.generate',
+      unit: 'image',
+      quantity: 1,
+      metadata: { slideNum: Number(slideNum) || null },
+    })
 
     return NextResponse.json({
       slideNum: result.slideNum,

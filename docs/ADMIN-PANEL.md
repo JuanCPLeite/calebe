@@ -14,6 +14,8 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 /admin                  ← Dashboard geral
 /admin/workspaces       ← Lista de clientes/workspaces
 /admin/workspaces/[id]  ← Detalhe de um workspace
+/admin/plans            ← Gestão de tipos de plano e limites
+/admin/costs            ← Custos por modelo/workspace/usuário
 /admin/carousels        ← Postagens globais (draft/scheduled/published)
 /admin/users            ← Todos os usuários
 /admin/logs             ← System logs viewer
@@ -29,6 +31,7 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] API `GET/PATCH /api/admin/users` (owner only) para role/workspace do usuário
 - [x] API `GET /api/admin/metrics` (owner only) para cards e atividade recente
 - [x] API `GET/PATCH /api/admin/carousels` (owner only) para visão e ações de postagens
+- [x] API `GET/PATCH /api/admin/plans` (owner only) para tipos de plano customizados
 - [x] OpenAPI inicial das rotas admin em `docs/openapi-admin.yaml`
 - [x] UI MVP de `/admin/settings` (carrega/salva chaves)
 - [x] `/admin/settings` com reveal seguro de chave e teste de conexão por provider
@@ -38,6 +41,9 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] UI MVP de `/admin/logs` (tabela + filtros + payload + modal de detalhe)
 - [x] UI MVP de `/admin/users` (listar/filtrar/editar role/workspace)
 - [x] UI de `/admin/carousels` com filtros globais + ações operacionais
+- [x] UI de `/admin/plans` com popup de dicas e edição de limites por plano
+- [x] API `GET /api/admin/costs` (owner only) com agregados por período/workspace
+- [x] UI `/admin/costs` com custo total, top workspaces, top usuários e modelos mais caros
 - [ ] Refinos finais de UX nas telas admin (próximo foco: selector de workspace no header)
 
 ---
@@ -159,6 +165,29 @@ Filtros:
 - Cancelar agendamento
 - Reenfileirar publicação (limpa `ig_post_id/published_at` e agenda para agora)
 - Excluir carrossel
+
+---
+
+## /admin/costs — Custos
+
+### Visão geral
+
+- Custo total no período (USD)
+- Total de eventos de uso no período
+- Custo médio por evento
+
+### Quebras principais
+
+- Top workspaces por custo
+- Top usuários por custo
+- Modelos/provedores com maior custo agregado
+
+### Filtros
+
+- Período: 7 / 30 / 90 dias
+- Workspace: todos ou workspace específico
+
+> Fonte: tabela `usage_events` (instrumentada nas rotas de geração/publicação).
 
 ---
 
