@@ -61,6 +61,7 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - `/admin/costs` com alertas de pico de custo e risco de estouro de créditos
 - `/team` com visibilidade de limites (membros e créditos), alerta de consumo e bloqueio de convite ao atingir `memberLimit`
 - `/dashboard` com alerta de upgrade quando o consumo mensal de créditos atinge faixa de risco
+- Sidebar exibe consumo de créditos do workspace acima do bloco do usuário
 - Créditos e métricas de geração no workspace/admin priorizam `usage_events` (ledger), mantendo fallback legado em `carousels`
 - Consumo de crédito mensal ponderado por ação: geração de conteúdo, geração de imagem e publicação
 - Carrosséis agora usam soft delete (`deleted_at/deleted_by/deleted_reason`) para auditoria sem perder histórico

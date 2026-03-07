@@ -27,6 +27,18 @@ interface UserInfo {
   initials: string
 }
 
+interface WorkspaceLimits {
+  planLabel: string
+  monthlyPostCredits: number
+  usedCredits: number
+  remainingCredits: number
+  usagePercent: number
+}
+
+function formatCreditValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2)
+}
+
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
@@ -34,6 +46,7 @@ export function Sidebar() {
 
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const [isOwner, setIsOwner] = useState(false)
+  const [limits, setLimits] = useState<WorkspaceLimits | null>(null)
 
   useEffect(() => {
     async function loadUser() {
@@ -57,9 +70,23 @@ export function Sidebar() {
 
       setUserInfo({ email: user.email || '', displayName, initials })
       setIsOwner(typedProfile?.role === 'owner')
+
+      const limitsRes = await fetch('/api/workspace/limits').catch(() => null)
+      const limitsJson = limitsRes ? await limitsRes.json().catch(() => null) : null
+      if (limitsRes?.ok && limitsJson) {
+        setLimits({
+          planLabel: limitsJson.planLabel || 'Starter',
+          monthlyPostCredits: Number(limitsJson.monthlyPostCredits) || 0,
+          usedCredits: Number(limitsJson.usedCredits) || 0,
+          remainingCredits: Number(limitsJson.remainingCredits) || 0,
+          usagePercent: Number(limitsJson.usagePercent) || 0,
+        })
+      } else {
+        setLimits(null)
+      }
     }
     loadUser()
-  }, [])
+  }, [pathname])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -196,6 +223,30 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="px-4 py-4 border-t border-zinc-800">
+        {limits && (
+          <div className={cn(
+            'mb-3 rounded-lg border px-2.5 py-2',
+            limits.usagePercent >= 100
+              ? 'border-red-700/50 bg-red-950/20'
+              : limits.usagePercent >= 80
+                ? 'border-amber-700/50 bg-amber-950/20'
+                : 'border-zinc-700 bg-zinc-800/40'
+          )}>
+            <p className={cn(
+              'text-[11px] font-medium',
+              limits.usagePercent >= 100
+                ? 'text-red-300'
+                : limits.usagePercent >= 80
+                  ? 'text-amber-300'
+                  : 'text-zinc-300'
+            )}>
+              Créditos: {formatCreditValue(limits.usedCredits)}/{formatCreditValue(limits.monthlyPostCredits)} ({limits.usagePercent}%)
+            </p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">
+              Plano {limits.planLabel} · Restantes: {formatCreditValue(limits.remainingCredits)}
+            </p>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white">
             {userInfo?.initials || '?'}
