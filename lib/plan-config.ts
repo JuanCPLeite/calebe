@@ -2,6 +2,8 @@ export interface PlanConfig {
   id: string
   label: string
   expertLimit: number
+  memberLimit: number
+  monthlyPostCredits: number
   description: string
 }
 
@@ -10,18 +12,24 @@ export const DEFAULT_PLAN_CONFIGS: PlanConfig[] = [
     id: 'starter',
     label: 'Starter',
     expertLimit: 1,
+    memberLimit: 1,
+    monthlyPostCredits: 30,
     description: 'Plano de entrada com 1 expert ativo por workspace.',
   },
   {
     id: 'pro',
     label: 'Pro',
     expertLimit: 3,
+    memberLimit: 3,
+    monthlyPostCredits: 100,
     description: 'Plano intermediario com ate 3 experts por workspace.',
   },
   {
     id: 'agency',
     label: 'Agency',
     expertLimit: 5,
+    memberLimit: 10,
+    monthlyPostCredits: 1000,
     description: 'Plano avancado com ate 5 experts por workspace.',
   },
 ]
@@ -63,8 +71,10 @@ export function parsePlanConfigs(value: unknown): PlanConfig[] {
       ? item.description.trim().slice(0, 240)
       : ''
     const expertLimit = toPositiveInt(item.expertLimit, 1)
+    const memberLimit = toPositiveInt(item.memberLimit, expertLimit)
+    const monthlyPostCredits = toPositiveInt(item.monthlyPostCredits, 30)
 
-    normalized.push({ id, label, expertLimit, description })
+    normalized.push({ id, label, expertLimit, memberLimit, monthlyPostCredits, description })
     used.add(id)
   }
 
@@ -85,4 +95,3 @@ export function getExpertLimitForPlan(
   if (found) return found.expertLimit
   return plans[0]?.expertLimit || DEFAULT_PLAN_CONFIGS[0].expertLimit
 }
-

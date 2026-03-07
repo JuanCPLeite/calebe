@@ -43,6 +43,7 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] UI de `/admin/carousels` com filtros globais + ações operacionais
 - [x] UI de `/admin/plans` com popup de dicas e edição de limites por plano
 - [x] API `GET /api/admin/costs` (owner only) com agregados por período/workspace
+- [x] API `GET/POST/DELETE /api/admin/costs/prices` (owner only) para catálogo de preços
 - [x] UI `/admin/costs` com custo total, top workspaces, top usuários e modelos mais caros
 - [ ] Refinos finais de UX nas telas admin (próximo foco: selector de workspace no header)
 
@@ -189,6 +190,12 @@ Filtros:
 
 > Fonte: tabela `usage_events` (instrumentada nas rotas de geração/publicação).
 
+### Catálogo de Preços
+
+- Cadastro manual de preço por `provider + model + unit`.
+- Versionamento por `effective_from`.
+- Suporta remoção de linhas antigas.
+
 ---
 
 ## /admin/logs — System Logs Viewer
@@ -253,6 +260,17 @@ Tabela editável: qual modelo cada plano pode usar.
 | Claude Sonnet | ❌ | ✅ | ✅ |
 | Claude Opus | ❌ | ✅ | ✅ |
 | GPT-4o | ❌ | ❌ | ✅ |
+
+### Seção: Limites por Plano (Admin Plans)
+
+Cada plano pode configurar:
+- `expertLimit` (quantos experts por workspace)
+- `memberLimit` (quantos usuários por workspace)
+- `monthlyPostCredits` (créditos mensais de geração)
+
+Enforcement inicial ativo:
+- convite de membro bloqueia ao atingir `memberLimit`
+- geração de conteúdo bloqueia ao atingir `monthlyPostCredits`
 
 ### Seção: Configurações do Sistema
 

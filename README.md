@@ -53,8 +53,10 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Dashboard: lista/grid, filtros, métricas, thumbnails ao vivo, duplicar, excluir
 - Admin owner: visão global de postagens em `/admin/carousels` com ações operacionais
 - Admin owner: gestão de tipos de plano em `/admin/plans` (planos customizados + limite de experts)
+- Planos agora suportam também `memberLimit` e `monthlyPostCredits`
 - Base de Cost Intelligence no schema: catálogo de preços + eventos de consumo/custo
 - Admin owner: visão de custos em `/admin/costs` (top workspaces, top usuários e modelos)
+- Admin owner: catálogo de preços em `/admin/costs` para cálculo de custo real por unidade
 - Content Hub DB: platforms, content_formats, templates, template_prompts
 - UX DNA Expert em duas etapas: lista primeiro; formulário só após selecionar um DNA ou clicar em `Novo`
 - UX Fotos de Referência em duas etapas: lista primeiro; detalhes/fotos após selecionar expert
@@ -64,6 +66,9 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Fase 3 concluída no escopo admin/workspace (tokens centralizados na plataforma)
 - Fase 4 em aberto: selector de modelo + suporte multi-provider na UI de geração
 - Cost Intelligence em progresso: eventos de custo já instrumentados em geração de conteúdo, imagens e publicação
+- Enforcement inicial de limites ativo:
+- convite de equipe bloqueado ao atingir `memberLimit`
+- geração de conteúdo bloqueada ao atingir `monthlyPostCredits`
 
 ### Roadmap
 Ver `ROADMAP.md` para o plano completo.

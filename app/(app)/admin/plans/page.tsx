@@ -9,6 +9,8 @@ interface PlanItem {
   id: string
   label: string
   expertLimit: number
+  memberLimit: number
+  monthlyPostCredits: number
   description: string
 }
 
@@ -16,13 +18,15 @@ const DEFAULT_NEW_PLAN: PlanItem = {
   id: '',
   label: '',
   expertLimit: 1,
+  memberLimit: 1,
+  monthlyPostCredits: 30,
   description: '',
 }
 
 const TIPS = [
-  'Starter: 1 expert e onboarding simples.',
-  'Pro: 3 experts para operacao recorrente.',
-  'Agency: 5+ experts para equipes e clientes.',
+  'Starter: poucos usuarios e poucos creditos.',
+  'Pro: limite intermediario para operacao recorrente.',
+  'Agency: mais usuarios, mais experts e mais creditos.',
   'Use limites como referencia, nao como regra fixa.',
 ]
 
@@ -76,6 +80,8 @@ export default function AdminPlansPage() {
       id: normalizeId(newPlan.id),
       label: newPlan.label.trim(),
       expertLimit: Math.max(1, Math.min(100, Math.floor(Number(newPlan.expertLimit) || 1))),
+      memberLimit: Math.max(1, Math.min(500, Math.floor(Number(newPlan.memberLimit) || 1))),
+      monthlyPostCredits: Math.max(1, Math.min(100000, Math.floor(Number(newPlan.monthlyPostCredits) || 1))),
       description: newPlan.description.trim(),
     }
     setPlans((prev) => [...prev, plan])
@@ -137,7 +143,7 @@ export default function AdminPlansPage() {
         <>
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
             <p className="text-sm font-medium text-zinc-100">Adicionar plano</p>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
               <Input
                 value={newPlan.id}
                 onChange={(e) => setNewPlan((p) => ({ ...p, id: normalizeId(e.target.value) }))}
@@ -160,6 +166,24 @@ export default function AdminPlansPage() {
                 className="bg-zinc-800 border-zinc-700 text-zinc-100"
               />
               <Input
+                type="number"
+                min={1}
+                max={500}
+                value={newPlan.memberLimit}
+                onChange={(e) => setNewPlan((p) => ({ ...p, memberLimit: Number(e.target.value) || 1 }))}
+                placeholder="Limite usuarios"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100"
+              />
+              <Input
+                type="number"
+                min={1}
+                max={100000}
+                value={newPlan.monthlyPostCredits}
+                onChange={(e) => setNewPlan((p) => ({ ...p, monthlyPostCredits: Number(e.target.value) || 1 }))}
+                placeholder="Creditos mes"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100"
+              />
+              <Input
                 value={newPlan.description}
                 onChange={(e) => setNewPlan((p) => ({ ...p, description: e.target.value }))}
                 placeholder="Descricao (opcional)"
@@ -176,21 +200,23 @@ export default function AdminPlansPage() {
             <p className="text-xs text-zinc-500">
               Para editar: altere nome/limite/descricao e clique em <strong className="text-zinc-300">Salvar planos</strong>.
             </p>
-            <div className="hidden md:grid md:grid-cols-12 gap-2 px-1 text-[11px] uppercase tracking-wide text-zinc-500">
+            <div className="hidden md:grid md:grid-cols-14 gap-2 px-1 text-[11px] uppercase tracking-wide text-zinc-500">
               <p className="md:col-span-2">ID</p>
-              <p className="md:col-span-3">Nome</p>
+              <p className="md:col-span-2">Nome</p>
               <p className="md:col-span-2">Limite Experts</p>
-              <p className="md:col-span-4">Descricao</p>
+              <p className="md:col-span-2">Limite Usuarios</p>
+              <p className="md:col-span-2">Creditos/mes</p>
+              <p className="md:col-span-5">Descricao</p>
               <p className="md:col-span-1">Acao</p>
             </div>
             <div className="space-y-2">
               {plans.map((item, index) => (
-                <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+                <div key={item.id} className="grid grid-cols-1 md:grid-cols-14 gap-2 rounded-lg border border-zinc-800 bg-zinc-900 p-3">
                   <Input value={item.id} disabled className="md:col-span-2 bg-zinc-800 border-zinc-700 text-zinc-400" />
                   <Input
                     value={item.label}
                     onChange={(e) => updatePlan(index, { label: e.target.value })}
-                    className="md:col-span-3 bg-zinc-800 border-zinc-700 text-zinc-100"
+                    className="md:col-span-2 bg-zinc-800 border-zinc-700 text-zinc-100"
                     disabled={readonly}
                   />
                   <Input
@@ -203,9 +229,27 @@ export default function AdminPlansPage() {
                     disabled={readonly}
                   />
                   <Input
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={item.memberLimit}
+                    onChange={(e) => updatePlan(index, { memberLimit: Math.max(1, Number(e.target.value) || 1) })}
+                    className="md:col-span-2 bg-zinc-800 border-zinc-700 text-zinc-100"
+                    disabled={readonly}
+                  />
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100000}
+                    value={item.monthlyPostCredits}
+                    onChange={(e) => updatePlan(index, { monthlyPostCredits: Math.max(1, Number(e.target.value) || 1) })}
+                    className="md:col-span-2 bg-zinc-800 border-zinc-700 text-zinc-100"
+                    disabled={readonly}
+                  />
+                  <Input
                     value={item.description || ''}
                     onChange={(e) => updatePlan(index, { description: e.target.value })}
-                    className="md:col-span-4 bg-zinc-800 border-zinc-700 text-zinc-100"
+                    className="md:col-span-5 bg-zinc-800 border-zinc-700 text-zinc-100"
                     disabled={readonly}
                   />
                   <Button

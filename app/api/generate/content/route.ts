@@ -5,6 +5,7 @@ import { generateWithTemplate } from '@/lib/template-engine'
 import { getWorkspaceContext, getAppKeys } from '@/lib/workspace'
 import { log } from '@/lib/logger'
 import { recordUsageEvent } from '@/lib/usage-events'
+import { getWorkspacePlanLimits } from '@/lib/plan-limits'
 import type { ProviderId } from '@/lib/providers/types'
 
 type WorkspacePlan = 'starter' | 'pro' | 'agency'
@@ -44,6 +45,11 @@ function estimateTokensFromCharCount(charCount: number): number {
   return Math.max(1, Math.ceil(Math.max(0, charCount) / 4))
 }
 
+function monthStartIso(): string {
+  const now = new Date()
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)).toISOString()
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -70,6 +76,27 @@ export async function POST(req: NextRequest) {
       JSON.stringify({ error: 'Perfil de expert não encontrado. Configure em Expert → DNA.' }),
       { status: 400 }
     )
+  }
+
+  if (workspaceId) {
+    const [limits, usageRes] = await Promise.all([
+      getWorkspacePlanLimits(workspaceId),
+      supabase
+        .from('carousels')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', workspaceId)
+        .gte('created_at', monthStartIso()),
+    ])
+
+    const usedCredits = usageRes.count || 0
+    if (usedCredits >= limits.monthlyPostCredits) {
+      return new Response(
+        JSON.stringify({
+          error: `Limite mensal de créditos do plano ${limits.planLabel} atingido (${limits.monthlyPostCredits}).`,
+        }),
+        { status: 403 }
+      )
+    }
   }
 
   const { data: workspace } = workspaceId

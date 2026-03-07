@@ -65,6 +65,8 @@ Uso típico:
    - `/api/publish` (evento `publish`)
 2. Endpoint owner `/api/admin/costs` com agregados por período/workspace.
 3. Tela owner `/admin/costs` com top workspaces, top usuários e top modelos.
+4. Gestão de preços em `/api/admin/costs/prices` integrada à tela `/admin/costs`.
+5. Enforcement inicial de créditos mensais em `/api/generate/content` via `monthlyPostCredits`.
 
 ---
 

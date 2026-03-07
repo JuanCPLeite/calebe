@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/logger'
+import { getWorkspacePlanLimits } from '@/lib/plan-limits'
 
 type MemberRole = 'admin' | 'member'
 
@@ -119,6 +120,30 @@ export async function POST(req: NextRequest) {
       { error: 'Usuário não encontrado. Peça para ele criar conta antes de convidar.' },
       { status: 404 }
     )
+  }
+
+  const { data: existingMember } = await admin
+    .from('workspace_members')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .eq('user_id', targetUser.id)
+    .maybeSingle()
+
+  if (!existingMember) {
+    const limits = await getWorkspacePlanLimits(workspaceId)
+    const { count } = await admin
+      .from('workspace_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+
+    if ((count || 0) >= limits.memberLimit) {
+      return NextResponse.json(
+        {
+          error: `Limite de usuários do plano ${limits.planLabel} atingido (${limits.memberLimit}).`,
+        },
+        { status: 403 }
+      )
+    }
   }
 
   const { error } = await admin

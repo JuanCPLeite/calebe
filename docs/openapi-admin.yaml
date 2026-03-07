@@ -305,6 +305,64 @@ paths:
           description: Não autenticado
         '403':
           description: Acesso negado
+  /api/admin/costs/prices:
+    get:
+      summary: Lista catálogo de preços de custo
+      tags: [Admin Costs]
+      responses:
+        '200':
+          description: Lista de preços (provider/model/unit)
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+    post:
+      summary: Cadastra nova linha de preço
+      tags: [Admin Costs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, unit, pricePerUnit]
+              properties:
+                provider: { type: string }
+                model: { type: string }
+                unit: { type: string }
+                pricePerUnit: { type: number, minimum: 0 }
+                currency: { type: string, default: USD }
+                effectiveFrom: { type: string, format: date-time }
+      responses:
+        '201':
+          description: Preço cadastrado
+        '400':
+          description: Payload inválido
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+    delete:
+      summary: Remove uma linha de preço
+      tags: [Admin Costs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Preço removido
+        '400':
+          description: Payload inválido
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
   /api/admin/users:
     get:
       summary: Lista usuários da plataforma
