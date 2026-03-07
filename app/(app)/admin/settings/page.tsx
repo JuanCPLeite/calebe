@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, Save } from 'lucide-react'
+import { Loader2, Save, Eye, EyeOff, PlugZap } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
@@ -20,6 +20,8 @@ interface SettingsResponse {
   updatedAt: string | null
 }
 
+type Provider = 'anthropic' | 'google' | 'openai' | 'exa'
+
 export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -31,6 +33,30 @@ export default function AdminSettingsPage() {
     googleKey: '',
     openaiKey: '',
     exaKey: '',
+  })
+  const [revealed, setRevealed] = useState<Record<Provider, string>>({
+    anthropic: '',
+    google: '',
+    openai: '',
+    exa: '',
+  })
+  const [revealing, setRevealing] = useState<Record<Provider, boolean>>({
+    anthropic: false,
+    google: false,
+    openai: false,
+    exa: false,
+  })
+  const [testing, setTesting] = useState<Record<Provider, boolean>>({
+    anthropic: false,
+    google: false,
+    openai: false,
+    exa: false,
+  })
+  const [testResult, setTestResult] = useState<Record<Provider, { ok: boolean; detail: string } | null>>({
+    anthropic: null,
+    google: null,
+    openai: null,
+    exa: null,
   })
 
   async function loadSettings() {
@@ -78,6 +104,7 @@ export default function AdminSettingsPage() {
       setMasked(data.keys)
       setUpdatedAt(data.updatedAt ?? null)
       setForm({ anthropicKey: '', googleKey: '', openaiKey: '', exaKey: '' })
+      setRevealed({ anthropic: '', google: '', openai: '', exa: '' })
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar settings')
     } finally {
@@ -85,7 +112,56 @@ export default function AdminSettingsPage() {
     }
   }
 
+  async function toggleReveal(provider: Provider) {
+    if (revealed[provider]) {
+      setRevealed((prev) => ({ ...prev, [provider]: '' }))
+      return
+    }
+
+    setRevealing((prev) => ({ ...prev, [provider]: true }))
+    setError('')
+    try {
+      const res = await fetch('/api/admin/settings/reveal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Falha ao revelar chave')
+      setRevealed((prev) => ({ ...prev, [provider]: data.value || '' }))
+    } catch (err: any) {
+      setError(err.message || 'Erro ao revelar chave')
+    } finally {
+      setRevealing((prev) => ({ ...prev, [provider]: false }))
+    }
+  }
+
+  async function handleTest(provider: Provider) {
+    setTesting((prev) => ({ ...prev, [provider]: true }))
+    setError('')
+    try {
+      const res = await fetch('/api/admin/settings/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider }),
+      })
+      const data = await res.json()
+      setTestResult((prev) => ({
+        ...prev,
+        [provider]: { ok: Boolean(data.ok), detail: data.detail || '' },
+      }))
+    } catch (err: any) {
+      setTestResult((prev) => ({
+        ...prev,
+        [provider]: { ok: false, detail: err.message || 'Erro ao testar conexão' },
+      }))
+    } finally {
+      setTesting((prev) => ({ ...prev, [provider]: false }))
+    }
+  }
+
   const row = (
+    provider: Provider,
     label: string,
     placeholder: string,
     field: keyof typeof form,
@@ -98,13 +174,49 @@ export default function AdminSettingsPage() {
           {view?.configured ? 'Configurada' : 'Não configurada'}
         </span>
       </div>
-      <p className="text-xs text-zinc-500">Atual: {view?.masked || '—'}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-zinc-500">
+          Atual: {revealed[provider] || view?.masked || '—'}
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-zinc-700 text-zinc-200"
+          onClick={() => toggleReveal(provider)}
+          disabled={revealing[provider] || !view?.configured}
+        >
+          {revealing[provider]
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : revealed[provider]
+              ? <EyeOff className="w-4 h-4" />
+              : <Eye className="w-4 h-4" />
+          }
+          {revealed[provider] ? 'Ocultar' : 'Revelar'}
+        </Button>
+      </div>
       <Input
         value={form[field]}
         onChange={(e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))}
         placeholder={placeholder}
         className="bg-zinc-800 border-zinc-700 text-zinc-100"
       />
+      <div className="flex items-center justify-between gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-zinc-700 text-zinc-200"
+          onClick={() => handleTest(provider)}
+          disabled={testing[provider] || !view?.configured}
+        >
+          {testing[provider] ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlugZap className="w-4 h-4" />}
+          Testar conexão
+        </Button>
+        {testResult[provider] && (
+          <span className={`text-xs ${testResult[provider]!.ok ? 'text-green-400' : 'text-red-400'}`}>
+            {testResult[provider]!.detail}
+          </span>
+        )}
+      </div>
     </div>
   )
 
@@ -121,10 +233,10 @@ export default function AdminSettingsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {row('Anthropic', 'sk-ant-...', 'anthropicKey', masked?.anthropic)}
-          {row('Google', 'AIza...', 'googleKey', masked?.google)}
-          {row('OpenAI', 'sk-...', 'openaiKey', masked?.openai)}
-          {row('EXA', 'exa_...', 'exaKey', masked?.exa)}
+          {row('anthropic', 'Anthropic', 'sk-ant-...', 'anthropicKey', masked?.anthropic)}
+          {row('google', 'Google', 'AIza...', 'googleKey', masked?.google)}
+          {row('openai', 'OpenAI', 'sk-...', 'openaiKey', masked?.openai)}
+          {row('exa', 'EXA', 'exa_...', 'exaKey', masked?.exa)}
         </div>
       )}
 

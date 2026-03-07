@@ -40,6 +40,54 @@ paths:
           description: Não autenticado
         '403':
           description: Acesso negado
+  /api/admin/settings/reveal:
+    post:
+      summary: Revela chave atual de um provider (owner-only)
+      tags: [Admin Settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider]
+              properties:
+                provider:
+                  type: string
+                  enum: [anthropic, google, openai, exa]
+      responses:
+        '200':
+          description: Valor da chave retornado
+        '400':
+          description: Provider inválido
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+  /api/admin/settings/test:
+    post:
+      summary: Testa conexão do provider usando chave salva
+      tags: [Admin Settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider]
+              properties:
+                provider:
+                  type: string
+                  enum: [anthropic, google, openai, exa]
+      responses:
+        '200':
+          description: Resultado do teste de conexão
+        '400':
+          description: Provider inválido
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
   /api/admin/workspaces:
     get:
       summary: Lista workspaces

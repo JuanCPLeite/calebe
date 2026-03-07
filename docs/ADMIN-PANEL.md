@@ -29,12 +29,13 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] API `GET /api/admin/metrics` (owner only) para cards e atividade recente
 - [x] OpenAPI inicial das rotas admin em `docs/openapi-admin.yaml`
 - [x] UI MVP de `/admin/settings` (carrega/salva chaves)
+- [x] `/admin/settings` com reveal seguro de chave e teste de conexão por provider
 - [x] UI MVP de `/admin/workspaces` (listar/criar/suspender/alterar plano)
 - [x] UI MVP de `/admin/workspaces/[id]` (informações, membros, uso e logs recentes)
 - [x] UI de `/admin` com métricas reais + atividade recente
 - [x] UI MVP de `/admin/logs` (tabela + filtros + payload + modal de detalhe)
 - [x] UI MVP de `/admin/users` (listar/filtrar/editar role/workspace)
-- [ ] Refinos finais de UX nas telas admin
+- [ ] Refinos finais de UX nas telas admin (foco atual: `/admin/workspaces`)
 
 ---
 
