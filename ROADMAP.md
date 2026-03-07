@@ -1,96 +1,127 @@
-# Roadmap — Carousel Studio → Content Hub
+# Roadmap — Carousel Studio SaaS
 
-Data de referencia: 06/03/2026
+Data de referência: 06/03/2026
 
 ---
 
-## Concluido
+## Concluído
 
 ### Sprint 1 — Base do produto
 - [x] Estrutura Next.js + shadcn + Tailwind
-- [x] Sidebar e navegacao principal
+- [x] Sidebar e navegação principal
 - [x] Auth com Supabase
 - [x] Banco com RLS e storage
 
-### Sprint 2 — Motor de geracao
-- [x] Geracao de topicos (`/api/topics`) com EXA/Claude/mock
-- [x] Geracao de conteudo Claude com streaming SSE
-- [x] Geracao de imagens Gemini
+### Sprint 2 — Motor de geração
+- [x] Geração de tópicos (`/api/topics`) com EXA/Claude/mock
+- [x] Geração de conteúdo Claude com streaming SSE
+- [x] Geração de imagens Gemini
 - [x] Render de cards e preview completo
 
-### Sprint 3 — Expert configuravel
+### Sprint 3 — Expert configurável
 - [x] DNA do expert (tom, estilo, CTA, templates fixos)
-- [x] Upload e ordenacao de fotos de referencia
-- [x] Perfil e publico
-- [x] Persistencia em Supabase
+- [x] Upload e ordenação de fotos de referência
+- [x] Perfil e público
+- [x] Persistência em Supabase
 
-### Sprint 4 — Publicacao e operacao
-- [x] Persistencia de carrosseis
-- [x] Publicacao no Instagram via Meta Graph API
-- [x] Dashboard com filtros, busca, duplicacao e exclusao
+### Sprint 4 — Publicação e operação
+- [x] Persistência de carrosséis
+- [x] Publicação no Instagram via Meta Graph API
+- [x] Dashboard com filtros, busca, duplicação e exclusão
 - [x] Agendamento (`scheduled_at`) e endpoint de cron
 
-### Sprint 5 — Editor e multiplos templates
+### Sprint 5 — Editor e múltiplos templates
 - [x] Editor de carrossel com coverflow (prev/ativo/next)
 - [x] Layout FrankCard pixel-perfect com controle de fonte e highlight
 - [x] Template "X vs Y" (split layout comparativo) — SplitCard
 - [x] Dashboard com thumbnails ao vivo via FrankCard (ResizeObserver)
-- [x] Dashboard: metricas, filtros por status, busca, view lista/grid
+- [x] Dashboard: métricas, filtros por status, busca, view lista/grid
+
+### Sprint 6 — Content Hub Foundation + Template Engine
 - [x] Arquitetura Content Hub documentada (`docs/CONTENT-HUB-ARCHITECTURE.md`)
+- [x] Tabelas Supabase: platforms, content_formats, templates, template_prompts
+- [x] Seed: 5 plataformas, 8 formatos, 2 templates, 4 prompts em {{variable}} syntax
+- [x] Provider abstraction: ContentProvider interface, AnthropicProvider, registry
+- [x] Template Engine: busca prompt do DB, interpola variáveis, fallback hardcoded
+- [x] Route handler simplificado para delegar ao Template Engine
 
 ---
 
-## Em andamento / proximo
+## Em andamento / próximo
 
-### Fase 1 — Foundation DB (Content Hub)
-> Objetivo: mover templates e prompts do hardcode para o Supabase, sem mudar comportamento no frontend.
+### Fase 3 — Multi-tenant + Admin Panel
+> Objetivo: transformar em SaaS real com owner, clientes e funcionários.
+> Documentação: `docs/MULTI-TENANT-ARCHITECTURE.md`, `docs/ADMIN-PANEL.md`
 
-- [ ] Criar tabelas `platforms`, `content_formats`, `templates`, `template_prompts` no Supabase
-- [ ] Popular com os 2 templates existentes (frank-costa-10, positivo-negativo) e seus prompts atuais
-- [ ] Adicionar SQL ao `supabase-schema.sql`
-- [ ] Validar fallback hardcoded funcionando enquanto DB nao esta em uso
+**Schema:**
+- [ ] Tabela `profiles` (role: owner/admin/member) com trigger de criação automática
+- [ ] Tabela `workspaces` (uma por cliente/time)
+- [ ] Tabela `workspace_members` (liga usuário a workspace com role)
+- [ ] Tabela `app_settings` (chaves de IA da plataforma — owner only)
+- [ ] Tabela `system_logs` (append-only, índices por workspace/level/event)
+- [ ] Migrar `experts` e `carousels`: `user_id` → `workspace_id` + `created_by`
+- [ ] RLS helpers: `current_workspace_id()`, `is_owner()`, `current_user_role()`
+- [ ] Atualizar todas as policies RLS
 
-### Fase 2 — Template Engine
-> Objetivo: sistema de geracao dinamico — busca prompt no DB, injeta variaveis, streama via provider.
+**Backend:**
+- [ ] `lib/logger.ts` — helper fire-and-forget para system_logs
+- [ ] `lib/workspace.ts` — resolver workspace do usuário atual
+- [ ] `app/api/generate/content` — buscar tokens em `app_settings` em vez de `user_tokens`
+- [ ] Middleware de autorização para rotas `/admin/*` e `/team/*`
+- [ ] `app/api/admin/settings` — CRUD de app_settings (owner only)
+- [ ] `app/api/admin/workspaces` — listar/criar/suspender workspaces
 
-- [ ] `lib/providers/types.ts` — interface `ContentProvider` unificada
-- [ ] `lib/providers/anthropic.ts` — extrair logica atual do route handler
-- [ ] `lib/providers/registry.ts` — mapa `providerId → instancia`
-- [ ] `lib/template-engine.ts` — busca prompt do DB, interpola `{{variaveis}}`, streama SSE
-- [ ] `app/api/generate/content/route.ts` — delegar ao TemplateEngine
-- [ ] Cache de prompts (Map com TTL 5min para evitar hit no DB por geracao)
+**Frontend — Painel Admin (`/admin`):**
+- [ ] `/admin` — dashboard: métricas globais + atividade recente
+- [ ] `/admin/settings` — chaves de IA com mascaramento + teste de conexão
+- [ ] `/admin/workspaces` — lista de clientes com plano, uso e ações
+- [ ] `/admin/workspaces/[id]` — detalhe: membros, uso, logs do workspace
+- [ ] `/admin/logs` — viewer com filtros (level, evento, workspace, período)
+- [ ] `/admin/users` — todos os usuários com role e workspace
 
-### Fase 3 — Multi-Provider UI
-> Objetivo: usuario escolhe qual IA usar para gerar (Claude, GPT-4o, Gemini).
+**Frontend — Workspace:**
+- [ ] Selector de workspace no header (para quem é membro de múltiplos)
+- [ ] `/team` — gerenciar membros (admin only): convidar, alterar role, remover
+- [ ] Remover `/tokens` (tokens são da plataforma agora)
 
-- [ ] Selector de IA na tela de geracao
-- [ ] Mostrar apenas providers com chave configurada em `user_tokens`
+### Fase 4 — Multi-Provider UI
+> Objetivo: usuário escolhe qual modelo de IA usar para gerar.
+
+- [ ] Selector de modelo na tela de geração
+- [ ] Mostrar apenas modelos disponíveis para o plano do workspace
 - [ ] `lib/providers/openai.ts` — GPT-4o
-- [ ] Persistir `provider_used` no carousel para analytics
+- [ ] Persistir `model_used` no carousel para analytics
 
-### Fase 4 — Multi-Plataforma
-> Objetivo: gerar conteudo para Instagram, LinkedIn, Facebook, Twitter/X, Pinterest.
+### Fase 5 — Multi-Plataforma
+> Objetivo: gerar conteúdo para Instagram, LinkedIn, Facebook, Twitter/X, Pinterest.
 
-- [ ] Platform selector na tela de geracao
-- [ ] Format selector por plataforma (carrossel, post, story, thread)
+- [ ] Platform selector na geração
+- [ ] Format selector por plataforma
 - [ ] Preview adaptado por aspect ratio (4:5, 1:1, 9:16, 16:9, 2:3)
-- [ ] Adaptar fluxo de publicacao por plataforma (LinkedIn API, Twitter API)
+- [ ] Adaptar publicação por plataforma (LinkedIn API, Twitter API)
 
-### Fase 5 — Content Hub UI
-> Objetivo: nova experiencia de criacao — fluxo guiado da ideia ate a publicacao.
+### Fase 6 — Content Hub UI
+> Objetivo: nova experiência de criação — fluxo guiado da ideia até a publicação.
 
 - [ ] Nova rota `/create` substituindo `/generate`
-- [ ] Fluxo: Ideia → Plataforma → Formato → Template → IA → Gerar
+- [ ] Fluxo: Ideia → Plataforma → Formato → Template → Modelo → Gerar
 - [ ] Dashboard filtrado por plataforma + formato
-- [ ] Biblioteca de conteudo (search, tags, favoritos)
+- [ ] Biblioteca de conteúdo (search, tags, favoritos)
+
+### Fase 7 — Monetização
+> Objetivo: billing com Stripe, limites por plano, onboarding de clientes.
+
+- [ ] Integração Stripe (checkout, webhooks, portal do cliente)
+- [ ] Limites por plano (carrosséis/mês, membros, modelos disponíveis)
+- [ ] Página de planos pública (`/pricing`)
+- [ ] Onboarding guiado para novos clientes
+- [ ] Emails transacionais (convite de membro, confirmação de plano)
 
 ---
 
-## Backlog tecnico (qualquer sprint)
-- [ ] Hardening do cron para execucao 100% confiavel sem sessao de usuario
-- [ ] Idempotencia forte em publicacao (evitar duplicidade)
-- [ ] Logs estruturados e rastreabilidade por `carousel_id`
+## Backlog técnico (qualquer fase)
+- [ ] Hardening do cron para execução 100% confiável sem sessão de usuário
+- [ ] Idempotência forte em publicação (evitar duplicidade)
 - [ ] Migrar `middleware.ts` para `proxy.ts` (Next 16)
-- [ ] Melhorar build offline (fontes locais ou fallback)
-- [ ] Landing + onboarding
-- [ ] Planos/pagamento (Stripe)
+- [ ] Fontes locais para build offline
+- [ ] Retenção automática de logs (pg_cron deletar logs info > 90 dias)
