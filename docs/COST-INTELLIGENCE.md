@@ -90,6 +90,9 @@ Uso típico:
 22. Bloqueio de excedente de custo aplicado em `/api/generate/content`, `/api/generate/images` e `/api/publish`.
 23. `/api/workspace/limits` agora retorna também uso de orçamento mensal (USD) para a UI.
 24. Simulação de margem por plano entregue em `/admin/costs` com base no preço mensal configurável (`monthlyPriceUsd`) do `Admin Plans`.
+25. Geração de conteúdo passou a registrar `token_in/token_out` com telemetria nativa (Anthropic/OpenAI); fallback por estimativa só quando necessário.
+26. `/admin/costs` passou a mostrar custo por carrossel (salvo/publicado), agregando `usage_events` por `carousel_id`.
+27. `/api/workspace/limits` passou a retornar recomendação automática de upgrade quando uso de crédito/orçamento está alto e há plano superior configurado.
 
 ---
 

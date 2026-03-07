@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
 
     let usageQuery = admin
       .from('usage_events')
-      .select('workspace_id, user_id, provider, model, event_type, unit, quantity, total_cost_usd, created_at')
+      .select('workspace_id, user_id, carousel_id, provider, model, event_type, unit, quantity, total_cost_usd, created_at')
       .gte('created_at', from)
       .order('created_at', { ascending: false })
       .limit(5000)
@@ -122,6 +122,7 @@ export async function GET(req: NextRequest) {
     const byWorkspace = new Map<string, number>()
     const byUser = new Map<string, number>()
     const byModel = new Map<string, { provider: string; model: string; cost: number; quantity: number }>()
+    const byCarousel = new Map<string, { carouselId: string; workspaceId: string; workspaceName: string; totalCostUsd: number; eventCount: number }>()
     const userBreakdown = new Map<
       string,
       {
@@ -147,6 +148,7 @@ export async function GET(req: NextRequest) {
       const provider = row.provider || 'unknown'
       const model = row.model || ''
       const modelKey = `${provider}:${model}`
+      const carouselId = row.carousel_id || ''
 
       totalCostUsd += cost
       if (day) byDay.set(day, (byDay.get(day) || 0) + cost)
@@ -157,6 +159,19 @@ export async function GET(req: NextRequest) {
       current.cost += cost
       current.quantity += qty
       byModel.set(modelKey, current)
+
+      if (carouselId) {
+        const currentCarousel = byCarousel.get(carouselId) || {
+          carouselId,
+          workspaceId: wsId,
+          workspaceName: wsNameById.get(wsId) || wsId,
+          totalCostUsd: 0,
+          eventCount: 0,
+        }
+        currentCarousel.totalCostUsd += cost
+        currentCarousel.eventCount += 1
+        byCarousel.set(carouselId, currentCarousel)
+      }
 
       const breakdownKey = `${wsId}:${userId}`
       const breakdown = userBreakdown.get(breakdownKey) || {
@@ -211,6 +226,38 @@ export async function GET(req: NextRequest) {
         totalCostUsd: item.cost,
         totalQuantity: item.quantity,
       }))
+
+    const topCarouselCandidates = Array.from(byCarousel.values())
+      .sort((a, b) => b.totalCostUsd - a.totalCostUsd)
+      .slice(0, 30)
+    const topCarouselIds = topCarouselCandidates.map((item) => item.carouselId)
+    const carouselMetaById = new Map<string, { topic: string; published: boolean; createdAt: string | null }>()
+    if (topCarouselIds.length > 0) {
+      const { data: topCarouselsMetaRes } = await admin
+        .from('carousels')
+        .select('id, topic, ig_post_id, published_at, created_at')
+        .in('id', topCarouselIds)
+      for (const row of topCarouselsMetaRes || []) {
+        carouselMetaById.set(row.id, {
+          topic: row.topic || row.id,
+          published: Boolean(row.ig_post_id || row.published_at),
+          createdAt: row.created_at || null,
+        })
+      }
+    }
+    const topCarousels = topCarouselCandidates.map((item) => {
+      const meta = carouselMetaById.get(item.carouselId)
+      return {
+        carouselId: item.carouselId,
+        topic: meta?.topic || item.carouselId,
+        workspaceId: item.workspaceId,
+        workspaceName: item.workspaceName,
+        published: meta?.published || false,
+        createdAt: meta?.createdAt || null,
+        totalCostUsd: Number(item.totalCostUsd.toFixed(8)),
+        eventCount: item.eventCount,
+      }
+    })
     const byModelEffectiveness = new Map<string, { provider: string; model: string; generatedCount: number; publishedCount: number }>()
     for (const row of periodCarouselsRes.data || []) {
       const provider = row.provider_used || 'unknown'
@@ -471,6 +518,7 @@ export async function GET(req: NextRequest) {
       topWorkspaces,
       topUsers,
       topModels,
+      topCarousels,
       modelEffectiveness,
       userCreditBreakdown,
       daily,

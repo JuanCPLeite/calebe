@@ -46,6 +46,12 @@ function estimateTokensFromCharCount(charCount: number): number {
   return Math.max(1, Math.ceil(Math.max(0, charCount) / 4))
 }
 
+function toPositiveInt(value: unknown): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0
+  return Math.max(0, Math.floor(parsed))
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -190,8 +196,12 @@ export async function POST(req: NextRequest) {
           ].join(' ')
           const inputChars = [String(topic || ''), String(hook || ''), expertText].join(' ').length
           const outputChars = [String(event.caption || ''), JSON.stringify(event.slides || [])].join(' ').length
-          const estimatedInputTokens = estimateTokensFromCharCount(inputChars)
-          const estimatedOutputTokens = estimateTokensFromCharCount(outputChars)
+          const realInputTokens = toPositiveInt((event as any)?.tokenUsage?.inputTokens)
+          const realOutputTokens = toPositiveInt((event as any)?.tokenUsage?.outputTokens)
+          const usedEstimatedInput = realInputTokens <= 0
+          const usedEstimatedOutput = realOutputTokens <= 0
+          const inputTokens = usedEstimatedInput ? estimateTokensFromCharCount(inputChars) : realInputTokens
+          const outputTokens = usedEstimatedOutput ? estimateTokensFromCharCount(outputChars) : realOutputTokens
 
           await Promise.all([
             recordUsageEvent({
@@ -213,8 +223,11 @@ export async function POST(req: NextRequest) {
               model: event.modelUsed,
               eventType: 'content.generate',
               unit: 'token_in',
-              quantity: estimatedInputTokens,
-              metadata: { estimated: true },
+              quantity: inputTokens,
+              metadata: {
+                estimated: usedEstimatedInput,
+                source: usedEstimatedInput ? 'char_estimate' : 'provider_usage',
+              },
             }),
             recordUsageEvent({
               workspaceId,
@@ -224,8 +237,11 @@ export async function POST(req: NextRequest) {
               model: event.modelUsed,
               eventType: 'content.generate',
               unit: 'token_out',
-              quantity: estimatedOutputTokens,
-              metadata: { estimated: true },
+              quantity: outputTokens,
+              metadata: {
+                estimated: usedEstimatedOutput,
+                source: usedEstimatedOutput ? 'char_estimate' : 'provider_usage',
+              },
             }),
           ])
 

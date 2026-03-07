@@ -1,10 +1,16 @@
 export type ProviderId = 'anthropic' | 'openai' | 'google'
 
+export interface TokenUsage {
+  inputTokens?: number
+  outputTokens?: number
+}
+
 export interface StreamOptions {
   system: string
   user: string
   model?: string
   maxTokens?: number
+  onUsage?: (usage: TokenUsage) => void
 }
 
 export interface ContentProvider {

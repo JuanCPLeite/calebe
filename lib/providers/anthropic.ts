@@ -12,7 +12,7 @@ export class AnthropicProvider implements ContentProvider {
     this.client = new Anthropic({ apiKey })
   }
 
-  async *streamText({ system, user, model, maxTokens = 8192 }: StreamOptions): AsyncGenerator<string> {
+  async *streamText({ system, user, model, maxTokens = 8192, onUsage }: StreamOptions): AsyncGenerator<string> {
     const msgStream = this.client.messages.stream({
       model: model ?? this.defaultModel,
       max_tokens: maxTokens,
@@ -27,6 +27,17 @@ export class AnthropicProvider implements ContentProvider {
       ) {
         yield event.delta.text
       }
+    }
+
+    try {
+      const finalMessage = await msgStream.finalMessage()
+      const inputTokens = Number((finalMessage as any)?.usage?.input_tokens || 0)
+      const outputTokens = Number((finalMessage as any)?.usage?.output_tokens || 0)
+      if (onUsage && (inputTokens > 0 || outputTokens > 0)) {
+        onUsage({ inputTokens, outputTokens })
+      }
+    } catch {
+      // noop: mantém fallback de estimativa no chamador
     }
   }
 }

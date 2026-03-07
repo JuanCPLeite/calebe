@@ -35,6 +35,11 @@ interface WorkspaceLimits {
   remainingBudgetUsd: number | null
   budgetUsagePercent: number
   canGenerate: boolean
+  recommendation?: {
+    recommendedPlanId: string
+    recommendedPlanLabel: string
+    reason: string
+  } | null
 }
 
 const PLAN_MODEL_OPTIONS: Record<WorkspacePlan, ModelOption[]> = {
@@ -216,6 +221,7 @@ export default function GeneratePage() {
         remainingBudgetUsd: data.remainingBudgetUsd === null ? null : Number(data.remainingBudgetUsd || 0),
         budgetUsagePercent: Number(data.budgetUsagePercent) || 0,
         canGenerate: Boolean(data.canGenerate),
+        recommendation: data.recommendation || null,
       }
       setWorkspaceLimits(nextLimits)
       return nextLimits
@@ -897,6 +903,11 @@ export default function GeneratePage() {
           {workspaceLimits.budgetLimitUsd > 0 && (
             <p className="text-xs text-zinc-500 mt-0.5">
               Orçamento: {usd(workspaceLimits.usedBudgetUsd)}/{usd(workspaceLimits.budgetLimitUsd)} ({workspaceLimits.budgetUsagePercent}%).
+            </p>
+          )}
+          {workspaceLimits.recommendation && (
+            <p className="text-xs text-amber-300 mt-0.5">
+              Recomendação: upgrade para {workspaceLimits.recommendation.recommendedPlanLabel}. {workspaceLimits.recommendation.reason}
             </p>
           )}
         </div>

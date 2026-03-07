@@ -42,6 +42,11 @@ interface WorkspaceLimits {
   usedBudgetUsd: number
   budgetUsagePercent: number
   canGenerate: boolean
+  recommendation?: {
+    recommendedPlanId: string
+    recommendedPlanLabel: string
+    reason: string
+  } | null
 }
 
 type FilterTab = 'all' | 'draft' | 'scheduled' | 'published'
@@ -228,6 +233,7 @@ export default function DashboardPage() {
           usedBudgetUsd: Number(limitsJson.usedBudgetUsd) || 0,
           budgetUsagePercent: Number(limitsJson.budgetUsagePercent) || 0,
           canGenerate: Boolean(limitsJson.canGenerate),
+          recommendation: limitsJson.recommendation || null,
         })
       }
       setLoading(false)
@@ -393,6 +399,11 @@ export default function DashboardPage() {
           {workspaceLimits.budgetLimitUsd > 0 && (
             <p className="text-xs text-zinc-400 mt-0.5">
               {usd(workspaceLimits.usedBudgetUsd)}/{usd(workspaceLimits.budgetLimitUsd)} de orçamento ({workspaceLimits.budgetUsagePercent}%).
+            </p>
+          )}
+          {workspaceLimits.recommendation && (
+            <p className="text-xs text-amber-300 mt-0.5">
+              Recomendação: upgrade para {workspaceLimits.recommendation.recommendedPlanLabel}. {workspaceLimits.recommendation.reason}
             </p>
           )}
         </div>

@@ -192,6 +192,7 @@ Filtros:
 - Quebra de créditos por usuário e por ação (texto/imagem/publicação)
 - Comparativo de período (janela atual vs janela anterior) para custo, eventos e créditos
 - Modelos/provedores com maior custo agregado
+- Carrosséis com maior custo agregado (salvo/publicado)
 - Alertas automáticos (pico de custo e uso alto de créditos)
 - Projeção mensal de custo por workspace
 - Efetividade por modelo (gerado x publicado)

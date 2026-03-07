@@ -1,6 +1,10 @@
 import type { ContentProvider, StreamOptions } from './types'
 
 type OpenAIChunk = {
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+  }
   choices?: Array<{
     delta?: { content?: string }
   }>
@@ -17,7 +21,7 @@ export class OpenAIProvider implements ContentProvider {
     this.apiKey = apiKey
   }
 
-  async *streamText({ system, user, model, maxTokens = 8192 }: StreamOptions): AsyncGenerator<string> {
+  async *streamText({ system, user, model, maxTokens = 8192, onUsage }: StreamOptions): AsyncGenerator<string> {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -27,6 +31,7 @@ export class OpenAIProvider implements ContentProvider {
       body: JSON.stringify({
         model: model ?? this.defaultModel,
         stream: true,
+        stream_options: { include_usage: true },
         max_tokens: maxTokens,
         messages: [
           { role: 'system', content: system },
@@ -64,6 +69,14 @@ export class OpenAIProvider implements ContentProvider {
           chunk = JSON.parse(payload)
         } catch {
           continue
+        }
+
+        if (chunk?.usage && onUsage) {
+          const inputTokens = Number(chunk.usage.prompt_tokens || 0)
+          const outputTokens = Number(chunk.usage.completion_tokens || 0)
+          if (inputTokens > 0 || outputTokens > 0) {
+            onUsage({ inputTokens, outputTokens })
+          }
         }
 
         const text = chunk?.choices?.[0]?.delta?.content

@@ -134,8 +134,8 @@ Data de referência: 07/03/2026
 - [x] limite de créditos de postagem (mensal)
 - [x] políticas de excedente (bloquear e alertar entregues; cobrança extra pendente)
 - [ ] Medição de custo por geração/publicação:
-- [ ] custo por provider/modelo (input/output tokens, imagens, publicação)
-- [ ] custo por carrossel salvo/publicado
+- [x] custo por provider/modelo (input/output tokens, imagens, publicação)
+- [x] custo por carrossel salvo/publicado
 - [ ] Custo por workspace e por usuário:
 - [ ] dashboard `/admin/costs` com filtros por período, workspace e usuário
 - [ ] ranking de workspaces mais caros
@@ -149,7 +149,7 @@ Data de referência: 07/03/2026
 - [ ] alerta de uso anômalo (picos de custo)
 - [ ] Base para precificação:
 - [x] simulação de margem por plano
-- [ ] recomendação automática de upgrade de plano por uso
+- [x] recomendação automática de upgrade de plano por uso
 
 ---
 
@@ -223,3 +223,6 @@ Data de referência: 07/03/2026
 - Bloqueio de excedente expandido para custo mensal em `/api/generate/content`, `/api/generate/images` e `/api/publish`.
 - `/api/workspace/limits` passou a expor também uso de orçamento (USD) para UI.
 - Simulação de margem por plano entregue em `/admin/costs` com base em `monthlyPriceUsd` do `Admin Plans`.
+- Telemetria de tokens nativos integrada na geração de conteúdo (Anthropic/OpenAI) com fallback por estimativa apenas quando necessário.
+- `/admin/costs` agora mostra custo por carrossel (salvo/publicado) usando `usage_events.carousel_id`.
+- `/api/workspace/limits` agora traz recomendação automática de upgrade por uso alto de créditos/orçamento.

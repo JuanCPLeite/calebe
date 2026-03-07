@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExpertConfig } from './expert-config'
-import type { ProviderId } from './providers/types'
+import type { ProviderId, TokenUsage } from './providers/types'
 import { createProvider } from './providers/registry'
 import {
   buildSystemPrompt,
@@ -109,7 +109,7 @@ function buildVars(
 export type SSEEvent =
   | { chunk: string; slidesGenerated: number }
   | { retrying: true; waitSeconds: number; attempt: number }
-  | { done: true; topic: string; caption: string; slides: unknown[]; modelUsed: string }
+  | { done: true; topic: string; caption: string; slides: unknown[]; modelUsed: string; tokenUsage?: TokenUsage }
   | { error: string }
 
 // ─── Função principal ─────────────────────────────────────────────────────────
@@ -160,12 +160,21 @@ export async function* generateWithTemplate({
   const resolvedModel = modelOverride?.trim() || model || provider.defaultModel
 
   let accumulated = ''
+  let tokenUsage: TokenUsage | undefined
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       accumulated = ''
+      tokenUsage = undefined
 
-      for await (const chunk of provider.streamText({ system: systemPrompt, user: userPrompt, model: resolvedModel })) {
+      for await (const chunk of provider.streamText({
+        system: systemPrompt,
+        user: userPrompt,
+        model: resolvedModel,
+        onUsage: (usage) => {
+          tokenUsage = usage
+        },
+      })) {
         accumulated += chunk
         const slidesGenerated = (accumulated.match(/"num"\s*:/g) || []).length
         yield { chunk, slidesGenerated }
@@ -182,6 +191,7 @@ export async function* generateWithTemplate({
         caption: parsed.caption || '',
         slides: (parsed.slides || []).map((s: unknown) => ({ ...(s as object), approved: false })),
         modelUsed: resolvedModel,
+        tokenUsage,
       }
       return
 

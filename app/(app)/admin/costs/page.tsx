@@ -25,6 +25,16 @@ interface CostData {
   topWorkspaces: Array<{ workspaceId: string; workspaceName: string; totalCostUsd: number }>
   topUsers: Array<{ userId: string; userName: string; totalCostUsd: number }>
   topModels: Array<{ provider: string; model: string; totalCostUsd: number; totalQuantity: number }>
+  topCarousels: Array<{
+    carouselId: string
+    topic: string
+    workspaceId: string
+    workspaceName: string
+    published: boolean
+    createdAt: string | null
+    totalCostUsd: number
+    eventCount: number
+  }>
   modelEffectiveness: Array<{
     provider: string
     model: string
@@ -485,6 +495,37 @@ export default function AdminCostsPage() {
                   ))}
                   {data.topModels.length === 0 && (
                     <tr><td colSpan={4} className="py-4 text-center text-zinc-500">Sem dados no período.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <p className="text-sm font-semibold text-zinc-100 mb-3">Custo por carrossel (salvo/publicado)</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                    <th className="py-2 pr-3">Tópico</th>
+                    <th className="py-2 pr-3">Workspace</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3">Eventos</th>
+                    <th className="py-2 pr-3">Custo USD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.topCarousels || []).map((item) => (
+                    <tr key={item.carouselId} className="border-b border-zinc-900">
+                      <td className="py-2 pr-3 text-zinc-300 truncate max-w-[360px]" title={item.topic}>{item.topic}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.workspaceName}</td>
+                      <td className={`py-2 pr-3 ${item.published ? 'text-emerald-400' : 'text-zinc-400'}`}>{item.published ? 'Publicado' : 'Salvo'}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.eventCount}</td>
+                      <td className="py-2 pr-3 text-zinc-100 font-medium">{usd(item.totalCostUsd)}</td>
+                    </tr>
+                  ))}
+                  {(data.topCarousels || []).length === 0 && (
+                    <tr><td colSpan={5} className="py-4 text-center text-zinc-500">Sem dados no período.</td></tr>
                   )}
                 </tbody>
               </table>
