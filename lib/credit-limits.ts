@@ -16,8 +16,15 @@ function monthStartIso(): string {
 
 export async function getWorkspaceCreditUsage(workspaceId: string): Promise<WorkspaceCreditUsage> {
   const admin = createAdminClient()
-  const [limits, countRes] = await Promise.all([
+  const [limits, usageCountRes, legacyCarouselCountRes] = await Promise.all([
     getWorkspacePlanLimits(workspaceId),
+    admin
+      .from('usage_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('event_type', 'content.generate')
+      .eq('unit', 'render')
+      .gte('created_at', monthStartIso()),
     admin
       .from('carousels')
       .select('id', { count: 'exact', head: true })
@@ -25,7 +32,8 @@ export async function getWorkspaceCreditUsage(workspaceId: string): Promise<Work
       .gte('created_at', monthStartIso()),
   ])
 
-  const usedCredits = countRes.count || 0
+  // usage_events e o ledger oficial. Fallback legado: carousels antigos sem evento.
+  const usedCredits = Math.max(usageCountRes.count || 0, legacyCarouselCountRes.count || 0)
   const creditLimit = limits.monthlyPostCredits
   const remainingCredits = Math.max(0, creditLimit - usedCredits)
 
@@ -48,4 +56,3 @@ export async function assertWorkspaceCreditsAvailable(workspaceId: string): Prom
     usage,
   }
 }
-

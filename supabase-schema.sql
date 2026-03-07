@@ -465,6 +465,16 @@ where e.user_id = p.id
   and e.workspace_id is null
   and p.workspace_id is not null;
 
+-- Vincula carousels legados sem workspace e define created_by quando ausente
+update carousels c
+set
+  workspace_id = p.workspace_id,
+  created_by = coalesce(c.created_by, c.user_id)
+from profiles p
+where c.user_id = p.id
+  and c.workspace_id is null
+  and p.workspace_id is not null;
+
 -- Define expert ativo padrão para usuários sem active_expert_id
 update profiles p
 set active_expert_id = (

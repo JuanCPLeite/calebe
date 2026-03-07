@@ -63,7 +63,7 @@ export async function GET(
   }
   if (!workspace) return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 })
 
-  const [membersRes, carouselsRes, logsRes, usersRes] = await Promise.all([
+  const [membersRes, carouselsRes, usageRes, logsRes, usersRes] = await Promise.all([
     admin
       .from('workspace_members')
       .select('id, user_id, role, invited_by, created_at')
@@ -73,6 +73,12 @@ export async function GET(
       .from('carousels')
       .select('id, created_at, ig_post_id, published_at')
       .eq('workspace_id', workspaceId),
+    admin
+      .from('usage_events')
+      .select('id, created_at, event_type, unit')
+      .eq('workspace_id', workspaceId)
+      .in('event_type', ['content.generate', 'publish'])
+      .in('unit', ['render', 'publish']),
     admin
       .from('system_logs')
       .select('id, event, level, payload, user_id, created_at')
@@ -92,12 +98,18 @@ export async function GET(
   }))
 
   const carousels = carouselsRes.data || []
+  const usageEvents = usageRes.data || []
   const now = Date.now()
   const last30 = now - 30 * 24 * 60 * 60 * 1000
+  const generatedFromEvents = usageEvents.filter((e) => e.event_type === 'content.generate' && e.unit === 'render')
+  const publishedFromEvents = usageEvents.filter((e) => e.event_type === 'publish' && e.unit === 'publish')
   const usage = {
-    total_carousels: carousels.length,
-    carousels_last_30d: carousels.filter((c) => new Date(c.created_at).getTime() >= last30).length,
-    total_published: carousels.filter((c) => Boolean(c.ig_post_id)).length,
+    total_carousels: Math.max(generatedFromEvents.length, carousels.length),
+    carousels_last_30d: Math.max(
+      generatedFromEvents.filter((e) => new Date(e.created_at).getTime() >= last30).length,
+      carousels.filter((c) => new Date(c.created_at).getTime() >= last30).length
+    ),
+    total_published: Math.max(publishedFromEvents.length, carousels.filter((c) => Boolean(c.ig_post_id)).length),
   }
 
   const logs = (logsRes.data || []).map((entry) => ({

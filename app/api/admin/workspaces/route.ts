@@ -83,12 +83,18 @@ async function enrichWorkspaces(
   const recentLogsDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
   const monthStartDate = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
 
-  const [membersRes, carouselsRes, logsRes, monthCarouselsRes] = await Promise.all([
+  const [membersRes, carouselsRes, usageRes, logsRes, monthCarouselsRes] = await Promise.all([
     admin.from('workspace_members').select('workspace_id').in('workspace_id', workspaceIds),
     admin
       .from('carousels')
       .select('workspace_id, created_at, ig_post_id')
       .in('workspace_id', workspaceIds),
+    admin
+      .from('usage_events')
+      .select('workspace_id, created_at, event_type, unit')
+      .in('workspace_id', workspaceIds)
+      .in('event_type', ['content.generate', 'publish'])
+      .in('unit', ['render', 'publish']),
     admin
       .from('system_logs')
       .select('workspace_id, created_at')
@@ -106,9 +112,35 @@ async function enrichWorkspaces(
     memberCounts.set(row.workspace_id, (memberCounts.get(row.workspace_id) || 0) + 1)
   }
 
-  const monthCredits = new Map<string, number>()
+  const usageByWorkspace = new Map<string, { generatedTotal: number; generatedLast30: number; generatedThisMonth: number; publishedTotal: number }>()
+  for (const workspaceId of workspaceIds) {
+    usageByWorkspace.set(workspaceId, {
+      generatedTotal: 0,
+      generatedLast30: 0,
+      generatedThisMonth: 0,
+      publishedTotal: 0,
+    })
+  }
+
+  for (const row of usageRes.data || []) {
+    const entry = usageByWorkspace.get(row.workspace_id)
+    if (!entry) continue
+
+    const isGenerated = row.event_type === 'content.generate' && row.unit === 'render'
+    const isPublished = row.event_type === 'publish' && row.unit === 'publish'
+    if (isGenerated) {
+      entry.generatedTotal += 1
+      if (row.created_at && row.created_at >= last30Date) entry.generatedLast30 += 1
+      if (row.created_at && row.created_at >= monthStartDate) entry.generatedThisMonth += 1
+    }
+    if (isPublished) {
+      entry.publishedTotal += 1
+    }
+  }
+
+  const monthCarouselFallback = new Map<string, number>()
   for (const row of monthCarouselsRes.data || []) {
-    monthCredits.set(row.workspace_id, (monthCredits.get(row.workspace_id) || 0) + 1)
+    monthCarouselFallback.set(row.workspace_id, (monthCarouselFallback.get(row.workspace_id) || 0) + 1)
   }
 
   const usage = new Map<
@@ -127,6 +159,7 @@ async function enrichWorkspaces(
   for (const carousel of carouselsRes.data || []) {
     const entry = usage.get(carousel.workspace_id)
     if (!entry) continue
+    // Fallback legado para bases ainda sem usage_events completos.
     entry.total += 1
     if (carousel.ig_post_id) entry.published += 1
     if (carousel.created_at && carousel.created_at >= last30Date) entry.last30 += 1
@@ -141,17 +174,21 @@ async function enrichWorkspaces(
 
   return workspaces.map((workspace) => {
     const workspaceUsage = usage.get(workspace.id)
+    const usageEvents = usageByWorkspace.get(workspace.id)
     const plan = findPlanById(plans, workspace.plan) || plans[0] || DEFAULT_PLAN_CONFIGS[0]
-    const monthlyCreditsUsed = monthCredits.get(workspace.id) || 0
+    const generatedTotal = Math.max(usageEvents?.generatedTotal || 0, workspaceUsage?.total || 0)
+    const generatedLast30 = Math.max(usageEvents?.generatedLast30 || 0, workspaceUsage?.last30 || 0)
+    const publishedTotal = Math.max(usageEvents?.publishedTotal || 0, workspaceUsage?.published || 0)
+    const monthlyCreditsUsed = Math.max(usageEvents?.generatedThisMonth || 0, monthCarouselFallback.get(workspace.id) || 0)
     const monthlyCreditsLimit = plan?.monthlyPostCredits || 1
     const monthlyCreditsPercent = Math.round((monthlyCreditsUsed / Math.max(1, monthlyCreditsLimit)) * 100)
     return {
       ...workspace,
       member_count: memberCounts.get(workspace.id) || 0,
       member_limit: plan?.memberLimit || 1,
-      total_carousels: workspaceUsage?.total || 0,
-      total_published: workspaceUsage?.published || 0,
-      carousels_last_30d: workspaceUsage?.last30 || 0,
+      total_carousels: generatedTotal,
+      total_published: publishedTotal,
+      carousels_last_30d: generatedLast30,
       last_activity_at: workspaceUsage?.lastActivity || null,
       monthly_credits_used: monthlyCreditsUsed,
       monthly_credits_limit: monthlyCreditsLimit,
