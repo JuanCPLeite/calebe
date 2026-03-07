@@ -125,6 +125,7 @@ function DnaForm() {
   const supabase = createClient()
   const searchParams = useSearchParams()
   const isOnboarding = searchParams.get('onboarding') === '1'
+  const isCreatingNew = searchParams.get('new') === '1'
 
   const [form, setForm]         = useState<FormData>(EMPTY)
   const [newRule, setNewRule]   = useState('')
@@ -146,8 +147,15 @@ function DnaForm() {
       setUserId(user.id)
 
       const ctx = await getActiveExpertContext(supabase, user.id)
-      const expert = ctx.expert
       setWorkspaceId(ctx.workspaceId)
+      if (isCreatingNew) {
+        setExpertId(null)
+        setForm(EMPTY)
+        setAvatarUrl(null)
+        return
+      }
+
+      const expert = ctx.expert
       setExpertId(ctx.activeExpertId)
 
       if (expert) {
@@ -169,11 +177,11 @@ function DnaForm() {
       }
     }
     load()
-  }, [])
+  }, [isCreatingNew])
 
-  async function ensureExpertId(): Promise<string | null> {
+  async function ensureExpertId(forceCreate = false): Promise<string | null> {
     if (!userId || !workspaceId) return null
-    if (expertId) return expertId
+    if (expertId && !forceCreate) return expertId
 
     const { data: created, error } = await supabase
       .from('experts')
@@ -227,13 +235,21 @@ function DnaForm() {
   }
 
   async function handleSave() {
-    const currentExpertId = await ensureExpertId()
+    const currentExpertId = await ensureExpertId(isCreatingNew)
     if (!userId || !workspaceId || !currentExpertId) return
     setSaving(true)
-    await supabase
-      .from('experts')
-      .update({ ...form, updated_at: new Date().toISOString() })
-      .eq('id', currentExpertId)
+    if (isCreatingNew) {
+      await supabase
+        .from('experts')
+        .update({ ...form, updated_at: new Date().toISOString() })
+        .eq('id', currentExpertId)
+      window.history.replaceState(null, '', '/expert/dna')
+    } else {
+      await supabase
+        .from('experts')
+        .update({ ...form, updated_at: new Date().toISOString() })
+        .eq('id', currentExpertId)
+    }
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)

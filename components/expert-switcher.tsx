@@ -64,28 +64,11 @@ export function ExpertSwitcher() {
   }
 
   async function handleCreate() {
-    const displayName = window.prompt('Nome do novo expert:')
-    if (!displayName?.trim()) return
-    const handle = window.prompt('Handle (opcional):') || ''
-
     setCreating(true)
     setError('')
-    try {
-      const res = await fetch('/api/experts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: displayName.trim(), handle: handle.trim() }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Falha ao criar expert')
-      await load()
-      router.push('/expert/dna')
-      router.refresh()
-    } catch (err: any) {
-      setError(err.message || 'Erro ao criar expert')
-    } finally {
-      setCreating(false)
-    }
+    router.push('/expert/dna?new=1')
+    router.refresh()
+    setCreating(false)
   }
 
   if (loading) {
