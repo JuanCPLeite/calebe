@@ -162,6 +162,63 @@ paths:
           description: Não autenticado
         '403':
           description: Acesso negado
+  /api/admin/users:
+    get:
+      summary: Lista usuários da plataforma
+      tags: [Admin Users]
+      parameters:
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [owner, admin, member]
+        - in: query
+          name: workspaceId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        '200':
+          description: Lista de usuários
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+    patch:
+      summary: Atualiza role/workspace de usuário
+      tags: [Admin Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                role:
+                  type: string
+                  enum: [owner, admin, member]
+                workspaceId:
+                  nullable: true
+                  oneOf:
+                    - type: string
+                      format: uuid
+                    - type: 'null'
+      responses:
+        '200':
+          description: Usuário atualizado
+        '400':
+          description: Payload inválido
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
 components:
   securitySchemes:
     SupabaseSession:

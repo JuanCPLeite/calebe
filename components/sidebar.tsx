@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   Sparkles, LayoutDashboard, Dna, ImageIcon, Users,
-  Key, LayoutTemplate, ChevronRight, Zap, LogOut, Shield, Settings, FileText,
+  Key, LayoutTemplate, ChevronRight, Zap, LogOut, Shield, Settings, FileText, UserCog,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -148,6 +148,18 @@ export function Sidebar() {
             >
               <FileText className="w-4 h-4 flex-shrink-0" />
               <span className="flex-1">Admin Logs</span>
+            </Link>
+            <Link
+              href="/admin/users"
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group',
+                pathname.startsWith('/admin/users')
+                  ? 'bg-zinc-800 text-zinc-100'
+                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
+              )}
+            >
+              <UserCog className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">Admin Users</span>
             </Link>
           </>
         )}

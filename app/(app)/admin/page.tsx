@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Building2, Settings } from 'lucide-react'
+import { Building2, Settings, FileText, UserCog } from 'lucide-react'
 
 export default function AdminHomePage() {
   return (
@@ -11,7 +11,7 @@ export default function AdminHomePage() {
         <p className="text-sm text-zinc-500 mt-1">Painel operacional da plataforma</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl">
         <Link
           href="/admin/workspaces"
           className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 hover:border-zinc-700 transition-colors"
@@ -32,6 +32,28 @@ export default function AdminHomePage() {
             <h2 className="text-sm font-semibold text-zinc-100">Settings</h2>
           </div>
           <p className="text-xs text-zinc-500">Gerenciar chaves globais de IA da plataforma.</p>
+        </Link>
+
+        <Link
+          href="/admin/logs"
+          className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 hover:border-zinc-700 transition-colors"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <FileText className="w-5 h-5 text-violet-400" />
+            <h2 className="text-sm font-semibold text-zinc-100">Logs</h2>
+          </div>
+          <p className="text-xs text-zinc-500">Auditar eventos, erros e atividade recente.</p>
+        </Link>
+
+        <Link
+          href="/admin/users"
+          className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 hover:border-zinc-700 transition-colors"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <UserCog className="w-5 h-5 text-violet-400" />
+            <h2 className="text-sm font-semibold text-zinc-100">Users</h2>
+          </div>
+          <p className="text-xs text-zinc-500">Gerenciar role e workspace padrão dos usuários.</p>
         </Link>
       </div>
     </div>

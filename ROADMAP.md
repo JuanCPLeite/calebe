@@ -86,7 +86,7 @@ Data de referência: 06/03/2026
 - [ ] `/admin/workspaces` — lista de clientes com plano, uso e ações
 - [ ] `/admin/workspaces/[id]` — detalhe: membros, uso, logs do workspace
 - [x] `/admin/logs` — viewer com filtros (level, evento, workspace, período)
-- [ ] `/admin/users` — todos os usuários com role e workspace
+- [x] `/admin/users` — todos os usuários com role e workspace
 
 **Frontend — Workspace:**
 - [ ] Selector de workspace no header (para quem é membro de múltiplos)
@@ -146,5 +146,6 @@ Data de referência: 06/03/2026
 - API de workspaces do admin implementada (`GET/POST/PATCH` em `/api/admin/workspaces`).
 - UI inicial do admin entregue: `/admin`, `/admin/settings`, `/admin/workspaces` (MVP funcional).
 - `/admin/logs` implementado (API + UI com filtros e busca local em payload).
+- `/admin/users` implementado (API + UI para listar/filtrar/editar role/workspace).
 - Hardening de onboarding no schema: `profiles.role` não nulo + primeiro usuário vira `owner` automaticamente.
-- Próximo passo direto: `/admin/users` e detalhamento de `/admin/workspaces/[id]`.
+- Próximo passo direto: detalhamento de `/admin/workspaces/[id]` e modal de detalhe no `/admin/logs`.
