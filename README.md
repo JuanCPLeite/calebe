@@ -1,42 +1,54 @@
-# Carousel Studio
+# Carousel Studio — Content Hub
 
-Micro-SaaS para gerar, editar, renderizar e publicar carrosseis de Instagram com IA.
+Hub de criacao de conteudo para redes sociais com IA. O expert configura seu DNA uma vez e gera qualquer formato para qualquer plataforma com qualquer IA disponivel.
 
-**Stack atual:** Next.js 16 · React 19 · TypeScript · Tailwind 4 · shadcn/ui · Supabase · Claude · Gemini · Meta Graph API
+**Stack:** Next.js 16 · React 19 · TypeScript · Tailwind 4 · shadcn/ui · Supabase · Claude · Gemini · Meta Graph API
 
 ---
 
-## Estado atual (marco: 06/03/2026)
+## Visao do produto
+
+```
+[Ideia / Tema / Trend / Noticia]
+          ↓
+  [Escolher Plataforma]
+  Instagram · LinkedIn · Facebook · Twitter/X · Pinterest
+          ↓
+  [Escolher Formato]
+  Carrossel · Post · Story · Thread · Artigo
+          ↓
+  [Escolher Template]
+  Brand Equity · X vs Y · Lista · Storytelling · ...
+          ↓
+  [Escolher IA]
+  Claude · GPT-4o · Gemini Pro · ...
+          ↓
+  [Gerar → Editar → Publicar]
+```
+
+---
+
+## Estado atual (06/03/2026)
 
 ### Implementado
 - Autenticacao com Supabase (rotas privadas + callback)
 - Multi-tenant por usuario (RLS no banco)
-- Configuracao do expert:
-  - DNA (tom, estilo, CTA, templates fixos)
-  - Fotos de referencia
-  - Perfil e publico
+- Configuracao do expert: DNA, fotos de referencia, perfil e publico
 - Tokens por usuario (Anthropic, Google, EXA, Meta)
-- Descoberta de topicos (`/api/topics`):
-  - EXA quando chave existe
-  - fallback Claude
-  - fallback mock
+- Descoberta de topicos (`/api/topics`): EXA → Claude fallback → mock
 - Geracao de conteudo com streaming SSE (`/api/generate/content`)
 - Geracao de imagens com Gemini (`/api/generate/images`)
 - Render de cards (`/api/render/card`)
-- Fluxo de salvar imagens em storage (`/api/save-images`)
 - Publicacao no Instagram (`/api/publish`)
 - Agendamento e cron (`/api/cron/publish-scheduled`)
-- Dashboard:
-  - lista/grid
-  - filtros e busca
-  - duplicar/excluir
-  - detalhe por carousel
-  - fallback visual do thumbnail com `FrankCard`
+- Templates de carrossel:
+  - **Brand Equity** (Frank Costa 10 slides) — layout `frank`
+  - **X vs Y** (split comparativo) — layout `split`
+- Editor com coverflow (prev/ativo/next), controle de fonte e highlight por slide
+- Dashboard: lista/grid, filtros, busca, metricas, thumbnails ao vivo, duplicar, excluir
 
-### Em andamento / atencao
-- Build local pode falhar sem internet por fontes Google (`Inter`, `DM Sans`)
-- Aviso de deprecacao do `middleware.ts` no Next 16 (migrar para `proxy.ts`)
-- Fluxo de cron/publish ainda precisa hardening final para execucao totalmente robusta em server-side sem sessao
+### Proximas fases
+Ver `ROADMAP.md` para o plano completo e `docs/CONTENT-HUB-ARCHITECTURE.md` para a arquitetura tecnica.
 
 ---
 
@@ -61,14 +73,20 @@ app/
     save-images/
     topics/
 lib/
-  content-engine.ts
+  content-engine.ts       # system/user prompts por template
   image-generator.ts
   instagram.ts
   expert-config.ts
+  templates.ts            # definicao dos templates
   supabase/
 components/
   generate/
+    frank-card.tsx        # card layout Brand Equity
+    split-card.tsx        # card layout X vs Y
+    carousel-preview.tsx  # editor com coverflow
   ui/
+docs/
+  CONTENT-HUB-ARCHITECTURE.md  # arquitetura e roadmap tecnico
 ```
 
 ---
@@ -96,19 +114,25 @@ npm run start   # next start -p 8080
 - Schema base: `supabase-schema.sql`
 - Buckets: `expert-photos`, `carousel-images`
 - Politicas RLS por usuario
-- Guia setup CLI: `SUPABASE_SETUP.md`
-- Guia setup Dashboard-only (sem terminal local): `SUPABASE_SETUP_DASHBOARD_ONLY.md`
+- Guia setup: `SUPABASE_SETUP.md` / `SUPABASE_SETUP_DASHBOARD_ONLY.md`
 
-Cron nativo Supabase (recomendado para postagem):
-- Edge Function: `publish-scheduled`
-- Agendamento: `* * * * *` (a cada 1 minuto)
-- Precisao real: normalmente ate ~60s apos `scheduled_at`
+Variaveis minimas:
 
-Variaveis minimas esperadas:
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `NEXT_PUBLIC_APP_URL`
-- `CRON_SECRET`
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_APP_URL=
+CRON_SECRET=
+```
 
 Tokens de provedores sao salvos por usuario na tabela `user_tokens`.
+
+---
+
+## Documentacao
+
+| Documento | Descricao |
+|-----------|-----------|
+| `ROADMAP.md` | Sprints concluidos e fases planejadas |
+| `docs/CONTENT-HUB-ARCHITECTURE.md` | Arquitetura tecnica, schema DB, provider abstraction, template engine |
+| `supabase-schema.sql` | Schema completo do banco (fonte unica da verdade) |
