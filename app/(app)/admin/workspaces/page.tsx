@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { Loader2, Plus, RefreshCcw } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -243,14 +244,21 @@ export default function AdminWorkspacesPage() {
                       {new Date(w.created_at).toLocaleDateString('pt-BR')}
                     </td>
                     <td className="py-3 pr-3">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-zinc-700 text-zinc-200"
-                        onClick={() => toggleActive(w)}
-                      >
-                        {w.active ? 'Suspender' : 'Reativar'}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/admin/workspaces/${w.id}`}>
+                          <Button size="sm" variant="outline" className="border-zinc-700 text-zinc-200">
+                            Detalhes
+                          </Button>
+                        </Link>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-zinc-700 text-zinc-200"
+                          onClick={() => toggleActive(w)}
+                        >
+                          {w.active ? 'Suspender' : 'Reativar'}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -84,7 +84,7 @@ Data de referência: 06/03/2026
 - [ ] `/admin` — dashboard: métricas globais + atividade recente
 - [ ] `/admin/settings` — chaves de IA com mascaramento + teste de conexão
 - [ ] `/admin/workspaces` — lista de clientes com plano, uso e ações
-- [ ] `/admin/workspaces/[id]` — detalhe: membros, uso, logs do workspace
+- [x] `/admin/workspaces/[id]` — detalhe: membros, uso, logs do workspace
 - [x] `/admin/logs` — viewer com filtros (level, evento, workspace, período)
 - [x] `/admin/users` — todos os usuários com role e workspace
 
@@ -148,5 +148,6 @@ Data de referência: 06/03/2026
 - `/admin/logs` implementado (API + UI com filtros e busca local em payload).
 - `/admin/logs` refinado com modal de detalhe por linha e copy JSON.
 - `/admin/users` implementado (API + UI para listar/filtrar/editar role/workspace).
+- `/admin/workspaces/[id]` implementado (API + UI de detalhe com membros, uso e logs).
 - Hardening de onboarding no schema: `profiles.role` não nulo + primeiro usuário vira `owner` automaticamente.
-- Próximo passo direto: detalhamento de `/admin/workspaces/[id]`.
+- Próximo passo direto: completar dashboard `/admin` com métricas reais e elevar `/admin/settings`/`/admin/workspaces` de MVP para versão final.

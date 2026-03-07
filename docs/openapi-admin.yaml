@@ -125,6 +125,26 @@ paths:
           description: Não autenticado
         '403':
           description: Acesso negado
+  /api/admin/workspaces/{id}:
+    get:
+      summary: Detalha um workspace
+      tags: [Admin Workspaces]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detalhes do workspace (membros, uso, logs)
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+        '404':
+          description: Workspace não encontrado
   /api/admin/logs:
     get:
       summary: Lista logs de sistema
