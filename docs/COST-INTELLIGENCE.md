@@ -66,9 +66,10 @@ Uso típico:
 2. Endpoint owner `/api/admin/costs` com agregados por período/workspace.
 3. Tela owner `/admin/costs` com top workspaces, top usuários e top modelos.
 4. Gestão de preços em `/api/admin/costs/prices` integrada à tela `/admin/costs`.
-5. Enforcement inicial de créditos mensais em `/api/generate/content` via `monthlyPostCredits`.
+5. Enforcement inicial de créditos mensais em `/api/generate/content`, `/api/generate/images` e `/api/publish`.
 6. Seed opcional de baseline em `/api/admin/costs/prices/seed` (valores estimados).
 7. Alertas no `/admin/costs` para pico de custo e workspaces perto/estourados no crédito.
+8. Projeção mensal de custo por workspace no `/admin/costs`.
 
 ---
 

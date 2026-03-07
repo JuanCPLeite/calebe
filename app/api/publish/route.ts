@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceContext } from '@/lib/workspace'
 import { log } from '@/lib/logger'
 import { recordUsageEvent } from '@/lib/usage-events'
+import { assertWorkspaceCreditsAvailable } from '@/lib/credit-limits'
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,6 +21,18 @@ export async function POST(req: NextRequest) {
       getWorkspaceContext(user.id, supabase),
       getExpertForContext(user.id, supabase),
     ])
+
+    if (workspaceId) {
+      const creditCheck = await assertWorkspaceCreditsAvailable(workspaceId)
+      if (!creditCheck.ok) {
+        return NextResponse.json(
+          {
+            error: `Limite mensal de créditos do plano ${creditCheck.usage.planLabel} atingido (${creditCheck.usage.usedCredits}/${creditCheck.usage.creditLimit}).`,
+          },
+          { status: 403 }
+        )
+      }
+    }
 
     if (!expert) return NextResponse.json(
       { error: 'Perfil de expert não encontrado. Configure em Expert → DNA.' },

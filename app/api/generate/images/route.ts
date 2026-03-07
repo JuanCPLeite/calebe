@@ -5,12 +5,25 @@ import { getAppKeys } from '@/lib/workspace'
 import { getActiveExpertRow } from '@/lib/expert-config'
 import { getWorkspaceContext } from '@/lib/workspace'
 import { recordUsageEvent } from '@/lib/usage-events'
+import { assertWorkspaceCreditsAvailable } from '@/lib/credit-limits'
 
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    const { workspaceId } = await getWorkspaceContext(user.id, supabase)
+    if (workspaceId) {
+      const creditCheck = await assertWorkspaceCreditsAvailable(workspaceId)
+      if (!creditCheck.ok) {
+        return NextResponse.json(
+          {
+            error: `Limite mensal de créditos do plano ${creditCheck.usage.planLabel} atingido (${creditCheck.usage.usedCredits}/${creditCheck.usage.creditLimit}).`,
+          },
+          { status: 403 }
+        )
+      }
+    }
 
     const { slideNum, imagePrompt } = await req.json()
     if (!imagePrompt) return NextResponse.json({ error: 'imagePrompt obrigatório' }, { status: 400 })
@@ -49,7 +62,6 @@ export async function POST(req: NextRequest) {
 
     const result = await generateSlideImage(slideNum, imagePrompt, expertPhotoBase64, googleKey)
 
-    const { workspaceId } = await getWorkspaceContext(user.id, supabase)
     await recordUsageEvent({
       workspaceId,
       userId: user.id,

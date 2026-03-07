@@ -50,7 +50,8 @@ export async function GET(req: NextRequest) {
 
     if (workspaceId) usageQuery = usageQuery.eq('workspace_id', workspaceId)
 
-    const [usageRes, workspacesRes, profilesRes, settingsRes, monthCarouselsRes] = await Promise.all([
+    const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
+    const [usageRes, workspacesRes, profilesRes, settingsRes, monthCarouselsRes, monthCostRes] = await Promise.all([
       usageQuery,
       admin.from('workspaces').select('id, name, plan').order('name', { ascending: true }),
       admin.from('profiles').select('id, full_name'),
@@ -58,8 +59,13 @@ export async function GET(req: NextRequest) {
       admin
         .from('carousels')
         .select('workspace_id, created_at')
-        .gte('created_at', new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString())
+        .gte('created_at', monthStart)
         .limit(20000),
+      admin
+        .from('usage_events')
+        .select('workspace_id, total_cost_usd')
+        .gte('created_at', monthStart)
+        .limit(50000),
     ])
 
     if (usageRes.error) {
@@ -164,6 +170,30 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.usagePercent - a.usagePercent)
       .slice(0, 20)
 
+    const monthCostByWorkspace = new Map<string, number>()
+    for (const row of monthCostRes.data || []) {
+      const wsId = row.workspace_id || 'unknown'
+      const cost = Number(row.total_cost_usd || 0)
+      monthCostByWorkspace.set(wsId, (monthCostByWorkspace.get(wsId) || 0) + cost)
+    }
+    const now = new Date()
+    const dayOfMonth = now.getUTCDate()
+    const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate()
+
+    const monthlyProjection = workspaces.map((w) => {
+      const monthCostUsd = monthCostByWorkspace.get(w.id) || 0
+      const projectedMonthCostUsd = dayOfMonth > 0 ? (monthCostUsd / dayOfMonth) * daysInMonth : monthCostUsd
+      return {
+        workspaceId: w.id,
+        workspaceName: w.name || w.id,
+        planId: w.plan || 'starter',
+        monthCostUsd,
+        projectedMonthCostUsd,
+      }
+    })
+      .sort((a, b) => b.projectedMonthCostUsd - a.projectedMonthCostUsd)
+      .slice(0, 20)
+
     for (const item of creditUsage) {
       if (item.usagePercent >= 100) {
         alerts.push({
@@ -189,6 +219,7 @@ export async function GET(req: NextRequest) {
       topModels,
       daily,
       creditUsage,
+      monthlyProjection,
       alerts: alerts.slice(0, 12),
     })
   } catch (err: any) {

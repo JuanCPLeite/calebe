@@ -205,3 +205,5 @@ Data de referência: 07/03/2026
 - Catálogo de preços entregue: `/api/admin/costs/prices` + gestão no `/admin/costs`.
 - Enforcement inicial entregue: `memberLimit` em `/api/team/members` e `monthlyPostCredits` em `/api/generate/content`.
 - Alertas iniciais de custo/crédito entregues em `/admin/costs` + seed estimado de preços.
+- Enforcement de crédito expandido para `/api/generate/images` e `/api/publish`.
+- Projeção mensal por workspace entregue no `/admin/costs`.

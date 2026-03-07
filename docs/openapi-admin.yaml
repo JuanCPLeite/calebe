@@ -300,7 +300,7 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Custo total, top workspaces, top usuários e top modelos
+          description: Custo total, top workspaces, top usuários, top modelos, alertas e projeção mensal
         '401':
           description: Não autenticado
         '403':

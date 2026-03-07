@@ -69,7 +69,7 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Cost Intelligence em progresso: eventos de custo já instrumentados em geração de conteúdo, imagens e publicação
 - Enforcement inicial de limites ativo:
 - convite de equipe bloqueado ao atingir `memberLimit`
-- geração de conteúdo bloqueada ao atingir `monthlyPostCredits`
+- geração de conteúdo/imagens/publicação bloqueada ao atingir `monthlyPostCredits`
 
 ### Roadmap
 Ver `ROADMAP.md` para o plano completo.

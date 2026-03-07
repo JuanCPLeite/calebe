@@ -27,6 +27,13 @@ interface CostData {
     creditLimit: number
     usagePercent: number
   }>
+  monthlyProjection: Array<{
+    workspaceId: string
+    workspaceName: string
+    planId: string
+    monthCostUsd: number
+    projectedMonthCostUsd: number
+  }>
   alerts: Array<{ level: 'info' | 'warn'; message: string }>
 }
 
@@ -300,6 +307,35 @@ export default function AdminCostsPage() {
                     </tr>
                   ))}
                   {data.creditUsage.length === 0 && (
+                    <tr><td colSpan={4} className="py-4 text-center text-zinc-500">Sem dados no período.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <p className="text-sm font-semibold text-zinc-100 mb-3">Projeção mensal de custo (USD)</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                    <th className="py-2 pr-3">Workspace</th>
+                    <th className="py-2 pr-3">Plano</th>
+                    <th className="py-2 pr-3">Mês atual</th>
+                    <th className="py-2 pr-3">Projeção do mês</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.monthlyProjection.map((item) => (
+                    <tr key={item.workspaceId} className="border-b border-zinc-900">
+                      <td className="py-2 pr-3 text-zinc-300">{item.workspaceName}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.planId}</td>
+                      <td className="py-2 pr-3 text-zinc-100">{usd(item.monthCostUsd)}</td>
+                      <td className="py-2 pr-3 text-zinc-100 font-medium">{usd(item.projectedMonthCostUsd)}</td>
+                    </tr>
+                  ))}
+                  {data.monthlyProjection.length === 0 && (
                     <tr><td colSpan={4} className="py-4 text-center text-zinc-500">Sem dados no período.</td></tr>
                   )}
                 </tbody>
