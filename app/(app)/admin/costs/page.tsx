@@ -18,6 +18,18 @@ interface CostData {
   topWorkspaces: Array<{ workspaceId: string; workspaceName: string; totalCostUsd: number }>
   topUsers: Array<{ userId: string; userName: string; totalCostUsd: number }>
   topModels: Array<{ provider: string; model: string; totalCostUsd: number; totalQuantity: number }>
+  userCreditBreakdown: Array<{
+    userId: string
+    userName: string
+    workspaceId: string
+    workspaceName: string
+    eventCount: number
+    totalCostUsd: number
+    totalCredits: number
+    contentCredits: number
+    imageCredits: number
+    publishCredits: number
+  }>
   daily: Array<{ date: string; totalCostUsd: number }>
   creditUsage: Array<{
     workspaceId: string
@@ -55,6 +67,10 @@ interface CreditPolicy {
 
 function usd(value: number): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 4 })
+}
+
+function credit(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2)
 }
 
 export default function AdminCostsPage() {
@@ -327,6 +343,43 @@ export default function AdminCostsPage() {
                   ))}
                   {data.topModels.length === 0 && (
                     <tr><td colSpan={4} className="py-4 text-center text-zinc-500">Sem dados no período.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <p className="text-sm font-semibold text-zinc-100 mb-3">Uso por usuário (créditos por ação)</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                    <th className="py-2 pr-3">Usuário</th>
+                    <th className="py-2 pr-3">Workspace</th>
+                    <th className="py-2 pr-3">Eventos</th>
+                    <th className="py-2 pr-3">Créd. texto</th>
+                    <th className="py-2 pr-3">Créd. imagem</th>
+                    <th className="py-2 pr-3">Créd. publish</th>
+                    <th className="py-2 pr-3">Créd. total</th>
+                    <th className="py-2 pr-3">Custo USD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.userCreditBreakdown || []).map((item) => (
+                    <tr key={`${item.workspaceId}:${item.userId}`} className="border-b border-zinc-900">
+                      <td className="py-2 pr-3 text-zinc-300">{item.userName}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.workspaceName}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.eventCount}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{credit(item.contentCredits)}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{credit(item.imageCredits)}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{credit(item.publishCredits)}</td>
+                      <td className="py-2 pr-3 text-zinc-100 font-medium">{credit(item.totalCredits)}</td>
+                      <td className="py-2 pr-3 text-zinc-100 font-medium">{usd(item.totalCostUsd)}</td>
+                    </tr>
+                  ))}
+                  {(data.userCreditBreakdown || []).length === 0 && (
+                    <tr><td colSpan={8} className="py-4 text-center text-zinc-500">Sem dados no período.</td></tr>
                   )}
                 </tbody>
               </table>

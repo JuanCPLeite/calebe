@@ -188,6 +188,7 @@ Filtros:
 
 - Top workspaces por custo
 - Top usuários por custo
+- Quebra de créditos por usuário e por ação (texto/imagem/publicação)
 - Modelos/provedores com maior custo agregado
 - Alertas automáticos (pico de custo e uso alto de créditos)
 - Projeção mensal de custo por workspace

@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
     let usageQuery = admin
       .from('usage_events')
-      .select('workspace_id, user_id, provider, model, quantity, total_cost_usd, created_at')
+      .select('workspace_id, user_id, provider, model, event_type, unit, quantity, total_cost_usd, created_at')
       .gte('created_at', from)
       .order('created_at', { ascending: false })
       .limit(5000)
@@ -93,6 +93,21 @@ export async function GET(req: NextRequest) {
     const byWorkspace = new Map<string, number>()
     const byUser = new Map<string, number>()
     const byModel = new Map<string, { provider: string; model: string; cost: number; quantity: number }>()
+    const userBreakdown = new Map<
+      string,
+      {
+        userId: string
+        userName: string
+        workspaceId: string
+        workspaceName: string
+        eventCount: number
+        totalCostUsd: number
+        totalCredits: number
+        contentCredits: number
+        imageCredits: number
+        publishCredits: number
+      }
+    >()
 
     for (const row of usage) {
       const cost = Number(row.total_cost_usd || 0)
@@ -113,6 +128,39 @@ export async function GET(req: NextRequest) {
       current.cost += cost
       current.quantity += qty
       byModel.set(modelKey, current)
+
+      const breakdownKey = `${wsId}:${userId}`
+      const breakdown = userBreakdown.get(breakdownKey) || {
+        userId,
+        userName: userNameById.get(userId) || userId,
+        workspaceId: wsId,
+        workspaceName: wsNameById.get(wsId) || wsId,
+        eventCount: 0,
+        totalCostUsd: 0,
+        totalCredits: 0,
+        contentCredits: 0,
+        imageCredits: 0,
+        publishCredits: 0,
+      }
+      breakdown.eventCount += 1
+      breakdown.totalCostUsd += cost
+
+      const weighted = toWeightedCredits([{
+        event_type: row.event_type,
+        unit: row.unit,
+        quantity: Number((row as any).quantity || 0),
+      }], creditWeights)
+      breakdown.totalCredits = Number((breakdown.totalCredits + weighted).toFixed(2))
+      if (row.event_type === 'content.generate' && row.unit === 'render') {
+        breakdown.contentCredits = Number((breakdown.contentCredits + weighted).toFixed(2))
+      }
+      if (row.event_type === 'image.generate' && row.unit === 'image') {
+        breakdown.imageCredits = Number((breakdown.imageCredits + weighted).toFixed(2))
+      }
+      if (row.event_type === 'publish' && row.unit === 'publish') {
+        breakdown.publishCredits = Number((breakdown.publishCredits + weighted).toFixed(2))
+      }
+      userBreakdown.set(breakdownKey, breakdown)
     }
 
     const topWorkspaces = Array.from(byWorkspace.entries())
@@ -133,6 +181,14 @@ export async function GET(req: NextRequest) {
         model: item.model,
         totalCostUsd: item.cost,
         totalQuantity: item.quantity,
+      }))
+
+    const userCreditBreakdown = Array.from(userBreakdown.values())
+      .sort((a, b) => b.totalCredits - a.totalCredits || b.totalCostUsd - a.totalCostUsd)
+      .slice(0, 30)
+      .map((row) => ({
+        ...row,
+        totalCostUsd: Number(row.totalCostUsd.toFixed(8)),
       }))
 
     const daily = Array.from(byDay.entries())
@@ -237,6 +293,7 @@ export async function GET(req: NextRequest) {
       topWorkspaces,
       topUsers,
       topModels,
+      userCreditBreakdown,
       daily,
       creditUsage,
       monthlyProjection,
