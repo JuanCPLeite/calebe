@@ -9,39 +9,71 @@ export interface WorkspaceCreditUsage {
   remainingCredits: number
 }
 
+export interface CreditWeights {
+  contentRender: number
+  imageGenerate: number
+  publish: number
+}
+
 type UsageRow = {
   event_type: string
   unit: string
   quantity: number | null
 }
 
-// Regua inicial de credito por acao (pode evoluir para configuracao em app_settings).
-export const CREDIT_WEIGHTS = {
+const APP_SETTINGS_ID = '00000000-0000-0000-0000-000000000001'
+
+export const DEFAULT_CREDIT_WEIGHTS: CreditWeights = {
   contentRender: 1,
   imageGenerate: 0.25,
   publish: 0,
-} as const
+}
+
+export function parseCreditWeights(input: unknown): CreditWeights {
+  const source = (input && typeof input === 'object') ? (input as Record<string, unknown>) : {}
+  function n(key: keyof CreditWeights, fallback: number): number {
+    const raw = Number(source[key])
+    if (!Number.isFinite(raw) || raw < 0) return fallback
+    return Number(raw.toFixed(4))
+  }
+  return {
+    contentRender: n('contentRender', DEFAULT_CREDIT_WEIGHTS.contentRender),
+    imageGenerate: n('imageGenerate', DEFAULT_CREDIT_WEIGHTS.imageGenerate),
+    publish: n('publish', DEFAULT_CREDIT_WEIGHTS.publish),
+  }
+}
+
+export async function getCreditWeights(): Promise<CreditWeights> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('app_settings')
+    .select('credit_weights_json')
+    .eq('id', APP_SETTINGS_ID)
+    .maybeSingle()
+
+  return parseCreditWeights((data as any)?.credit_weights_json)
+}
 
 function monthStartIso(): string {
   const now = new Date()
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0)).toISOString()
 }
 
-export function toWeightedCredits(rows: UsageRow[]): number {
+export function toWeightedCredits(rows: UsageRow[], weights: CreditWeights = DEFAULT_CREDIT_WEIGHTS): number {
   let credits = 0
   for (const row of rows || []) {
     const qty = Number(row.quantity || 0)
     if (qty <= 0) continue
     if (row.event_type === 'content.generate' && row.unit === 'render') {
-      credits += qty * CREDIT_WEIGHTS.contentRender
+      credits += qty * weights.contentRender
       continue
     }
     if (row.event_type === 'image.generate' && row.unit === 'image') {
-      credits += qty * CREDIT_WEIGHTS.imageGenerate
+      credits += qty * weights.imageGenerate
       continue
     }
     if (row.event_type === 'publish' && row.unit === 'publish') {
-      credits += qty * CREDIT_WEIGHTS.publish
+      credits += qty * weights.publish
       continue
     }
   }
@@ -50,8 +82,9 @@ export function toWeightedCredits(rows: UsageRow[]): number {
 
 export async function getWorkspaceCreditUsage(workspaceId: string): Promise<WorkspaceCreditUsage> {
   const admin = createAdminClient()
-  const [limits, usageRes, legacyCarouselCountRes] = await Promise.all([
+  const [limits, weights, usageRes, legacyCarouselCountRes] = await Promise.all([
     getWorkspacePlanLimits(workspaceId),
+    getCreditWeights(),
     admin
       .from('usage_events')
       .select('event_type, unit, quantity')
@@ -67,7 +100,7 @@ export async function getWorkspaceCreditUsage(workspaceId: string): Promise<Work
   ])
 
   // usage_events e o ledger oficial. Fallback legado: carousels antigos sem evento.
-  const weightedUsage = toWeightedCredits((usageRes.data || []) as UsageRow[])
+  const weightedUsage = toWeightedCredits((usageRes.data || []) as UsageRow[], weights)
   const usedCredits = Math.max(weightedUsage, legacyCarouselCountRes.count || 0)
   const creditLimit = limits.monthlyPostCredits
   const remainingCredits = Number(Math.max(0, creditLimit - usedCredits).toFixed(2))

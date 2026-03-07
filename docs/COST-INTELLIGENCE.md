@@ -78,6 +78,7 @@ Uso típico:
 14. `supabase-schema.sql` inclui backfill idempotente de `carousels.workspace_id` para bases legadas.
 15. Exclusão de carrossel migrou para soft delete, sem perder histórico financeiro/uso.
 16. Consumo de créditos mensal passou a ser ponderado por ação: `content.generate/render=1`, `image.generate/image=0.25`, `publish/publish=0`.
+17. Política de crédito por ação ficou configurável no admin (`/admin/costs`) com persistência em `app_settings.credit_weights_json`.
 
 ---
 

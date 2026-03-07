@@ -63,6 +63,7 @@ O schema cria automaticamente:
 - Buckets de storage: `expert-photos`, `carousel-images`
 - Todas as RLS policies
 - Trigger de onboarding automático: `profiles` + `workspace` + `workspace_members`
+- Política de créditos por ação em `app_settings.credit_weights_json`
 
 > O schema é **idempotente** — pode ser rodado múltiplas vezes sem erro.
 

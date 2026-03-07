@@ -64,6 +64,7 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Sidebar exibe consumo de créditos do workspace acima do bloco do usuário
 - Créditos e métricas de geração no workspace/admin priorizam `usage_events` (ledger), mantendo fallback legado em `carousels`
 - Consumo de crédito mensal ponderado por ação: geração de conteúdo, geração de imagem e publicação
+- Política de créditos por ação configurável em `Admin > Costs`
 - Carrosséis agora usam soft delete (`deleted_at/deleted_by/deleted_reason`) para auditoria sem perder histórico
 - Content Hub DB: platforms, content_formats, templates, template_prompts
 - UX DNA Expert em duas etapas: lista primeiro; formulário só após selecionar um DNA ou clicar em `Novo`

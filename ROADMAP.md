@@ -215,3 +215,4 @@ Data de referência: 07/03/2026
 - Soft delete de carrossel implementado (auditoria preservada; usuário não vê item excluído).
 - Agendamento Supabase alinhado ao modelo atual de credenciais (`experts.ig_access_token`/`ig_account_id`).
 - Régua inicial de créditos por ação entregue (texto/imagem/publicação) via `usage_events`.
+- Política de créditos por ação agora configurável no admin (`/api/admin/costs/credit-policy` + UI em `/admin/costs`).

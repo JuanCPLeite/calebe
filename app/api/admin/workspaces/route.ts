@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/logger'
 import { DEFAULT_PLAN_CONFIGS, parsePlanConfigs, findPlanById, type PlanConfig } from '@/lib/plan-config'
-import { toWeightedCredits } from '@/lib/credit-limits'
+import { toWeightedCredits, parseCreditWeights } from '@/lib/credit-limits'
 
 const APP_SETTINGS_ID = '00000000-0000-0000-0000-000000000001'
 type WorkspaceBase = {
@@ -84,7 +84,7 @@ async function enrichWorkspaces(
   const recentLogsDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
   const monthStartDate = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
 
-  const [membersRes, carouselsRes, usageRes, logsRes, monthCarouselsRes] = await Promise.all([
+  const [membersRes, carouselsRes, usageRes, logsRes, monthCarouselsRes, settingsRes] = await Promise.all([
     admin.from('workspace_members').select('workspace_id').in('workspace_id', workspaceIds),
     admin
       .from('carousels')
@@ -106,7 +106,13 @@ async function enrichWorkspaces(
       .select('workspace_id')
       .in('workspace_id', workspaceIds)
       .gte('created_at', monthStartDate),
+    admin
+      .from('app_settings')
+      .select('credit_weights_json')
+      .eq('id', APP_SETTINGS_ID)
+      .maybeSingle(),
   ])
+  const creditWeights = parseCreditWeights((settingsRes.data as any)?.credit_weights_json)
 
   const memberCounts = new Map<string, number>()
   for (const row of membersRes.data || []) {
@@ -143,7 +149,7 @@ async function enrichWorkspaces(
         event_type: row.event_type,
         unit: row.unit,
         quantity: Number((row as any).quantity || 0),
-      }])).toFixed(2))
+      }], creditWeights)).toFixed(2))
     }
   }
 

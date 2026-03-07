@@ -47,6 +47,12 @@ interface PriceRow {
   effective_from: string
 }
 
+interface CreditPolicy {
+  contentRender: number
+  imageGenerate: number
+  publish: number
+}
+
 function usd(value: number): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 4 })
 }
@@ -60,6 +66,8 @@ export default function AdminCostsPage() {
   const [prices, setPrices] = useState<PriceRow[]>([])
   const [savingPrice, setSavingPrice] = useState(false)
   const [seedingPrice, setSeedingPrice] = useState(false)
+  const [savingPolicy, setSavingPolicy] = useState(false)
+  const [creditPolicy, setCreditPolicy] = useState<CreditPolicy>({ contentRender: 1, imageGenerate: 0.25, publish: 0 })
   const [priceForm, setPriceForm] = useState({
     provider: 'anthropic',
     model: '',
@@ -90,6 +98,7 @@ export default function AdminCostsPage() {
   useEffect(() => {
     load()
     loadPrices()
+    loadCreditPolicy()
   }, [])
 
   const avgPerEvent = useMemo(() => {
@@ -103,6 +112,21 @@ export default function AdminCostsPage() {
       const json = await res.json()
       if (!res.ok) return
       setPrices(json.prices || [])
+    } catch {
+      // noop
+    }
+  }
+
+  async function loadCreditPolicy() {
+    try {
+      const res = await fetch('/api/admin/costs/credit-policy')
+      const json = await res.json()
+      if (!res.ok) return
+      setCreditPolicy({
+        contentRender: Number(json?.weights?.contentRender) || 0,
+        imageGenerate: Number(json?.weights?.imageGenerate) || 0,
+        publish: Number(json?.weights?.publish) || 0,
+      })
     } catch {
       // noop
     }
@@ -154,6 +178,32 @@ export default function AdminCostsPage() {
       await loadPrices()
     } catch (err: any) {
       setError(err.message || 'Erro ao excluir preço')
+    }
+  }
+
+  async function saveCreditPolicy() {
+    setSavingPolicy(true)
+    try {
+      const payload = {
+        weights: {
+          contentRender: Number(creditPolicy.contentRender || 0),
+          imageGenerate: Number(creditPolicy.imageGenerate || 0),
+          publish: Number(creditPolicy.publish || 0),
+        },
+      }
+      const res = await fetch('/api/admin/costs/credit-policy', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Falha ao salvar política de créditos')
+      await load()
+      await loadCreditPolicy()
+    } catch (err: any) {
+      setError(err.message || 'Erro ao salvar política de créditos')
+    } finally {
+      setSavingPolicy(false)
     }
   }
 
@@ -311,6 +361,47 @@ export default function AdminCostsPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-sm font-semibold text-zinc-100">Política de Créditos por Ação</p>
+              <Button onClick={saveCreditPolicy} disabled={savingPolicy} className="bg-violet-600 hover:bg-violet-500">
+                {savingPolicy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar política'}
+              </Button>
+            </div>
+            <p className="text-xs text-zinc-500">
+              Define quantos créditos cada ação consome no mês. Valores decimais permitidos.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={creditPolicy.contentRender}
+                onChange={(e) => setCreditPolicy((p) => ({ ...p, contentRender: Number(e.target.value) }))}
+                placeholder="Geração de conteúdo (render)"
+                className="h-9 rounded-md border border-zinc-700 bg-zinc-800 px-3 text-sm text-zinc-100"
+              />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={creditPolicy.imageGenerate}
+                onChange={(e) => setCreditPolicy((p) => ({ ...p, imageGenerate: Number(e.target.value) }))}
+                placeholder="Geração de imagem"
+                className="h-9 rounded-md border border-zinc-700 bg-zinc-800 px-3 text-sm text-zinc-100"
+              />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={creditPolicy.publish}
+                onChange={(e) => setCreditPolicy((p) => ({ ...p, publish: Number(e.target.value) }))}
+                placeholder="Publicação"
+                className="h-9 rounded-md border border-zinc-700 bg-zinc-800 px-3 text-sm text-zinc-100"
+              />
             </div>
           </div>
 

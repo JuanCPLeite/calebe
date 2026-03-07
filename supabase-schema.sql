@@ -327,12 +327,14 @@ create table if not exists app_settings (
   openai_key    text        default '',
   exa_key       text        default '',
   plan_configs  jsonb       not null default '[]'::jsonb,
+  credit_weights_json jsonb not null default '{"contentRender":1,"imageGenerate":0.25,"publish":0}'::jsonb,
   updated_at    timestamptz not null default now(),
   updated_by    uuid        references auth.users(id) on delete set null
 );
 
 -- Compatibilidade para bases antigas
 alter table app_settings add column if not exists plan_configs jsonb not null default '[]'::jsonb;
+alter table app_settings add column if not exists credit_weights_json jsonb not null default '{"contentRender":1,"imageGenerate":0.25,"publish":0}'::jsonb;
 
 -- Garante que só existe 1 linha de settings
 insert into app_settings (id) values ('00000000-0000-0000-0000-000000000001')

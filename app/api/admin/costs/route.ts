@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/logger'
 import { findPlanById, parsePlanConfigs, DEFAULT_PLAN_CONFIGS } from '@/lib/plan-config'
+import { parseCreditWeights, toWeightedCredits } from '@/lib/credit-limits'
 
 async function ensureOwner() {
   const supabase = await createClient()
@@ -51,16 +52,23 @@ export async function GET(req: NextRequest) {
     if (workspaceId) usageQuery = usageQuery.eq('workspace_id', workspaceId)
 
     const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
-    const [usageRes, workspacesRes, profilesRes, settingsRes, monthCarouselsRes, monthCostRes] = await Promise.all([
+    const [usageRes, workspacesRes, profilesRes, settingsRes, monthCarouselsRes, monthUsageRes, monthCostRes] = await Promise.all([
       usageQuery,
       admin.from('workspaces').select('id, name, plan').order('name', { ascending: true }),
       admin.from('profiles').select('id, full_name'),
-      admin.from('app_settings').select('plan_configs').eq('id', '00000000-0000-0000-0000-000000000001').maybeSingle(),
+      admin.from('app_settings').select('plan_configs, credit_weights_json').eq('id', '00000000-0000-0000-0000-000000000001').maybeSingle(),
       admin
         .from('carousels')
         .select('workspace_id, created_at')
         .gte('created_at', monthStart)
         .limit(20000),
+      admin
+        .from('usage_events')
+        .select('workspace_id, event_type, unit, quantity')
+        .gte('created_at', monthStart)
+        .in('event_type', ['content.generate', 'image.generate', 'publish'])
+        .in('unit', ['render', 'image', 'publish'])
+        .limit(50000),
       admin
         .from('usage_events')
         .select('workspace_id, total_cost_usd')
@@ -76,6 +84,7 @@ export async function GET(req: NextRequest) {
     const workspaces = workspacesRes.data || []
     const profiles = profilesRes.data || []
     const plans = parsePlanConfigs((settingsRes.data as any)?.plan_configs || DEFAULT_PLAN_CONFIGS)
+    const creditWeights = parseCreditWeights((settingsRes.data as any)?.credit_weights_json)
     const wsNameById = new Map(workspaces.map((w) => [w.id, w.name || w.id]))
     const userNameById = new Map(profiles.map((p) => [p.id, p.full_name || p.id]))
 
@@ -148,14 +157,25 @@ export async function GET(req: NextRequest) {
     }
 
     const monthUsageByWorkspace = new Map<string, number>()
+    for (const row of monthUsageRes.data || []) {
+      const wsId = row.workspace_id || 'unknown'
+      const weighted = toWeightedCredits([{
+        event_type: row.event_type,
+        unit: row.unit,
+        quantity: Number((row as any).quantity || 0),
+      }], creditWeights)
+      monthUsageByWorkspace.set(wsId, Number(((monthUsageByWorkspace.get(wsId) || 0) + weighted).toFixed(2)))
+    }
+
+    const monthCarouselFallback = new Map<string, number>()
     for (const row of monthCarouselsRes.data || []) {
       const wsId = row.workspace_id || 'unknown'
-      monthUsageByWorkspace.set(wsId, (monthUsageByWorkspace.get(wsId) || 0) + 1)
+      monthCarouselFallback.set(wsId, (monthCarouselFallback.get(wsId) || 0) + 1)
     }
 
     const creditUsage = workspaces.map((w) => {
       const plan = findPlanById(plans, w.plan) || plans[0]
-      const used = monthUsageByWorkspace.get(w.id) || 0
+      const used = Math.max(monthUsageByWorkspace.get(w.id) || 0, monthCarouselFallback.get(w.id) || 0)
       const limit = plan?.monthlyPostCredits || 1
       const usagePercent = Math.round((used / Math.max(1, limit)) * 100)
       return {
