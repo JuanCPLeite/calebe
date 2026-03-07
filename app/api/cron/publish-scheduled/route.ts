@@ -146,8 +146,15 @@ async function resolveMetaCredentials(
  * Requer header: x-cron-secret = CRON_SECRET (env var)
  */
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get('x-cron-secret')
-  if (!secret || secret !== process.env.CRON_SECRET) {
+  const expected = process.env.CRON_SECRET || ''
+  const headerSecret = req.headers.get('x-cron-secret') || ''
+  const authHeader = req.headers.get('authorization') || ''
+  const bearerSecret = authHeader.toLowerCase().startsWith('bearer ')
+    ? authHeader.slice(7).trim()
+    : ''
+  const provided = headerSecret || bearerSecret
+
+  if (!expected || !provided || provided !== expected) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 

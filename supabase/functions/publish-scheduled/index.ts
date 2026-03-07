@@ -13,8 +13,15 @@ interface CarouselSlide {
 interface CarouselRow {
   id: string
   user_id: string
+  workspace_id?: string | null
+  expert_id?: string | null
   caption: string | null
   slides: CarouselSlide[] | null
+}
+
+interface MetaCredentials {
+  token: string
+  accountId: string
 }
 
 const API_VERSION = "v21.0"
@@ -159,6 +166,53 @@ async function resolveSlideUrl(
   return null
 }
 
+async function resolveMetaCredentials(
+  supabase: ReturnType<typeof createClient>,
+  carousel: CarouselRow,
+): Promise<MetaCredentials | null> {
+  let token = ""
+  let accountId = ""
+
+  if (carousel.expert_id) {
+    const { data: expertById } = await supabase
+      .from("experts")
+      .select("ig_access_token, ig_account_id")
+      .eq("id", carousel.expert_id)
+      .maybeSingle()
+    token = (expertById as Record<string, string> | null)?.ig_access_token || ""
+    accountId = (expertById as Record<string, string> | null)?.ig_account_id || ""
+  }
+
+  if (!token || !accountId) {
+    const { data: expertByUser } = await supabase
+      .from("experts")
+      .select("ig_access_token, ig_account_id")
+      .eq("user_id", carousel.user_id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    token = token || (expertByUser as Record<string, string> | null)?.ig_access_token || ""
+    accountId = accountId || (expertByUser as Record<string, string> | null)?.ig_account_id || ""
+  }
+
+  if ((!token || !accountId) && carousel.workspace_id) {
+    const { data: expertByWorkspace } = await supabase
+      .from("experts")
+      .select("ig_access_token, ig_account_id")
+      .eq("workspace_id", carousel.workspace_id)
+      .limit(1)
+      .maybeSingle()
+    token = token || (expertByWorkspace as Record<string, string> | null)?.ig_access_token || ""
+    accountId = accountId || (expertByWorkspace as Record<string, string> | null)?.ig_account_id || ""
+  }
+
+  token = token || Deno.env.get("META_GRAPH_API_TOKEN") || Deno.env.get("IG_TOKEN") || ""
+  accountId = accountId || Deno.env.get("META_IG_ACCOUNT_ID") || Deno.env.get("IG_ACCOUNT_ID") || ""
+
+  if (!token || !accountId) return null
+  return { token, accountId }
+}
+
 Deno.serve(async (req) => {
   const cronSecret = Deno.env.get("CRON_SECRET")
   if (!cronSecret || req.headers.get("x-cron-secret") !== cronSecret) {
@@ -175,7 +229,8 @@ Deno.serve(async (req) => {
 
   const { data: pending, error } = await supabase
     .from("carousels")
-    .select("id,user_id,caption,slides")
+    .select("id,user_id,workspace_id,expert_id,caption,slides")
+    .is("deleted_at", null)
     .lte("scheduled_at", new Date().toISOString())
     .is("ig_post_id", null)
     .not("scheduled_at", "is", null)
@@ -205,25 +260,13 @@ Deno.serve(async (req) => {
         continue
       }
 
-      const { data: tokens, error: tokenErr } = await supabase
-        .from("user_tokens")
-        .select("provider,value")
-        .eq("user_id", raw.user_id)
-        .in("provider", ["meta_token", "meta_account_id"])
-      if (tokenErr) throw new Error(tokenErr.message)
-
-      let metaToken = ""
-      let metaAccountId = ""
-      for (const token of tokens || []) {
-        if (token.provider === "meta_token") metaToken = token.value
-        if (token.provider === "meta_account_id") metaAccountId = token.value
-      }
-      if (!metaToken || !metaAccountId) {
-        results.push({ id: raw.id, status: "tokens_meta_ausentes" })
+      const meta = await resolveMetaCredentials(supabase, raw)
+      if (!meta) {
+        results.push({ id: raw.id, status: "credenciais_meta_ausentes" })
         continue
       }
 
-      const postId = await publishCarousel(metaAccountId, metaToken, imageUrls, raw.caption)
+      const postId = await publishCarousel(meta.accountId, meta.token, imageUrls, raw.caption)
 
       const { error: updateErr } = await supabase
         .from("carousels")
@@ -233,6 +276,7 @@ Deno.serve(async (req) => {
         })
         .eq("id", raw.id)
         .eq("user_id", raw.user_id)
+        .is("deleted_at", null)
       if (updateErr) throw new Error(updateErr.message)
 
       results.push({ id: raw.id, status: "publicado" })
