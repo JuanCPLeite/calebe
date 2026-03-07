@@ -89,7 +89,7 @@ Data de referência: 06/03/2026
 - [x] `/admin/users` — todos os usuários com role e workspace
 
 **Frontend — Workspace:**
-- [ ] Selector de workspace no header (para quem é membro de múltiplos)
+- [x] Selector de workspace no header (para quem é membro de múltiplos)
 - [ ] `/team` — gerenciar membros (admin only): convidar, alterar role, remover
 - [ ] Remover `/tokens` (tokens são da plataforma agora)
 
@@ -152,5 +152,6 @@ Data de referência: 06/03/2026
 - `/admin` agora consome métricas reais via `/api/admin/metrics`.
 - `/admin/settings` refinado com reveal seguro e teste de conexão por provider.
 - `/admin/workspaces` evoluído para versão final: colunas de uso/membros/atividade, KPIs e confirmação de suspensão/reativação.
+- Selector de workspace no header implementado (troca segura via `/api/workspace/context`).
 - Hardening de onboarding no schema: `profiles.role` não nulo + primeiro usuário vira `owner` automaticamente.
-- Próximo passo direto: implementar selector de workspace no header (multi-membership).
+- Próximo passo direto: implementar `/team` para gestão de membros (admin only).

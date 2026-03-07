@@ -255,6 +255,9 @@ app/
       logs/             ← system_logs viewer
       settings/         ← app_settings (chaves de IA)
       users/            ← todos os usuários
+
+  api/
+    workspace/context   ← GET/PATCH do workspace ativo do usuário logado
 ```
 
 ---
@@ -280,3 +283,4 @@ app/
 | 2026-03-06 | profiles.role com 3 níveis (owner/admin/member) | Simples e suficiente para o estágio atual |
 | 2026-03-06 | plan no schema desde o início | Evita migration forçada quando Stripe for integrado |
 | 2026-03-06 | Trigger cria profile automaticamente | Onboarding automático sem ação manual |
+| 2026-03-07 | Selector global de workspace no header | Usuário com múltiplos memberships alterna contexto sem sair da sessão |
