@@ -44,6 +44,7 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] UI de `/admin/plans` com popup de dicas e edição de limites por plano
 - [x] API `GET /api/admin/costs` (owner only) com agregados por período/workspace
 - [x] API `GET/POST/DELETE /api/admin/costs/prices` (owner only) para catálogo de preços
+- [x] API `POST /api/admin/costs/prices/seed` para preencher baseline de preços estimados
 - [x] UI `/admin/costs` com custo total, top workspaces, top usuários e modelos mais caros
 - [ ] Refinos finais de UX nas telas admin (próximo foco: selector de workspace no header)
 
@@ -182,6 +183,7 @@ Filtros:
 - Top workspaces por custo
 - Top usuários por custo
 - Modelos/provedores com maior custo agregado
+- Alertas automáticos (pico de custo e uso alto de créditos)
 
 ### Filtros
 

@@ -19,6 +19,15 @@ interface CostData {
   topUsers: Array<{ userId: string; userName: string; totalCostUsd: number }>
   topModels: Array<{ provider: string; model: string; totalCostUsd: number; totalQuantity: number }>
   daily: Array<{ date: string; totalCostUsd: number }>
+  creditUsage: Array<{
+    workspaceId: string
+    workspaceName: string
+    planId: string
+    usedCredits: number
+    creditLimit: number
+    usagePercent: number
+  }>
+  alerts: Array<{ level: 'info' | 'warn'; message: string }>
 }
 
 interface PriceRow {
@@ -43,6 +52,7 @@ export default function AdminCostsPage() {
   const [data, setData] = useState<CostData | null>(null)
   const [prices, setPrices] = useState<PriceRow[]>([])
   const [savingPrice, setSavingPrice] = useState(false)
+  const [seedingPrice, setSeedingPrice] = useState(false)
   const [priceForm, setPriceForm] = useState({
     provider: 'anthropic',
     model: '',
@@ -107,6 +117,21 @@ export default function AdminCostsPage() {
       setError(err.message || 'Erro ao salvar preço')
     } finally {
       setSavingPrice(false)
+    }
+  }
+
+  async function seedEstimatedPrices() {
+    setSeedingPrice(true)
+    try {
+      const res = await fetch('/api/admin/costs/prices/seed', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Falha ao semear preços')
+      await loadPrices()
+      await load()
+    } catch (err: any) {
+      setError(err.message || 'Erro ao semear preços')
+    } finally {
+      setSeedingPrice(false)
     }
   }
 
@@ -183,6 +208,17 @@ export default function AdminCostsPage() {
             </div>
           </div>
 
+          {data.alerts.length > 0 && (
+            <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 p-4 space-y-2">
+              <p className="text-sm font-semibold text-amber-300">Alertas de custo e uso</p>
+              {data.alerts.map((alert, idx) => (
+                <p key={idx} className={`text-xs ${alert.level === 'warn' ? 'text-amber-300' : 'text-zinc-300'}`}>
+                  • {alert.message}
+                </p>
+              ))}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
               <p className="text-sm font-semibold text-zinc-100 mb-3">Top Workspaces por custo</p>
@@ -240,8 +276,47 @@ export default function AdminCostsPage() {
             </div>
           </div>
 
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <p className="text-sm font-semibold text-zinc-100 mb-3">Uso de créditos mensais por workspace</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                    <th className="py-2 pr-3">Workspace</th>
+                    <th className="py-2 pr-3">Plano</th>
+                    <th className="py-2 pr-3">Uso</th>
+                    <th className="py-2 pr-3">%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.creditUsage.map((item) => (
+                    <tr key={item.workspaceId} className="border-b border-zinc-900">
+                      <td className="py-2 pr-3 text-zinc-300">{item.workspaceName}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.planId}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{item.usedCredits}/{item.creditLimit}</td>
+                      <td className={`py-2 pr-3 font-medium ${item.usagePercent >= 100 ? 'text-red-400' : item.usagePercent >= 80 ? 'text-amber-400' : 'text-zinc-100'}`}>
+                        {item.usagePercent}%
+                      </td>
+                    </tr>
+                  ))}
+                  {data.creditUsage.length === 0 && (
+                    <tr><td colSpan={4} className="py-4 text-center text-zinc-500">Sem dados no período.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
-            <p className="text-sm font-semibold text-zinc-100">Catálogo de Preços (USD)</p>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-sm font-semibold text-zinc-100">Catálogo de Preços (USD)</p>
+              <Button onClick={seedEstimatedPrices} disabled={seedingPrice} variant="outline" className="border-zinc-700 text-zinc-200">
+                {seedingPrice ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Seed estimado'}
+              </Button>
+            </div>
+            <p className="text-xs text-zinc-500">
+              Seed estimado serve como ponto de partida. Ajuste com preços reais do provider.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
               <select
                 value={priceForm.provider}

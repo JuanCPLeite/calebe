@@ -363,6 +363,17 @@ paths:
           description: Não autenticado
         '403':
           description: Acesso negado
+  /api/admin/costs/prices/seed:
+    post:
+      summary: Insere preços estimados iniciais no catálogo
+      tags: [Admin Costs]
+      responses:
+        '200':
+          description: Seed aplicado
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
   /api/admin/users:
     get:
       summary: Lista usuários da plataforma

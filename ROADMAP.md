@@ -204,3 +204,4 @@ Data de referência: 07/03/2026
 - MVP de custos entregue: instrumentação de `usage_events` em content/images/publish + `/api/admin/costs` + `/admin/costs`.
 - Catálogo de preços entregue: `/api/admin/costs/prices` + gestão no `/admin/costs`.
 - Enforcement inicial entregue: `memberLimit` em `/api/team/members` e `monthlyPostCredits` em `/api/generate/content`.
+- Alertas iniciais de custo/crédito entregues em `/admin/costs` + seed estimado de preços.
