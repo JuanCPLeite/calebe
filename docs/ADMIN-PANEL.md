@@ -30,7 +30,7 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] UI MVP de `/admin/settings` (carrega/salva chaves)
 - [x] UI MVP de `/admin/workspaces` (listar/criar/suspender/alterar plano)
 - [x] UI inicial de `/admin` (hub de navegação)
-- [x] UI MVP de `/admin/logs` (tabela + filtros + payload)
+- [x] UI MVP de `/admin/logs` (tabela + filtros + payload + modal de detalhe)
 - [x] UI MVP de `/admin/users` (listar/filtrar/editar role/workspace)
 - [ ] Fechar versão completa das telas (`/admin` com métricas, `/admin/workspaces/[id]`)
 

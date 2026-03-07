@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, RefreshCcw } from 'lucide-react'
+import { Loader2, RefreshCcw, X, Copy, Check } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +28,8 @@ export default function AdminLogsPage() {
   const [workspaceId, setWorkspaceId] = useState('')
   const [days, setDays] = useState<'1' | '7' | '30'>('7')
   const [search, setSearch] = useState('')
+  const [selectedLog, setSelectedLog] = useState<LogItem | null>(null)
+  const [copied, setCopied] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -73,6 +75,21 @@ export default function AdminLogsPage() {
     if (lvl === 'error') return 'bg-red-700/30 text-red-300'
     if (lvl === 'warn') return 'bg-amber-700/30 text-amber-300'
     return 'bg-blue-700/30 text-blue-300'
+  }
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setSelectedLog(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  async function handleCopyPayload() {
+    if (!selectedLog) return
+    await navigator.clipboard.writeText(JSON.stringify(selectedLog.payload || {}, null, 2))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
   }
 
   return (
@@ -152,11 +169,16 @@ export default function AdminLogsPage() {
                   <th className="py-2 pr-3">Evento</th>
                   <th className="py-2 pr-3">Workspace</th>
                   <th className="py-2 pr-3">Payload</th>
+                  <th className="py-2 pr-3">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredLogs.map((item) => (
-                  <tr key={item.id} className="border-b border-zinc-900 align-top">
+                  <tr
+                    key={item.id}
+                    className="border-b border-zinc-900 align-top hover:bg-zinc-900/40 cursor-pointer"
+                    onClick={() => setSelectedLog(item)}
+                  >
                     <td className="py-3 pr-3 text-zinc-400 whitespace-nowrap">
                       {new Date(item.created_at).toLocaleString('pt-BR')}
                     </td>
@@ -168,15 +190,28 @@ export default function AdminLogsPage() {
                       {item.workspace ? item.workspace.name : '—'}
                     </td>
                     <td className="py-3 pr-3">
-                      <pre className="text-xs text-zinc-400 whitespace-pre-wrap break-words max-w-[560px]">
-                        {JSON.stringify(item.payload || {}, null, 2)}
-                      </pre>
+                      <p className="text-xs text-zinc-400 max-w-[560px] truncate">
+                        {JSON.stringify(item.payload || {})}
+                      </p>
+                    </td>
+                    <td className="py-3 pr-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-zinc-700 text-zinc-200"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedLog(item)
+                        }}
+                      >
+                        Detalhes
+                      </Button>
                     </td>
                   </tr>
                 ))}
                 {filteredLogs.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-zinc-500">
+                    <td colSpan={6} className="py-6 text-center text-zinc-500">
                       Nenhum log encontrado com os filtros atuais.
                     </td>
                   </tr>
@@ -186,6 +221,55 @@ export default function AdminLogsPage() {
           </div>
         )}
       </div>
+
+      {selectedLog && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setSelectedLog(null)}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[85vh] rounded-xl border border-zinc-700 bg-zinc-900 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-zinc-100">{selectedLog.event}</p>
+                <p className="text-xs text-zinc-500">
+                  {new Date(selectedLog.created_at).toLocaleString('pt-BR')} · {selectedLog.id}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge className={levelBadge(selectedLog.level)}>{selectedLog.level}</Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-zinc-700 text-zinc-200"
+                  onClick={handleCopyPayload}
+                >
+                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copied ? 'Copiado' : 'Copiar JSON'}
+                </Button>
+                <button
+                  className="text-zinc-400 hover:text-zinc-100"
+                  onClick={() => setSelectedLog(null)}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-4 py-3 space-y-2 overflow-y-auto">
+              <p className="text-xs text-zinc-500">
+                Workspace: {selectedLog.workspace?.name || '—'} ({selectedLog.workspace_id || 'sem id'})
+              </p>
+              <p className="text-xs text-zinc-500">User ID: {selectedLog.user_id || '—'}</p>
+              <pre className="text-xs text-zinc-300 bg-zinc-950 border border-zinc-800 rounded-lg p-3 whitespace-pre-wrap break-words">
+                {JSON.stringify(selectedLog.payload || {}, null, 2)}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -146,6 +146,7 @@ Data de referência: 06/03/2026
 - API de workspaces do admin implementada (`GET/POST/PATCH` em `/api/admin/workspaces`).
 - UI inicial do admin entregue: `/admin`, `/admin/settings`, `/admin/workspaces` (MVP funcional).
 - `/admin/logs` implementado (API + UI com filtros e busca local em payload).
+- `/admin/logs` refinado com modal de detalhe por linha e copy JSON.
 - `/admin/users` implementado (API + UI para listar/filtrar/editar role/workspace).
 - Hardening de onboarding no schema: `profiles.role` não nulo + primeiro usuário vira `owner` automaticamente.
-- Próximo passo direto: detalhamento de `/admin/workspaces/[id]` e modal de detalhe no `/admin/logs`.
+- Próximo passo direto: detalhamento de `/admin/workspaces/[id]`.
