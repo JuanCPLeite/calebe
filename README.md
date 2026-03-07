@@ -50,6 +50,7 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Geração de imagens com Gemini
 - Publicação no Instagram via Meta Graph API
 - Agendamento com cron nativo Supabase
+- Agendamento validado com Edge Function `publish-scheduled` usando credenciais Meta em `experts` (com fallback env)
 - Dashboard: lista/grid, filtros, métricas, thumbnails ao vivo, duplicar, excluir
 - Admin owner: visão global de postagens em `/admin/carousels` com ações operacionais
 - Admin owner: gestão de tipos de plano em `/admin/plans` (planos customizados + limite de experts)

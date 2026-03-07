@@ -213,3 +213,4 @@ Data de referência: 07/03/2026
 - `/dashboard` agora exibe alerta de risco/esgotamento de créditos para orientar upgrade.
 - Métricas de geração/créditos passaram a priorizar `usage_events` (ledger) com fallback legado em `carousels`.
 - Soft delete de carrossel implementado (auditoria preservada; usuário não vê item excluído).
+- Agendamento Supabase alinhado ao modelo atual de credenciais (`experts.ig_access_token`/`ig_account_id`).

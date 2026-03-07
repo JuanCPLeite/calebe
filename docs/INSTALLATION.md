@@ -55,7 +55,7 @@ npm install
 4. Clique em **Run**
 
 O schema cria automaticamente:
-- Tabelas de usuários: `profiles`, `experts`, `expert_photos`, `user_tokens`, `carousels`
+- Tabelas de usuários: `profiles`, `experts`, `expert_photos`, `carousels`
 - Tabelas multi-tenant: `workspaces`, `workspace_members`
 - Tabelas admin: `app_settings`, `system_logs`
 - Tabelas de custo: `provider_price_catalog`, `usage_events`
@@ -343,11 +343,11 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 - Confirme que `ig_account_id` e `ig_access_token` estão preenchidos em `experts`
 
 ### Agendamento não publica no horário
-- O cron do Vercel roda no intervalo configurado (`vercel.json`: `*/5 * * * *`), então pode haver atraso de até ~5 minutos
-- Confirme que `CRON_SECRET` está configurado no ambiente de produção
-- Se usar Vercel Cron, o header chega como `Authorization: Bearer <CRON_SECRET>`
-- Se usar pg_cron/Supabase, o header esperado é `x-cron-secret: <CRON_SECRET>`
+- No fluxo Supabase (`pg_cron` + Edge Function), o header esperado é `x-cron-secret: <CRON_SECRET>`
+- Confirme que o mesmo valor de `CRON_SECRET` está no secret da function e no `cron.schedule(...)`
 - Para publicação no fluxo atual, a function usa credenciais Meta do `experts` (`ig_access_token` e `ig_account_id`), com fallback de env
+- `processed: 0` indica que não há itens elegíveis (`scheduled_at <= now`, `ig_post_id is null`, `deleted_at is null`)
+- Erro `Only photo or video can be accepted as media type`: regenere imagens/cards do carrossel e reagende
 
 ### Após atualizar para a versão multi-tenant atual
 - Rode novamente `supabase-schema.sql` para garantir colunas novas idempotentes (ex.: `experts.ig_access_token`)

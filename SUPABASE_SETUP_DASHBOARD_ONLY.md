@@ -9,7 +9,7 @@ Guia completo para configurar um projeto Carousel Studio do zero usando apenas o
 | Item | Descricao |
 |------|-----------|
 | Schema completo | Todas as tabelas, RLS e storage |
-| Tabelas de usuarios | experts, expert_photos, user_tokens, carousels |
+| Tabelas de usuarios | profiles, experts, expert_photos, carousels, workspaces, workspace_members |
 | Tabelas Content Hub | platforms, content_formats, templates, template_prompts |
 | Storage buckets | expert-photos, carousel-images |
 | Edge Function | publish-scheduled (cron de publicacao) |
@@ -45,8 +45,8 @@ O schema e **idempotente**: pode ser rodado multiplas vezes sem erro — ele usa
 **Tabelas de usuarios:**
 - `experts` — perfil do expert (nome, nicho, templates, CTA, cor de destaque)
 - `expert_photos` — fotos de referencia do expert (max 10)
-- `user_tokens` — chaves de API por usuario (Anthropic, Google, EXA, Meta)
 - `carousels` — historico de carrosseis gerados (slides em JSONB)
+- `profiles`, `workspaces`, `workspace_members` — base multi-tenant e roles
 
 **Tabelas Content Hub:**
 - `platforms` — Instagram, LinkedIn, Facebook, Twitter/X, Pinterest
@@ -235,9 +235,11 @@ order by table_name;
 -- expert_photos
 -- experts
 -- platforms
+-- profiles
 -- template_prompts
 -- templates
--- user_tokens
+-- workspace_members
+-- workspaces
 ```
 
 ```sql
@@ -296,3 +298,10 @@ order by tp.template_id, tp.step;
 - Postagem normalmente ocorre em ate ~60 segundos apos `scheduled_at`
 - Precisao de "segundo exato" nao e garantida com cron SQL
 - Para alta precisao, considere Supabase Realtime + webhook dedicado
+
+## Troubleshooting de publicacao agendada
+
+- `401 Não autorizado`: `x-cron-secret` do invoke/cron diferente do secret `CRON_SECRET` da function.
+- `processed: 0`: nao ha itens elegiveis (`scheduled_at <= now`, `ig_post_id is null`, `deleted_at is null`).
+- `credenciais_meta_ausentes`: faltam `ig_access_token`/`ig_account_id` em `experts` (ou fallback env).
+- `Only photo or video can be accepted as media type`: regenere imagens/cards antes de agendar novamente.

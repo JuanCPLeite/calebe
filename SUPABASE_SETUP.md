@@ -142,8 +142,9 @@ Erro 401 na function:
 - `x-cron-secret` diferente do `CRON_SECRET` salvo.
 
 Function processa mas nao publica:
-- Verificar `user_tokens` do usuario (`meta_token` e `meta_account_id`).
+- Verificar credenciais Meta no `experts` (`ig_access_token` e `ig_account_id`), com fallback por env.
 - Verificar slides com URL publicavel (`cardStoragePath`, `bgImageStoragePath`, `cardPath`, `imagePath`).
+- Se aparecer `Only photo or video can be accepted as media type`, regenere as imagens/cards do carrossel.
 
 ## 11) Seguranca
 
