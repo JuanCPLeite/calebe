@@ -16,6 +16,7 @@ const nav = [
   { label: 'DNA Expert',       href: '/expert/dna',      icon: Dna },
   { label: 'Fotos Referência', href: '/expert/photos',   icon: ImageIcon },
   { label: 'Perfil & Público', href: '/expert/audience', icon: Users },
+  { label: 'Equipe',          href: '/team',            icon: Users },
   { label: 'Tokens & APIs',    href: '/tokens',          icon: Key },
   { label: 'Templates',        href: '/templates',       icon: LayoutTemplate },
 ]

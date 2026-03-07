@@ -258,6 +258,7 @@ app/
 
   api/
     workspace/context   ← GET/PATCH do workspace ativo do usuário logado
+    team/members        ← GET/POST/PATCH/DELETE dos membros do workspace atual
 ```
 
 ---
@@ -284,3 +285,4 @@ app/
 | 2026-03-06 | plan no schema desde o início | Evita migration forçada quando Stripe for integrado |
 | 2026-03-06 | Trigger cria profile automaticamente | Onboarding automático sem ação manual |
 | 2026-03-07 | Selector global de workspace no header | Usuário com múltiplos memberships alterna contexto sem sair da sessão |
+| 2026-03-07 | API `/api/team/members` para gestão de equipe | Centraliza regra de permissão admin/owner no workspace atual |

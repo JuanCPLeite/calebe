@@ -90,7 +90,7 @@ Data de referência: 06/03/2026
 
 **Frontend — Workspace:**
 - [x] Selector de workspace no header (para quem é membro de múltiplos)
-- [ ] `/team` — gerenciar membros (admin only): convidar, alterar role, remover
+- [x] `/team` — gerenciar membros (admin only): convidar, alterar role, remover
 - [ ] Remover `/tokens` (tokens são da plataforma agora)
 
 ### Fase 4 — Multi-Provider UI
@@ -153,5 +153,6 @@ Data de referência: 06/03/2026
 - `/admin/settings` refinado com reveal seguro e teste de conexão por provider.
 - `/admin/workspaces` evoluído para versão final: colunas de uso/membros/atividade, KPIs e confirmação de suspensão/reativação.
 - Selector de workspace no header implementado (troca segura via `/api/workspace/context`).
+- `/team` implementado com API `/api/team/members` (listar, convidar, alterar role e remover).
 - Hardening de onboarding no schema: `profiles.role` não nulo + primeiro usuário vira `owner` automaticamente.
-- Próximo passo direto: implementar `/team` para gestão de membros (admin only).
+- Próximo passo direto: remover `/tokens` (fluxo legado de chaves por usuário).
