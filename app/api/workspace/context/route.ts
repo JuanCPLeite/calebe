@@ -8,6 +8,8 @@ interface ProfileRow {
   workspace_id: string | null
 }
 
+type WorkspacePlan = 'starter' | 'pro' | 'agency'
+
 export async function GET() {
   const supabase = await createClient()
   const {
@@ -32,7 +34,7 @@ export async function GET() {
   if (profile.role === 'owner') {
     const { data: workspaces } = await admin
       .from('workspaces')
-      .select('id, name, slug, active')
+      .select('id, name, slug, active, plan')
       .order('name', { ascending: true })
 
     return NextResponse.json({
@@ -42,6 +44,7 @@ export async function GET() {
         name: w.name,
         slug: w.slug,
         active: Boolean(w.active),
+        plan: (w.plan as WorkspacePlan) || 'starter',
         role: 'owner',
       })),
     })
@@ -59,10 +62,10 @@ export async function GET() {
   const { data: workspaces } = memberWorkspaceIds.length
     ? await admin
         .from('workspaces')
-        .select('id, name, slug, active')
+        .select('id, name, slug, active, plan')
         .in('id', memberWorkspaceIds)
         .order('name', { ascending: true })
-    : { data: [] as Array<{ id: string; name: string; slug: string; active: boolean }> }
+    : { data: [] as Array<{ id: string; name: string; slug: string; active: boolean; plan: WorkspacePlan }> }
 
   const roleMap = Object.fromEntries(
     (memberships || []).map((m) => [m.workspace_id, m.role || 'member'])
@@ -70,13 +73,14 @@ export async function GET() {
 
   return NextResponse.json({
     currentWorkspaceId: profile.workspace_id,
-    workspaces: (workspaces || []).map((w) => ({
-      id: w.id,
-      name: w.name,
-      slug: w.slug,
-      active: Boolean(w.active),
-      role: (roleMap[w.id] as 'admin' | 'member' | undefined) || 'member',
-    })),
+      workspaces: (workspaces || []).map((w) => ({
+        id: w.id,
+        name: w.name,
+        slug: w.slug,
+        active: Boolean(w.active),
+        plan: (w.plan as WorkspacePlan) || 'starter',
+        role: (roleMap[w.id] as 'admin' | 'member' | undefined) || 'member',
+      })),
   })
 }
 

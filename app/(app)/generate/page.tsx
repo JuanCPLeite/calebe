@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Topic } from '@/components/generate/topic-card'
@@ -9,10 +9,39 @@ import { Sparkles, Mic, Loader2, ArrowLeft, Send, AlertCircle, Calendar, Check, 
 import { TopicDiscovery } from '@/components/generate/topic-discovery'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+import { getActiveExpertContext } from '@/lib/expert-client'
 import { useSearchParams } from 'next/navigation'
 import { TEMPLATES, TEMPLATE_PRESETS } from '@/lib/templates'
 
 type Stage = 'discovery' | 'generating' | 'editing'
+type WorkspacePlan = 'starter' | 'pro' | 'agency'
+type ProviderId = 'anthropic' | 'openai'
+
+interface ModelOption {
+  providerId: ProviderId
+  model: string
+  label: string
+}
+
+const PLAN_MODEL_OPTIONS: Record<WorkspacePlan, ModelOption[]> = {
+  starter: [
+    { providerId: 'anthropic', model: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+  ],
+  pro: [
+    { providerId: 'anthropic', model: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+    { providerId: 'anthropic', model: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+  ],
+  agency: [
+    { providerId: 'anthropic', model: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+    { providerId: 'anthropic', model: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+    { providerId: 'openai', model: 'gpt-4o', label: 'GPT-4o' },
+  ],
+}
+
+function normalizePlan(value: unknown): WorkspacePlan {
+  if (value === 'pro' || value === 'agency') return value
+  return 'starter'
+}
 
 const DEFAULT_EXPERT: ExpertInfo = {
   displayName: 'Expert',
@@ -49,6 +78,9 @@ export default function GeneratePage() {
   const [showScheduler, setShowScheduler] = useState(false)
   const [scheduling, setScheduling]       = useState(false)
   const [savedTopicRef, setSavedTopicRef] = useState<string | null>(null)
+  const [workspacePlan, setWorkspacePlan] = useState<WorkspacePlan>('starter')
+  const [selectedProviderId, setSelectedProviderId] = useState<ProviderId>('anthropic')
+  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-5')
   const autoSaveTimerRef                  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sessionIdRef                      = useRef<string>(`temp-${Date.now()}`)
   const reRenderTimers                    = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
@@ -66,24 +98,15 @@ export default function GeneratePage() {
       if (!user) return
       setUserId(user.id)
 
-      // Carrega expert
-      const { data: exp } = await supabase
-        .from('experts')
-        .select('display_name, handle, highlight_color, niche, id')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const ctx = await getActiveExpertContext(supabase, user.id)
+      const exp = ctx.expert
 
       if (exp) {
-        setNiche(exp.niche || 'seu nicho')
+        setNiche((exp.niche as string) || 'seu nicho')
 
         let avatarUrl: string | undefined
         try {
-          const { data: expFull } = await supabase
-            .from('experts')
-            .select('avatar_url')
-            .eq('user_id', user.id)
-            .maybeSingle()
-          avatarUrl = (expFull as any)?.avatar_url || undefined
+          avatarUrl = (exp as any)?.avatar_url || undefined
         } catch { /* coluna ainda não existe */ }
 
         if (!avatarUrl && exp.id) {
@@ -103,9 +126,9 @@ export default function GeneratePage() {
         }
 
         setExpert({
-          displayName:    exp.display_name || DEFAULT_EXPERT.displayName,
-          handle:         exp.handle       || DEFAULT_EXPERT.handle,
-          highlightColor: exp.highlight_color || DEFAULT_EXPERT.highlightColor,
+          displayName:    (exp.display_name as string) || DEFAULT_EXPERT.displayName,
+          handle:         (exp.handle as string)       || DEFAULT_EXPERT.handle,
+          highlightColor: (exp.highlight_color as string) || DEFAULT_EXPERT.highlightColor,
           avatarUrl,
         })
       }
@@ -114,6 +137,44 @@ export default function GeneratePage() {
 
     loadExpertContext()
   }, [])
+
+  // Carrega plano do workspace atual para filtrar modelos disponíveis
+  useEffect(() => {
+    async function loadWorkspacePlan() {
+      try {
+        const res = await fetch('/api/workspace/context')
+        const data = await res.json()
+        if (!res.ok) return
+
+        const workspaces = Array.isArray(data.workspaces) ? data.workspaces : []
+        const currentWorkspaceId = typeof data.currentWorkspaceId === 'string' ? data.currentWorkspaceId : ''
+        const currentWorkspace = workspaces.find((w: any) => w.id === currentWorkspaceId) || workspaces[0]
+        setWorkspacePlan(normalizePlan(currentWorkspace?.plan))
+      } catch {
+        setWorkspacePlan('starter')
+      }
+    }
+
+    loadWorkspacePlan()
+  }, [])
+
+  const availableModels = useMemo(() => PLAN_MODEL_OPTIONS[workspacePlan], [workspacePlan])
+  const providerOptions = useMemo(
+    () => Array.from(new Set(availableModels.map((opt) => opt.providerId))),
+    [availableModels]
+  )
+
+  useEffect(() => {
+    const currentModelIsValid = availableModels.some(
+      (opt) => opt.providerId === selectedProviderId && opt.model === selectedModel
+    )
+    if (currentModelIsValid) return
+
+    const fallback = availableModels.find((opt) => opt.providerId === selectedProviderId) || availableModels[0]
+    if (!fallback) return
+    setSelectedProviderId(fallback.providerId)
+    setSelectedModel(fallback.model)
+  }, [availableModels, selectedProviderId, selectedModel])
 
   // Aplica preset automaticamente quando vem de /templates?template=...
   useEffect(() => {
@@ -141,7 +202,13 @@ export default function GeneratePage() {
         const res = await fetch('/api/carousels', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topic: selectedTopic, caption, slides }),
+          body: JSON.stringify({
+            topic: selectedTopic,
+            caption,
+            slides,
+            providerId: selectedProviderId,
+            model: selectedModel,
+          }),
         })
         const data = await res.json()
         if (data.id) {
@@ -223,7 +290,15 @@ export default function GeneratePage() {
       const res = await fetch('/api/generate/content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topic.title, hook, textLength, useFixedSlides, templateId: activeTemplateId }),
+        body: JSON.stringify({
+          topic: topic.title,
+          hook,
+          textLength,
+          useFixedSlides,
+          templateId: activeTemplateId,
+          providerId: selectedProviderId,
+          model: selectedModel,
+        }),
       })
 
       if (!res.ok || !res.body) {
@@ -678,7 +753,9 @@ export default function GeneratePage() {
             <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
           </div>
           <div className="space-y-2">
-            <p className="text-sm font-medium text-zinc-100">Gerando carrossel com Claude...</p>
+            <p className="text-sm font-medium text-zinc-100">
+              Gerando carrossel com {availableModels.find((m) => m.model === selectedModel)?.label || selectedModel}...
+            </p>
             {clampedSlides > 0 ? (
               <>
                 <p className="text-xs text-zinc-400">
@@ -774,6 +851,41 @@ export default function GeneratePage() {
               Gerar com IA
             </button>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">Provider:</span>
+          <select
+            value={selectedProviderId}
+            onChange={(e) => {
+              const nextProvider = e.target.value as ProviderId
+              setSelectedProviderId(nextProvider)
+              const firstModel = availableModels.find((m) => m.providerId === nextProvider)
+              if (firstModel) setSelectedModel(firstModel.model)
+            }}
+            className="h-8 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100"
+          >
+            {providerOptions.map((provider) => (
+              <option key={provider} value={provider}>
+                {provider === 'anthropic' ? 'Anthropic' : 'OpenAI'}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">Modelo:</span>
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="h-8 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100"
+          >
+            {availableModels
+              .filter((m) => m.providerId === selectedProviderId)
+              .map((modelOption) => (
+                <option key={`${modelOption.providerId}:${modelOption.model}`} value={modelOption.model}>
+                  {modelOption.label}
+                </option>
+              ))}
+          </select>
         </div>
       </div>
 

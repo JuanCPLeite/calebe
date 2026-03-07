@@ -80,7 +80,7 @@ Conteúdo assim toda semana — sem enrolação.
 // Converte row do DB para ExpertConfig
 export function toExpertConfig(row: Record<string, unknown>): ExpertConfig {
   return {
-    id: (row.user_id as string) || '',
+    id: (row.id as string) || '',
     displayName: (row.display_name as string) || '',
     handle: (row.handle as string) || '',
     igAccountId: (row.ig_account_id as string) || '',
@@ -97,19 +97,49 @@ export function toExpertConfig(row: Record<string, unknown>): ExpertConfig {
   }
 }
 
-// Busca expert do DB pelo userId
+export async function getActiveExpertRow(
+  userId: string,
+  supabase: SupabaseClient
+): Promise<Record<string, unknown> | null> {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('workspace_id, active_expert_id')
+    .eq('id', userId)
+    .maybeSingle()
+
+  const activeExpertId = (profile as Record<string, unknown> | null)?.active_expert_id as string | null | undefined
+  if (activeExpertId) {
+    const { data: activeExpert, error: activeError } = await supabase
+      .from('experts')
+      .select('*')
+      .eq('id', activeExpertId)
+      .maybeSingle()
+    if (!activeError && activeExpert) return activeExpert as Record<string, unknown>
+  }
+
+  const workspaceId = (profile as Record<string, unknown> | null)?.workspace_id as string | null | undefined
+  if (!workspaceId) return null
+
+  const { data: fallback, error } = await supabase
+    .from('experts')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !fallback) return null
+  return fallback as Record<string, unknown>
+}
+
+// Compatibilidade: retorna o expert ativo no contexto atual
 export async function getExpertFromDB(
   userId: string,
   supabase: SupabaseClient
 ): Promise<ExpertConfig | null> {
-  const { data, error } = await supabase
-    .from('experts')
-    .select('*')
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  if (error || !data) return null
-  return toExpertConfig(data)
+  const row = await getActiveExpertRow(userId, supabase)
+  if (!row) return null
+  return toExpertConfig(row)
 }
 
 // Busca expert do workspace atual quando não há expert ligado diretamente ao usuário
@@ -117,26 +147,9 @@ export async function getExpertForContext(
   userId: string,
   supabase: SupabaseClient
 ): Promise<ExpertConfig | null> {
-  const byUser = await getExpertFromDB(userId, supabase)
-  if (byUser) return byUser
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('workspace_id')
-    .eq('id', userId)
-    .maybeSingle()
-
-  if (!profile?.workspace_id) return null
-
-  const { data: expert, error } = await supabase
-    .from('experts')
-    .select('*')
-    .eq('workspace_id', profile.workspace_id)
-    .limit(1)
-    .maybeSingle()
-
-  if (error || !expert) return null
-  return toExpertConfig(expert)
+  const row = await getActiveExpertRow(userId, supabase)
+  if (!row) return null
+  return toExpertConfig(row)
 }
 
 // Compatibilidade legada (sem auth)

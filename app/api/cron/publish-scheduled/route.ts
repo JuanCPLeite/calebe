@@ -91,19 +91,32 @@ async function resolveSlidePublishUrl(
 
 async function resolveMetaCredentials(
   supabase: ReturnType<typeof createAdminClient>,
-  carousel: { user_id: string; workspace_id?: string | null }
+  carousel: { user_id: string; workspace_id?: string | null; expert_id?: string | null }
 ): Promise<MetaCredentials | null> {
   let token = ''
   let accountId = ''
 
-  const { data: expertByUser } = await supabase
-    .from('experts')
-    .select('ig_access_token, ig_account_id')
-    .eq('user_id', carousel.user_id)
-    .maybeSingle()
+  if (carousel.expert_id) {
+    const { data: expertById } = await supabase
+      .from('experts')
+      .select('ig_access_token, ig_account_id')
+      .eq('id', carousel.expert_id)
+      .maybeSingle()
+    token = (expertById as Record<string, string> | null)?.ig_access_token || ''
+    accountId = (expertById as Record<string, string> | null)?.ig_account_id || ''
+  }
 
-  token = (expertByUser as Record<string, string> | null)?.ig_access_token || ''
-  accountId = (expertByUser as Record<string, string> | null)?.ig_account_id || ''
+  if (!token || !accountId) {
+    const { data: expertByUser } = await supabase
+      .from('experts')
+      .select('ig_access_token, ig_account_id')
+      .eq('user_id', carousel.user_id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    token = token || (expertByUser as Record<string, string> | null)?.ig_access_token || ''
+    accountId = accountId || (expertByUser as Record<string, string> | null)?.ig_account_id || ''
+  }
 
   if ((!token || !accountId) && carousel.workspace_id) {
     const { data: expertByWorkspace } = await supabase

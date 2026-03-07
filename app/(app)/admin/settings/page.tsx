@@ -167,17 +167,27 @@ export default function AdminSettingsPage() {
     field: keyof typeof form,
     view?: KeyView
   ) => (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-zinc-100">{label}</p>
-        <span className={`text-xs ${view?.configured ? 'text-green-400' : 'text-zinc-500'}`}>
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-zinc-100">{label}</p>
+          <p className="text-xs text-zinc-500 mt-0.5">Armazenada no `app_settings`</p>
+        </div>
+        <span className={`text-xs font-medium ${view?.configured ? 'text-green-400' : 'text-zinc-500'}`}>
           {view?.configured ? 'Configurada' : 'Não configurada'}
         </span>
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-zinc-500">
+      <p className="text-xs text-zinc-500 break-all font-mono bg-zinc-950/70 border border-zinc-800 rounded-md px-2 py-1.5">
           Atual: {revealed[provider] || view?.masked || '—'}
-        </p>
+      </p>
+      <Input
+        value={form[field]}
+        onChange={(e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))}
+        placeholder={placeholder}
+        className="bg-zinc-800 border-zinc-700 text-zinc-100"
+      />
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
         <Button
           size="sm"
           variant="outline"
@@ -193,14 +203,6 @@ export default function AdminSettingsPage() {
           }
           {revealed[provider] ? 'Ocultar' : 'Revelar'}
         </Button>
-      </div>
-      <Input
-        value={form[field]}
-        onChange={(e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))}
-        placeholder={placeholder}
-        className="bg-zinc-800 border-zinc-700 text-zinc-100"
-      />
-      <div className="flex items-center justify-between gap-2">
         <Button
           size="sm"
           variant="outline"
@@ -211,6 +213,7 @@ export default function AdminSettingsPage() {
           {testing[provider] ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlugZap className="w-4 h-4" />}
           Testar conexão
         </Button>
+        </div>
         {testResult[provider] && (
           <span className={`text-xs ${testResult[provider]!.ok ? 'text-green-400' : 'text-red-400'}`}>
             {testResult[provider]!.detail}
@@ -221,10 +224,21 @@ export default function AdminSettingsPage() {
   )
 
   return (
-    <div className="p-8 space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-bold text-zinc-100">Admin Settings</h1>
-        <p className="text-sm text-zinc-500 mt-1">Chaves globais da plataforma (owner only)</p>
+    <div className="p-8 space-y-6 max-w-6xl">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">Admin Settings</h1>
+          <p className="text-sm text-zinc-500 mt-1">Chaves globais da plataforma (owner only)</p>
+          {updatedAt && (
+            <p className="text-xs text-zinc-500 mt-2">
+              Última atualização: {new Date(updatedAt).toLocaleString('pt-BR')}
+            </p>
+          )}
+        </div>
+        <Button onClick={handleSave} disabled={saving || loading} className="bg-violet-600 hover:bg-violet-500">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Salvar chaves
+        </Button>
       </div>
 
       {loading ? (
@@ -232,7 +246,7 @@ export default function AdminSettingsPage() {
           <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {row('anthropic', 'Anthropic', 'sk-ant-...', 'anthropicKey', masked?.anthropic)}
           {row('google', 'Google', 'AIza...', 'googleKey', masked?.google)}
           {row('openai', 'OpenAI', 'sk-...', 'openaiKey', masked?.openai)}
@@ -240,18 +254,7 @@ export default function AdminSettingsPage() {
         </div>
       )}
 
-      {updatedAt && (
-        <p className="text-xs text-zinc-500">
-          Última atualização: {new Date(updatedAt).toLocaleString('pt-BR')}
-        </p>
-      )}
-
       {error && <p className="text-sm text-red-400">{error}</p>}
-
-      <Button onClick={handleSave} disabled={saving || loading} className="bg-violet-600 hover:bg-violet-500">
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-        Salvar chaves
-      </Button>
     </div>
   )
 }

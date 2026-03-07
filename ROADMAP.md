@@ -96,10 +96,10 @@ Data de referência: 06/03/2026
 ### Fase 4 — Multi-Provider UI
 > Objetivo: usuário escolhe qual modelo de IA usar para gerar.
 
-- [ ] Selector de modelo na tela de geração
-- [ ] Mostrar apenas modelos disponíveis para o plano do workspace
-- [ ] `lib/providers/openai.ts` — GPT-4o
-- [ ] Persistir `model_used` no carousel para analytics
+- [x] Selector de modelo na tela de geração
+- [x] Mostrar apenas modelos disponíveis para o plano do workspace
+- [x] `lib/providers/openai.ts` — GPT-4o
+- [x] Persistir `model_used` no carousel para analytics
 
 ### Fase 5 — Multi-Plataforma
 > Objetivo: gerar conteúdo para Instagram, LinkedIn, Facebook, Twitter/X, Pinterest.
@@ -165,3 +165,6 @@ Data de referência: 06/03/2026
 - Migração Next.js 16 concluída: `middleware.ts` substituído por `proxy.ts`.
 - `turbopack.root` configurado no `next.config.ts` para fixar a raiz correta do workspace.
 - Fluxo legado `/tokens` removido (rota, pagina e links da UI).
+- Multi-expert iniciado: selector de expert no header + API `/api/experts` (listar/criar/trocar ativo).
+- Schema atualizado para `profiles.active_expert_id` e `carousels.expert_id`.
+- Onboarding automático reforçado no schema: novo usuário já recebe workspace padrão + membership admin.

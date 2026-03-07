@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Save, Wand2, Plus, X, Sparkles, Camera, Loader2, Copy, Check } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { getActiveExpertContext } from '@/lib/expert-client'
 
 interface FormData {
   display_name: string
@@ -130,6 +131,8 @@ function DnaForm() {
   const [saving, setSaving]     = useState(false)
   const [saved, setSaved]       = useState(false)
   const [userId, setUserId]     = useState<string | null>(null)
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+  const [expertId, setExpertId] = useState<string | null>(null)
   const [showExample, setShowExample] = useState(false)
 
   const [avatarUrl, setAvatarUrl]             = useState<string | null>(null)
@@ -142,11 +145,10 @@ function DnaForm() {
       if (!user) return
       setUserId(user.id)
 
-      const { data: expert } = await supabase
-        .from('experts')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const ctx = await getActiveExpertContext(supabase, user.id)
+      const expert = ctx.expert
+      setWorkspaceId(ctx.workspaceId)
+      setExpertId(ctx.activeExpertId)
 
       if (expert) {
         setForm({
@@ -169,8 +171,36 @@ function DnaForm() {
     load()
   }, [])
 
+  async function ensureExpertId(): Promise<string | null> {
+    if (!userId || !workspaceId) return null
+    if (expertId) return expertId
+
+    const { data: created, error } = await supabase
+      .from('experts')
+      .insert({
+        user_id: userId,
+        workspace_id: workspaceId,
+        display_name: form.display_name || 'Novo Expert',
+        handle: form.handle || '',
+        highlight_color: form.highlight_color || '#9B59FF',
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+    if (error || !created?.id) return null
+
+    await supabase
+      .from('profiles')
+      .update({ active_expert_id: created.id })
+      .eq('id', userId)
+
+    setExpertId(created.id)
+    return created.id
+  }
+
   async function handleAvatarUpload(file: File) {
-    if (!userId) return
+    const currentExpertId = await ensureExpertId()
+    if (!userId || !currentExpertId) return
     setUploadingAvatar(true)
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
@@ -186,7 +216,8 @@ function DnaForm() {
       const url = signed?.signedUrl || ''
       await supabase
         .from('experts')
-        .upsert({ avatar_url: url, user_id: userId }, { onConflict: 'user_id' })
+        .update({ avatar_url: url, updated_at: new Date().toISOString() })
+        .eq('id', currentExpertId)
       setAvatarUrl(url)
     } catch (err) {
       console.error('Erro ao enviar avatar:', err)
@@ -196,12 +227,13 @@ function DnaForm() {
   }
 
   async function handleSave() {
-    if (!userId) return
+    const currentExpertId = await ensureExpertId()
+    if (!userId || !workspaceId || !currentExpertId) return
     setSaving(true)
-    await supabase.from('experts').upsert(
-      { ...form, user_id: userId, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id' }
-    )
+    await supabase
+      .from('experts')
+      .update({ ...form, updated_at: new Date().toISOString() })
+      .eq('id', currentExpertId)
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)

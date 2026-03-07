@@ -11,7 +11,7 @@
 -- Perfil do expert por usuário (1 por usuário)
 create table if not exists experts (
   id                    uuid        primary key default gen_random_uuid(),
-  user_id               uuid        references auth.users(id) on delete cascade not null unique,
+  user_id               uuid        references auth.users(id) on delete cascade not null,
   display_name          text        not null default '',
   handle                text        not null default '',
   niche                 text        default '',
@@ -55,6 +55,7 @@ create table if not exists user_tokens (
 create table if not exists carousels (
   id           uuid        primary key default gen_random_uuid(),
   user_id      uuid        references auth.users(id) on delete cascade not null,
+  expert_id    uuid        references experts(id) on delete set null,
   topic        text        not null,
   caption      text        default '',
   slides       jsonb       not null default '[]',
@@ -217,7 +218,9 @@ create table if not exists workspace_members (
 create table if not exists profiles (
   id           uuid        primary key references auth.users(id) on delete cascade,
   role         text        not null default 'member', -- 'owner' | 'admin' | 'member'
+  full_name    text        default '',
   workspace_id uuid        references workspaces(id) on delete set null,
+  active_expert_id uuid    references experts(id) on delete set null,
   created_at   timestamptz not null default now()
 );
 
@@ -226,18 +229,84 @@ create table if not exists profiles (
 update profiles set role = 'member' where role is null;
 alter table profiles alter column role set default 'member';
 alter table profiles alter column role set not null;
+alter table profiles add column if not exists full_name text default '';
+alter table profiles add column if not exists active_expert_id uuid references experts(id) on delete set null;
 
 -- Trigger: criar profile automaticamente ao cadastrar usuário
 create or replace function handle_new_user()
 returns trigger language plpgsql security definer as $$
 declare
   owner_exists boolean;
+  assigned_role text;
+  ws_id uuid;
+  ws_slug text;
+  ws_name text;
 begin
   select exists(select 1 from profiles where role = 'owner') into owner_exists;
+  assigned_role := case when owner_exists then 'member' else 'owner' end;
 
-  insert into profiles (id, role)
-  values (new.id, case when owner_exists then 'member' else 'owner' end)
+  insert into profiles (id, role, full_name)
+  values (
+    new.id,
+    assigned_role,
+    coalesce(new.raw_user_meta_data->>'full_name', '')
+  )
   on conflict (id) do nothing;
+
+  select workspace_id into ws_id
+  from profiles
+  where id = new.id;
+
+  if ws_id is null then
+    ws_slug := 'ws-' || substr(new.id::text, 1, 8);
+    ws_name := coalesce(
+      nullif(new.raw_user_meta_data->>'full_name', ''),
+      split_part(coalesce(new.email, ''), '@', 1),
+      'Workspace'
+    ) || ' Workspace';
+
+    insert into workspaces (name, slug, plan, owner_id, active)
+    values (
+      ws_name,
+      ws_slug,
+      case when assigned_role = 'owner' then 'agency' else 'starter' end,
+      new.id,
+      true
+    )
+    on conflict (slug) do nothing
+    returning id into ws_id;
+
+    if ws_id is null then
+      select id into ws_id
+      from workspaces
+      where owner_id = new.id
+      order by created_at asc
+      limit 1;
+    end if;
+
+    if ws_id is null then
+      select id into ws_id
+      from workspaces
+      where slug = ws_slug
+      order by created_at asc
+      limit 1;
+    end if;
+
+    if ws_id is not null then
+      update profiles
+      set workspace_id = ws_id
+      where id = new.id
+        and workspace_id is null;
+    end if;
+  end if;
+
+  if ws_id is not null then
+    insert into workspace_members (workspace_id, user_id, role, invited_by)
+    values (ws_id, new.id, 'admin', new.id)
+    on conflict (workspace_id, user_id) do update
+      set role = excluded.role;
+  end if;
+
   return new;
 end;
 $$;
@@ -282,12 +351,79 @@ create index if not exists system_logs_event_idx         on system_logs (event, 
 -- ─── Colunas novas em tabelas existentes (idempotente) ────────────────────────
 
 -- experts: adiciona workspace_id (mantém user_id para compatibilidade)
+alter table experts drop constraint if exists experts_user_id_key;
 alter table experts add column if not exists workspace_id uuid references workspaces(id) on delete cascade;
 alter table experts add column if not exists ig_access_token text default '';
 
 -- carousels: adiciona workspace_id e created_by (mantém user_id para compatibilidade)
 alter table carousels add column if not exists workspace_id uuid references workspaces(id) on delete cascade;
 alter table carousels add column if not exists created_by   uuid references auth.users(id) on delete set null;
+alter table carousels add column if not exists expert_id    uuid references experts(id) on delete set null;
+alter table carousels add column if not exists provider_used text;
+alter table carousels add column if not exists model_used text;
+
+-- ─── Backfill de onboarding para bases existentes (idempotente) ──────────────
+
+-- Cria workspace padrão para usuários sem workspace (incluindo owner legado)
+insert into workspaces (name, slug, plan, owner_id, active)
+select
+  coalesce(nullif(p.full_name, ''), split_part(u.email, '@', 1), 'Workspace') || ' Workspace',
+  'ws-' || substr(p.id::text, 1, 8),
+  case when p.role = 'owner' then 'agency' else 'starter' end,
+  p.id,
+  true
+from profiles p
+join auth.users u on u.id = p.id
+where p.workspace_id is null
+  and not exists (
+    select 1 from workspaces w where w.owner_id = p.id
+  )
+on conflict (slug) do nothing;
+
+-- Liga profile ao workspace padrão
+update profiles p
+set workspace_id = w.id
+from lateral (
+  select w.id
+  from workspaces w
+  where w.owner_id = p.id
+  order by w.created_at asc
+  limit 1
+) w
+where p.workspace_id is null;
+
+-- Garante membership admin do próprio usuário no próprio workspace
+insert into workspace_members (workspace_id, user_id, role, invited_by)
+select
+  p.workspace_id,
+  p.id,
+  'admin',
+  p.id
+from profiles p
+where p.workspace_id is not null
+on conflict (workspace_id, user_id) do update
+  set role = excluded.role;
+
+-- Vincula experts legados sem workspace
+update experts e
+set workspace_id = p.workspace_id
+from profiles p
+where e.user_id = p.id
+  and e.workspace_id is null
+  and p.workspace_id is not null;
+
+-- Define expert ativo padrão para usuários sem active_expert_id
+update profiles p
+set active_expert_id = e.id
+from lateral (
+  select e.id
+  from experts e
+  where e.workspace_id = p.workspace_id
+  order by e.updated_at desc nulls last, e.created_at desc nulls last
+  limit 1
+) e
+where p.workspace_id is not null
+  and p.active_expert_id is null;
 
 -- ─── Funções auxiliares de RLS ────────────────────────────────────────────────
 

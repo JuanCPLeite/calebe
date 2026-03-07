@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Save, Wand2, X, Copy, Check } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { getActiveExpertContext } from '@/lib/expert-client'
 
 interface AudienceProfile {
   pain_points: string
@@ -118,6 +119,8 @@ export default function AudiencePage() {
   const [saving, setSaving]       = useState(false)
   const [saved, setSaved]         = useState(false)
   const [userId, setUserId]       = useState<string | null>(null)
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+  const [expertId, setExpertId] = useState<string | null>(null)
   const [showExample, setShowExample] = useState(false)
 
   useEffect(() => {
@@ -126,11 +129,10 @@ export default function AudiencePage() {
       if (!user) return
       setUserId(user.id)
 
-      const { data: expert } = await supabase
-        .from('experts')
-        .select('audience_profile')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const ctx = await getActiveExpertContext(supabase, user.id)
+      const expert = ctx.expert as { id?: string; audience_profile?: AudienceProfile } | null
+      setWorkspaceId(ctx.workspaceId)
+      setExpertId(ctx.activeExpertId)
 
       if (expert?.audience_profile) {
         setForm({ ...EMPTY, ...expert.audience_profile })
@@ -140,14 +142,36 @@ export default function AudiencePage() {
   }, [])
 
   async function handleSave() {
-    if (!userId) return
+    if (!userId || !workspaceId) return
     setSaving(true)
-    await supabase
-      .from('experts')
-      .upsert(
-        { user_id: userId, audience_profile: form, updated_at: new Date().toISOString() },
-        { onConflict: 'user_id' }
-      )
+    let currentExpertId = expertId
+    if (!currentExpertId) {
+      const { data: created } = await supabase
+        .from('experts')
+        .insert({
+          user_id: userId,
+          workspace_id: workspaceId,
+          display_name: 'Novo Expert',
+          handle: '',
+          audience_profile: form,
+          updated_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single()
+      currentExpertId = created?.id || null
+      if (currentExpertId) {
+        await supabase
+          .from('profiles')
+          .update({ active_expert_id: currentExpertId })
+          .eq('id', userId)
+        setExpertId(currentExpertId)
+      }
+    } else {
+      await supabase
+        .from('experts')
+        .update({ audience_profile: form, updated_at: new Date().toISOString() })
+        .eq('id', currentExpertId)
+    }
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)

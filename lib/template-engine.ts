@@ -109,7 +109,7 @@ function buildVars(
 export type SSEEvent =
   | { chunk: string; slidesGenerated: number }
   | { retrying: true; waitSeconds: number; attempt: number }
-  | { done: true; topic: string; caption: string; slides: unknown[] }
+  | { done: true; topic: string; caption: string; slides: unknown[]; modelUsed: string }
   | { error: string }
 
 // ─── Função principal ─────────────────────────────────────────────────────────
@@ -123,6 +123,7 @@ export interface GenerateOptions {
   apiKey: string
   supabase: SupabaseClient
   contentOptions?: ContentOptions
+  modelOverride?: string
 }
 
 export async function* generateWithTemplate({
@@ -134,6 +135,7 @@ export async function* generateWithTemplate({
   apiKey,
   supabase,
   contentOptions = {},
+  modelOverride,
 }: GenerateOptions): AsyncGenerator<SSEEvent> {
   // Busca prompts no DB; se não encontrar, usa fallback hardcoded
   const { system: systemTemplate, user: userTemplate, model } =
@@ -155,6 +157,7 @@ export async function* generateWithTemplate({
       : buildUserPrompt(topic, hook, contentOptions)
 
   const provider = createProvider(providerId, apiKey)
+  const resolvedModel = modelOverride?.trim() || model || provider.defaultModel
 
   let accumulated = ''
 
@@ -162,7 +165,7 @@ export async function* generateWithTemplate({
     try {
       accumulated = ''
 
-      for await (const chunk of provider.streamText({ system: systemPrompt, user: userPrompt, model: model ?? undefined })) {
+      for await (const chunk of provider.streamText({ system: systemPrompt, user: userPrompt, model: resolvedModel })) {
         accumulated += chunk
         const slidesGenerated = (accumulated.match(/"num"\s*:/g) || []).length
         yield { chunk, slidesGenerated }
@@ -178,6 +181,7 @@ export async function* generateWithTemplate({
         topic: parsed.topic || topic,
         caption: parsed.caption || '',
         slides: (parsed.slides || []).map((s: unknown) => ({ ...(s as object), approved: false })),
+        modelUsed: resolvedModel,
       }
       return
 

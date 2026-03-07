@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+import { getActiveExpertContext } from '@/lib/expert-client'
 
 const DEFAULT_EXPERT: ExpertInfo = {
   displayName: 'Expert',
@@ -143,18 +144,12 @@ export default function CarouselDetailPage() {
       const bgPaths   = rawSlides.map(s => s.bgImageStoragePath).filter(Boolean) as string[]
       const allPaths  = [...cardPaths, ...bgPaths]
 
-      const [signedAll, expertData] = await Promise.all([
+      const [signedAll, expertCtx] = await Promise.all([
         // Batch de URLs (cards + bg images) — 1 request
         allPaths.length > 0
           ? supabase.storage.from('carousel-images').createSignedUrls(allPaths, 3600)
           : Promise.resolve({ data: [] }),
-        // Expert query
-        user
-          ? supabase.from('experts')
-              .select('display_name, handle, highlight_color, id')
-              .eq('user_id', user.id)
-              .maybeSingle()
-          : Promise.resolve({ data: null }),
+        user ? getActiveExpertContext(supabase, user.id) : Promise.resolve({ expert: null }),
       ])
 
       // Mapeia paths → signed URLs
@@ -183,7 +178,7 @@ export default function CarouselDetailPage() {
       }
 
       // Busca foto do expert (se encontrou expert)
-      const exp = expertData.data
+      const exp = expertCtx.expert as any
       if (exp) {
         const { data: photos } = await supabase
           .from('expert_photos')

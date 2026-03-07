@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getExpertForContext } from '@/lib/expert-config'
 
 export default async function Home() {
   const supabase = await createClient()
@@ -9,14 +10,10 @@ export default async function Home() {
     redirect('/login')
   }
 
-  // Verifica se o usuário já tem perfil configurado
-  const { data: expert } = await supabase
-    .from('experts')
-    .select('display_name')
-    .eq('user_id', user.id)
-    .maybeSingle()
+  // Verifica se já existe expert ativo/configurado no contexto atual
+  const expert = await getExpertForContext(user.id, supabase)
 
-  if (!expert?.display_name) {
+  if (!expert?.displayName) {
     redirect('/expert/dna?onboarding=1')
   }
 

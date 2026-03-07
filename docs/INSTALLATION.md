@@ -61,7 +61,7 @@ O schema cria automaticamente:
 - Tabelas Content Hub: `platforms`, `content_formats`, `templates`, `template_prompts`
 - Buckets de storage: `expert-photos`, `carousel-images`
 - Todas as RLS policies
-- Trigger para criação automática de `profiles` no cadastro
+- Trigger de onboarding automático: `profiles` + `workspace` + `workspace_members`
 
 > O schema é **idempotente** — pode ser rodado múltiplas vezes sem erro.
 
@@ -115,6 +115,8 @@ WHERE id = (
 > Regra atual:
 > - Primeiro usuário do projeto: `owner` (automático)
 > - Próximos usuários: `member`
+> - Todo usuário novo recebe workspace padrão automático
+> - Todo usuário novo entra como `admin` no próprio workspace
 > - Sempre é possível promover/rebaixar manualmente via SQL
 
 ### Verificar se funcionou
@@ -128,6 +130,19 @@ SELECT
   p.created_at
 FROM profiles p
 JOIN auth.users u ON u.id = p.id
+ORDER BY p.created_at ASC;
+```
+
+```sql
+SELECT
+  u.email,
+  p.role,
+  p.workspace_id,
+  p.active_expert_id,
+  w.name as workspace_name
+FROM profiles p
+JOIN auth.users u ON u.id = p.id
+LEFT JOIN workspaces w ON w.id = p.workspace_id
 ORDER BY p.created_at ASC;
 ```
 
@@ -264,10 +279,12 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 
 - [ ] Chave Anthropic configurada no admin
 - [ ] Expert DNA configurado pelo cliente (nome, nicho, CTA)
+- [ ] Expert ativo selecionado no header (quando houver múltiplos experts)
 
 ### Para geração de imagens
 
 - [ ] Chave Google Gemini configurada no admin
+- [ ] O expert já foi salvo em `/expert/dna` antes de usar `/expert/photos`
 
 ### Para publicação no Instagram
 
@@ -293,6 +310,7 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 ### "Perfil de expert não encontrado"
 - O usuário precisa estar em um workspace com expert configurado
 - Acesse `/expert` e preencha o DNA do expert
+- Com múltiplos experts, confirme qual está ativo no selector do header
 
 ### "Chave de IA não configurada"
 - Acesse `/admin/settings` como owner e configure as chaves
@@ -301,6 +319,7 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 ### Geração de imagens falha
 - Verifique a chave Google no admin panel
 - O modelo `imagen-3` requer projeto Google Cloud com billing ativo
+- Se a página `Fotos Referência` estiver vazia, salve antes o DNA do expert em `/expert/dna` (isso cria o expert)
 
 ### Publicação no Instagram falha
 - Verifique se o token Meta não expirou (tokens de curta duração expiram em 60 dias)
@@ -309,6 +328,10 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 
 ### Após atualizar para a versão multi-tenant atual
 - Rode novamente `supabase-schema.sql` para garantir colunas novas idempotentes (ex.: `experts.ig_access_token`)
+- O script também faz backfill automático de:
+  - `workspace_id` para usuários legados sem workspace
+  - `workspace_members` do dono no próprio workspace
+  - `active_expert_id` para quem já tinha expert legado
 
 ---
 

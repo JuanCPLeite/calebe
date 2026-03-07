@@ -9,11 +9,15 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { FrankCard } from '@/components/generate/frank-card'
+import { getActiveExpertContext } from '@/lib/expert-client'
 
 interface Carousel {
   id: string
   topic: string
   caption: string
+  expert_id?: string | null
+  provider_used?: string | null
+  model_used?: string | null
   slides: Array<{ cardPath?: string; imagePath?: string; text?: string; imageHeightPercent?: number; imagePosition?: 'top' | 'bottom'; imageObjectX?: number; imageObjectY?: number; fontSize?: number; highlightEnabled?: boolean }>
   ig_post_id: string | null
   published_at: string | null
@@ -174,24 +178,20 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const [{ data: carouselData }, { data: expertData }] = await Promise.all([
+      const [{ data: carouselData }, expertCtx] = await Promise.all([
         supabase
           .from('carousels')
-          .select('id, topic, caption, ig_post_id, published_at, scheduled_at, created_at, slides')
+          .select('id, topic, caption, expert_id, provider_used, model_used, ig_post_id, published_at, scheduled_at, created_at, slides')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(100),
-        supabase
-          .from('experts')
-          .select('display_name, handle, highlight_color, avatar_url')
-          .eq('user_id', user.id)
-          .maybeSingle(),
+        getActiveExpertContext(supabase, user.id),
       ])
 
       const rows = carouselData || []
       setCarousels(rows)
       setStats(computeStats(rows))
-      if (expertData) setExpert(expertData as Expert)
+      if (expertCtx.expert) setExpert(expertCtx.expert as Expert)
       setLoading(false)
     }
     load()
@@ -235,8 +235,11 @@ export default function DashboardPage() {
         topic:    `${c.topic} (cópia)`,
         caption:  c.caption,
         slides:   c.slides,
+        expert_id: c.expert_id ?? null,
+        provider_used: c.provider_used ?? null,
+        model_used: c.model_used ?? null,
       })
-      .select('id, topic, caption, ig_post_id, published_at, scheduled_at, created_at, slides')
+      .select('id, topic, caption, expert_id, provider_used, model_used, ig_post_id, published_at, scheduled_at, created_at, slides')
       .single()
 
     if (data) {

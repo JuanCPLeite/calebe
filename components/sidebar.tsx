@@ -18,12 +18,12 @@ const nav = [
   { label: 'Perfil & Público', href: '/expert/audience', icon: Users },
   { label: 'Equipe',          href: '/team',            icon: Users },
   { label: 'Templates',        href: '/templates',       icon: LayoutTemplate },
+  { label: 'Configurações',    href: '/settings',        icon: Settings },
 ]
 
 interface UserInfo {
   email: string
   displayName: string
-  handle: string
   initials: string
 }
 
@@ -40,21 +40,14 @@ export function Sidebar() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      // Busca perfil expert do DB
-      const { data: expert } = await supabase
-        .from('experts')
-        .select('display_name, handle')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, full_name')
         .eq('id', user.id)
         .maybeSingle()
 
-      const displayName = expert?.display_name || user.email?.split('@')[0] || 'Usuário'
-      const handle = expert?.handle || ''
+      const typedProfile = profile as { role?: 'owner' | 'admin' | 'member'; full_name?: string | null } | null
+      const displayName = typedProfile?.full_name?.trim() || user.email?.split('@')[0] || 'Usuário'
       const initials = displayName
         .split(' ')
         .map((w: string) => w[0])
@@ -62,8 +55,8 @@ export function Sidebar() {
         .join('')
         .toUpperCase()
 
-      setUserInfo({ email: user.email || '', displayName, handle, initials })
-      setIsOwner(profile?.role === 'owner')
+      setUserInfo({ email: user.email || '', displayName, initials })
+      setIsOwner(typedProfile?.role === 'owner')
     }
     loadUser()
   }, [])
@@ -176,7 +169,7 @@ export function Sidebar() {
               {userInfo?.displayName || 'Carregando...'}
             </p>
             <p className="text-xs text-zinc-500 truncate">
-              {userInfo?.handle || userInfo?.email || ''}
+              {userInfo?.email || ''}
             </p>
           </div>
           <button

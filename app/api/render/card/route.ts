@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { renderCardToPng } from '@/lib/card-renderer'
 import { createClient } from '@/lib/supabase/server'
+import { getActiveExpertRow } from '@/lib/expert-config'
 
 /**
  * POST /api/render/card
@@ -46,22 +47,18 @@ export async function POST(req: NextRequest) {
     let avatarMime    = 'jpeg'
 
     if (user) {
-      const { data: expert } = await supabase
-        .from('experts')
-        .select('display_name, handle, highlight_color, id')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const expert = await getActiveExpertRow(user.id, supabase)
 
       if (expert) {
-        authorName    = expert.display_name || authorName
-        authorHandle  = expert.handle       || authorHandle
-        highlightColor = expert.highlight_color || highlightColor
+        authorName = (expert.display_name as string) || authorName
+        authorHandle = (expert.handle as string) || authorHandle
+        highlightColor = (expert.highlight_color as string) || highlightColor
 
         // Busca avatar do Supabase Storage
         const { data: photos } = await supabase
           .from('expert_photos')
           .select('storage_path')
-          .eq('expert_id', expert.id)
+          .eq('expert_id', expert.id as string)
           .order('order_index', { ascending: true })
           .limit(1)
 

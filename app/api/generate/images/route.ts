@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { generateSlideImage } from '@/lib/image-generator'
 import { createClient } from '@/lib/supabase/server'
 import { getAppKeys } from '@/lib/workspace'
+import { getActiveExpertRow } from '@/lib/expert-config'
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,17 +24,13 @@ export async function POST(req: NextRequest) {
     // Carrega foto de referência do expert (2 queries separadas, sem N+1)
     let expertPhotoBase64: string | undefined
 
-    const { data: expert } = await supabase
-      .from('experts')
-      .select('id')
-      .eq('user_id', user.id)
-      .maybeSingle()
+    const expert = await getActiveExpertRow(user.id, supabase)
 
-    if (expert?.id) {
+    if (expert && typeof expert.id === 'string') {
       const { data: photos } = await supabase
         .from('expert_photos')
         .select('storage_path')
-        .eq('expert_id', expert.id)
+        .eq('expert_id', expert.id as string)
         .order('order_index', { ascending: true })
         .limit(1)
 

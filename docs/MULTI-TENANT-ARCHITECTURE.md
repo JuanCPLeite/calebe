@@ -35,14 +35,16 @@ auth.users (Supabase)
   └── profiles (1:1)
         ├── role: 'owner' | 'admin' | 'member'
         └── workspace_id (workspace padrão)
+        └── active_expert_id (expert ativo no workspace)
 
 workspaces (1 por cliente/time)
   ├── workspace_members (N:N com users)
   │     └── role: 'admin' | 'member'
-  ├── experts (1 por workspace)
+  ├── experts (N por workspace)
   ├── expert_photos
   └── carousels (N por workspace)
         └── created_by (FK auth.users)
+        └── expert_id (FK experts)
 
 app_settings (global — 1 linha)
   └── chaves de IA da plataforma
@@ -58,7 +60,9 @@ system_logs (append-only)
 profiles (
   id          uuid PK → auth.users.id,
   role        text  -- 'owner' | 'admin' | 'member'
+  full_name   text
   workspace_id uuid FK → workspaces (workspace padrão do usuário)
+  active_expert_id uuid FK → experts (expert ativo)
   created_at  timestamptz
 )
 
@@ -108,7 +112,8 @@ system_logs (
 
 -- experts e carousels: trocar user_id → workspace_id
 experts (
-  workspace_id    uuid FK → workspaces, -- era user_id
+  workspace_id    uuid FK → workspaces,
+  user_id         uuid FK → auth.users, -- criador/compatibilidade
   ig_account_id   text,                 -- conta Instagram do cliente/workspace
   ig_access_token text,                 -- token Meta usado na publicação
   ...
@@ -117,6 +122,7 @@ experts (
 carousels (
   workspace_id uuid FK → workspaces, -- era user_id
   created_by   uuid FK → auth.users, -- quem gerou
+  expert_id    uuid FK → experts,    -- qual expert foi usado
   ...
 )
 ```
@@ -230,9 +236,12 @@ $$;
 1. Usuário se cadastra (auth.users criado pelo Supabase)
 2. Trigger cria `profiles` automaticamente
 3. Primeiro usuário do projeto vira `owner`; próximos entram como `member`
-4. Cliente paga → owner cria workspace para ele → envia convite
-5. Cliente aceita → workspace_members criado com role='admin'
-6. Cliente convida funcionários → workspace_members com role='member'
+4. Trigger cria workspace padrão automaticamente para o usuário
+5. Trigger cria `workspace_members` com role `admin` para o próprio usuário
+6. `profiles.workspace_id` aponta para esse workspace padrão
+7. Usuário cria 1+ experts e alterna no selector (`active_expert_id`)
+8. Fluxo obrigatório de setup do expert: salvar primeiro em `Expert > DNA`, depois subir fotos em `Expert > Fotos Referência`
+9. Convites de equipe adicionam `workspace_members` com role `member`/`admin`
 ```
 
 ---

@@ -71,6 +71,12 @@ npm run dev
 # http://localhost:8080
 ```
 
+## Fluxo recomendado de Expert (importante)
+
+1. Em `Expert > DNA`, crie/salve o expert primeiro.
+2. Depois vá em `Expert > Fotos Referência` para subir fotos desse expert.
+3. Se trocar o expert ativo no header, as fotos exibidas/salvas também mudam para o expert selecionado.
+
 ---
 
 ## Documentação

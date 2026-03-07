@@ -1,5 +1,6 @@
 import { Sidebar } from '@/components/sidebar'
 import { WorkspaceSwitcher } from '@/components/workspace-switcher'
+import { ExpertSwitcher } from '@/components/expert-switcher'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { DM_Sans } from 'next/font/google'
 
@@ -14,7 +15,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className={`flex h-screen overflow-hidden ${dmSans.variable}`}>
         <Sidebar />
         <main className="flex-1 min-w-0 flex flex-col">
-          <header className="h-12 border-b border-zinc-800 bg-zinc-950/60 px-4 flex items-center justify-end">
+          <header className="h-12 border-b border-zinc-800 bg-zinc-950/60 px-4 flex items-center justify-end gap-4">
+            <ExpertSwitcher />
             <WorkspaceSwitcher />
           </header>
           <div className="flex-1 overflow-y-auto">

@@ -1,9 +1,43 @@
 import { NextRequest } from 'next/server'
-import { getExpertFromDB } from '@/lib/expert-config'
+import { getExpertForContext } from '@/lib/expert-config'
 import { createClient } from '@/lib/supabase/server'
 import { generateWithTemplate } from '@/lib/template-engine'
 import { getWorkspaceContext, getAppKeys } from '@/lib/workspace'
 import { log } from '@/lib/logger'
+import type { ProviderId } from '@/lib/providers/types'
+
+type WorkspacePlan = 'starter' | 'pro' | 'agency'
+
+interface ModelOption {
+  providerId: ProviderId
+  model: string
+  label: string
+}
+
+const PLAN_MODEL_OPTIONS: Record<WorkspacePlan, ModelOption[]> = {
+  starter: [
+    { providerId: 'anthropic', model: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+  ],
+  pro: [
+    { providerId: 'anthropic', model: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+    { providerId: 'anthropic', model: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+  ],
+  agency: [
+    { providerId: 'anthropic', model: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+    { providerId: 'anthropic', model: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+    { providerId: 'openai', model: 'gpt-4o', label: 'GPT-4o' },
+  ],
+}
+
+function normalizePlan(value: string | null | undefined): WorkspacePlan {
+  if (value === 'pro' || value === 'agency') return value
+  return 'starter'
+}
+
+function normalizeProviderId(value: unknown): ProviderId {
+  if (value === 'openai' || value === 'google' || value === 'anthropic') return value
+  return 'anthropic'
+}
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -12,17 +46,19 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 })
   }
 
-  const { topic, hook, textLength, useFixedSlides, templateId } = await req.json()
+  const { topic, hook, textLength, useFixedSlides, templateId, providerId, model } = await req.json()
   if (!topic) {
     return new Response(JSON.stringify({ error: 'topic obrigatório' }), { status: 400 })
   }
 
   // Workspace e chaves da plataforma em paralelo
-  const [{ workspaceId, role }, appKeys, expert] = await Promise.all([
+  const [{ workspaceId }, appKeys, expert] = await Promise.all([
     getWorkspaceContext(user.id, supabase),
     getAppKeys(),
-    getExpertFromDB(user.id, supabase),
+    getExpertForContext(user.id, supabase),
   ])
+
+  const selectedProviderId = normalizeProviderId(providerId)
 
   if (!expert) {
     return new Response(
@@ -31,12 +67,40 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Owner usa chave da plataforma; fallback para env local (desenvolvimento)
-  const anthropicKey = appKeys.anthropicKey || process.env.ANTHROPIC_API_KEY || ''
+  const { data: workspace } = workspaceId
+    ? await supabase
+        .from('workspaces')
+        .select('plan')
+        .eq('id', workspaceId)
+        .maybeSingle<{ plan: WorkspacePlan }>()
+    : { data: null as { plan: WorkspacePlan } | null }
 
-  if (!anthropicKey) {
+  const plan = normalizePlan(workspace?.plan)
+  const availableModels = PLAN_MODEL_OPTIONS[plan]
+  const availablePairs = new Set(availableModels.map((opt) => `${opt.providerId}:${opt.model}`))
+
+  const fallbackModel = availableModels.find((opt) => opt.providerId === selectedProviderId)
+  const selectedModel = typeof model === 'string' ? model.trim() : ''
+  const chosenModel = selectedModel || fallbackModel?.model || ''
+
+  if (!chosenModel || !availablePairs.has(`${selectedProviderId}:${chosenModel}`)) {
     return new Response(
-      JSON.stringify({ error: 'Chave Anthropic não configurada. Acesse o painel admin → Settings.' }),
+      JSON.stringify({ error: `Modelo não disponível no plano ${plan}.` }),
+      { status: 403 }
+    )
+  }
+
+  const keyByProvider: Partial<Record<ProviderId, string>> = {
+    anthropic: appKeys.anthropicKey || process.env.ANTHROPIC_API_KEY || '',
+    openai: appKeys.openaiKey || process.env.OPENAI_API_KEY || '',
+    google: appKeys.googleKey || process.env.GOOGLE_API_KEY || '',
+  }
+
+  const providerApiKey = keyByProvider[selectedProviderId] || ''
+
+  if (!providerApiKey) {
+    return new Response(
+      JSON.stringify({ error: `Chave ${selectedProviderId} não configurada. Acesse o painel admin → Settings.` }),
       { status: 400 }
     )
   }
@@ -57,10 +121,11 @@ export async function POST(req: NextRequest) {
         topic,
         hook,
         expert,
-        providerId: 'anthropic',
-        apiKey: anthropicKey,
+        providerId: selectedProviderId,
+        apiKey: providerApiKey,
         supabase,
         contentOptions,
+        modelOverride: chosenModel,
       })
 
       for await (const event of gen) {
@@ -72,9 +137,12 @@ export async function POST(req: NextRequest) {
             user_id:      user.id,
             workspace_id: workspaceId,
             created_by:   user.id,
+            expert_id:    expert.id || null,
             topic,
             caption:      event.caption,
             slides:       event.slides,
+            provider_used: selectedProviderId,
+            model_used: event.modelUsed,
           }).then(() => {})
 
           // Log de sucesso
@@ -84,7 +152,8 @@ export async function POST(req: NextRequest) {
             userId: user.id,
             payload: {
               template_id:  resolvedTemplateId,
-              model:        'claude-opus-4-6',
+              provider:     selectedProviderId,
+              model:        event.modelUsed,
               topic,
               slides_count: (event.slides as unknown[]).length,
               duration_ms:  Date.now() - startTime,
@@ -98,7 +167,7 @@ export async function POST(req: NextRequest) {
             level:       'error',
             workspaceId,
             userId:      user.id,
-            payload:     { template_id: resolvedTemplateId, model: 'claude-opus-4-6', topic, error: event.error },
+            payload:     { template_id: resolvedTemplateId, provider: selectedProviderId, model: chosenModel, topic, error: event.error },
           })
         }
       }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Upload, X, ImageIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { getActiveExpertContext } from '@/lib/expert-client'
 
 interface Photo {
   id: string
@@ -25,13 +26,10 @@ export default function PhotosPage() {
       if (!user) return
       setUserId(user.id)
 
-      const { data: expert } = await supabase
-        .from('experts')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const ctx = await getActiveExpertContext(supabase, user.id)
+      const expert = ctx.expert as { id?: string } | null
 
-      if (!expert) return
+      if (!expert?.id) return
       setExpertId(expert.id)
 
       const { data: rows } = await supabase
@@ -97,7 +95,10 @@ export default function PhotosPage() {
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">Fotos de Referência</h1>
           <p className="text-zinc-400 text-sm mt-1">
-            Até 10 fotos do expert — usadas para gerar imagens com você no fundo
+            Até 10 fotos do expert ativo — usadas para gerar imagens com você no fundo
+          </p>
+          <p className="text-zinc-500 text-xs mt-1">
+            Pré-requisito: primeiro salve o expert em <strong>DNA Expert</strong>, depois envie as fotos.
           </p>
         </div>
         <button
