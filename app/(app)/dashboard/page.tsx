@@ -32,6 +32,15 @@ interface Expert {
   avatar_url?: string | null
 }
 
+interface WorkspaceLimits {
+  planLabel: string
+  monthlyPostCredits: number
+  usedCredits: number
+  remainingCredits: number
+  usagePercent: number
+  canGenerate: boolean
+}
+
 type FilterTab = 'all' | 'draft' | 'scheduled' | 'published'
 type ViewMode  = 'list' | 'grid'
 const DASHBOARD_VIEW_KEY = 'dashboard_view_mode'
@@ -159,6 +168,7 @@ export default function DashboardPage() {
   const [filter,      setFilter]     = useState<FilterTab>('all')
   const [view,        setView]       = useState<ViewMode>('list')
   const [viewReady,   setViewReady]  = useState(false)
+  const [workspaceLimits, setWorkspaceLimits] = useState<WorkspaceLimits | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem(DASHBOARD_VIEW_KEY)
@@ -192,6 +202,19 @@ export default function DashboardPage() {
       setCarousels(rows)
       setStats(computeStats(rows))
       if (expertCtx.expert) setExpert(expertCtx.expert as Expert)
+
+      const limitsRes = await fetch('/api/workspace/limits').catch(() => null)
+      const limitsJson = limitsRes ? await limitsRes.json().catch(() => null) : null
+      if (limitsRes?.ok && limitsJson) {
+        setWorkspaceLimits({
+          planLabel: limitsJson.planLabel || 'Starter',
+          monthlyPostCredits: Number(limitsJson.monthlyPostCredits) || 0,
+          usedCredits: Number(limitsJson.usedCredits) || 0,
+          remainingCredits: Number(limitsJson.remainingCredits) || 0,
+          usagePercent: Number(limitsJson.usagePercent) || 0,
+          canGenerate: Boolean(limitsJson.canGenerate),
+        })
+      }
       setLoading(false)
     }
     load()
@@ -326,6 +349,22 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {workspaceLimits && workspaceLimits.usagePercent >= 80 && (
+        <div className={`rounded-xl border px-4 py-3 ${
+          workspaceLimits.usagePercent >= 100 ? 'border-red-700/40 bg-red-950/20' : 'border-amber-700/40 bg-amber-950/20'
+        }`}>
+          <p className={`text-xs font-medium ${
+            workspaceLimits.usagePercent >= 100 ? 'text-red-300' : 'text-amber-300'
+          }`}>
+            {workspaceLimits.usagePercent >= 100 ? 'Créditos do mês esgotados.' : 'Uso de créditos alto.'}
+          </p>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            {workspaceLimits.usedCredits}/{workspaceLimits.monthlyPostCredits} usados no plano {workspaceLimits.planLabel}.
+            {workspaceLimits.usagePercent >= 80 ? ' Upgrade recomendado.' : ''}
+          </p>
+        </div>
+      )}
 
       {/* Métricas */}
       <div className="grid grid-cols-4 gap-4">

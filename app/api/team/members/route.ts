@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/logger'
 import { getWorkspacePlanLimits } from '@/lib/plan-limits'
+import { getWorkspaceCreditUsage } from '@/lib/credit-limits'
 
 type MemberRole = 'admin' | 'member'
 
@@ -55,7 +56,7 @@ export async function GET() {
   if ('error' in auth) return auth.error
 
   const { admin, workspaceId, user } = auth
-  const [workspaceRes, membersRes, usersRes] = await Promise.all([
+  const [workspaceRes, membersRes, usersRes, planLimits, creditUsage] = await Promise.all([
     admin
       .from('workspaces')
       .select('id, name, slug, plan, active')
@@ -67,6 +68,8 @@ export async function GET() {
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false }),
     admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    getWorkspacePlanLimits(workspaceId),
+    getWorkspaceCreditUsage(workspaceId),
   ])
 
   if (workspaceRes.error || membersRes.error) {
@@ -90,6 +93,14 @@ export async function GET() {
 
   return NextResponse.json({
     workspace: workspaceRes.data || null,
+    limits: {
+      memberLimit: planLimits.memberLimit,
+      expertLimit: planLimits.expertLimit,
+      monthlyPostCredits: planLimits.monthlyPostCredits,
+      usedCredits: creditUsage.usedCredits,
+      remainingCredits: creditUsage.remainingCredits,
+      usagePercent: Math.round((creditUsage.usedCredits / Math.max(1, creditUsage.creditLimit)) * 100),
+    },
     members: (membersRes.data || []).map((m) => ({
       ...m,
       email: usersMap[m.user_id] || '',

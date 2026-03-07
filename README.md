@@ -58,6 +58,8 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Admin owner: visão de custos em `/admin/costs` (top workspaces, top usuários e modelos)
 - Admin owner: catálogo de preços em `/admin/costs` para cálculo de custo real por unidade
 - `/admin/costs` com alertas de pico de custo e risco de estouro de créditos
+- `/team` com visibilidade de limites (membros e créditos), alerta de consumo e bloqueio de convite ao atingir `memberLimit`
+- `/dashboard` com alerta de upgrade quando o consumo mensal de créditos atinge faixa de risco
 - Content Hub DB: platforms, content_formats, templates, template_prompts
 - UX DNA Expert em duas etapas: lista primeiro; formulário só após selecionar um DNA ou clicar em `Novo`
 - UX Fotos de Referência em duas etapas: lista primeiro; detalhes/fotos após selecionar expert

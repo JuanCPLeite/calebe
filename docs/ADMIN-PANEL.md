@@ -2,7 +2,7 @@
 
 > Acesso exclusivo do owner da plataforma (role = 'owner').
 > Rota: `/admin`
-> Versão: 1.0 — 2026-03-06
+> Versão: 1.1 — 2026-03-07
 
 ---
 
@@ -46,6 +46,8 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] API `GET/POST/DELETE /api/admin/costs/prices` (owner only) para catálogo de preços
 - [x] API `POST /api/admin/costs/prices/seed` para preencher baseline de preços estimados
 - [x] UI `/admin/costs` com custo total, top workspaces, top usuários e modelos mais caros
+- [x] Workspace `/team` exibe limites de membros/créditos e bloqueia convite ao atingir limite
+- [x] Workspace `/dashboard` exibe alerta de risco/esgotamento de créditos para upgrade
 - [ ] Refinos finais de UX nas telas admin (próximo foco: selector de workspace no header)
 
 ---
@@ -274,7 +276,7 @@ Cada plano pode configurar:
 
 Enforcement inicial ativo:
 - convite de membro bloqueia ao atingir `memberLimit`
-- geração de conteúdo bloqueia ao atingir `monthlyPostCredits`
+- geração de conteúdo/imagens/publicação bloqueia ao atingir `monthlyPostCredits`
 
 ### Seção: Configurações do Sistema
 

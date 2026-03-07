@@ -1,7 +1,7 @@
 # Cost Intelligence — Especificação Inicial
 
 > Objetivo: medir custo real de geração/publicação e suportar limites por plano (usuários, créditos, orçamento).
-> Status: schema + instrumentação inicial + dashboard owner de custos (`/admin/costs`).
+> Status: schema + instrumentação inicial + dashboard owner de custos (`/admin/costs`) + alertas de crédito em telas de workspace.
 > Data: 2026-03-07
 
 ---
@@ -71,20 +71,13 @@ Uso típico:
 7. Alertas no `/admin/costs` para pico de custo e workspaces perto/estourados no crédito.
 8. Projeção mensal de custo por workspace no `/admin/costs`.
 9. Endpoint `/api/workspace/limits` para a UI informar crédito disponível antes da geração.
+10. `/team` agora mostra uso de créditos/membros e bloqueia convite ao atingir `memberLimit`.
+11. `/dashboard` agora mostra alerta de risco/esgotamento de créditos com indicação de upgrade.
 
 ---
 
 ## Próximas entregas
 
-1. Instrumentar rotas para gravar `usage_events` reais:
-   - `/api/generate/content`
-   - `/api/generate/images`
-   - `/api/publish`
-2. Criar `/admin/costs` com:
-   - total USD por período
-   - top workspaces e top usuários por custo
-   - custo médio por modelo
-3. Integrar limites por plano:
-   - `member_limit`
-   - `monthly_post_credits`
-   - regra de excedente (bloquear/avisar/cobrar extra)
+1. Refinar cálculo de custo real por provider/modelo com telemetria de tokens nativos por API (reduzir estimativa).
+2. Evoluir regra de excedente por plano (cobrança extra/overage) além do bloqueio/alerta atual.
+3. Entregar painel admin com custo por usuário e tendência temporal comparativa por modelo.

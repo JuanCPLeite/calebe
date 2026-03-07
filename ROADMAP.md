@@ -129,10 +129,10 @@ Data de referência: 07/03/2026
 ### Fase 8 — Cost Intelligence e Créditos
 > Objetivo: medir custo real por geração e controlar consumo por plano/workspace.
 
-- [ ] Expandir `Admin Plans` com limites adicionais por plano:
-- [ ] limite de usuários/membros
-- [ ] limite de créditos de postagem (mensal)
-- [ ] políticas de excedente (bloquear, alertar, cobrar extra)
+- [x] Expandir `Admin Plans` com limites adicionais por plano:
+- [x] limite de usuários/membros
+- [x] limite de créditos de postagem (mensal)
+- [ ] políticas de excedente (bloquear e alertar entregues; cobrança extra pendente)
 - [ ] Medição de custo por geração/publicação:
 - [ ] custo por provider/modelo (input/output tokens, imagens, publicação)
 - [ ] custo por carrossel salvo/publicado
@@ -209,3 +209,5 @@ Data de referência: 07/03/2026
 - Projeção mensal por workspace entregue no `/admin/costs`.
 - `/generate` agora consulta `/api/workspace/limits` e alerta crédito antes de tentar gerar.
 - `/admin/workspaces` agora exibe uso de créditos mensais por workspace.
+- `/team` agora exibe uso de membros/créditos e desabilita convite ao atingir `memberLimit`.
+- `/dashboard` agora exibe alerta de risco/esgotamento de créditos para orientar upgrade.
