@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateSlideImage } from '@/lib/image-generator'
 import { createClient } from '@/lib/supabase/server'
+import { getAppKeys } from '@/lib/workspace'
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,17 +12,11 @@ export async function POST(req: NextRequest) {
     const { slideNum, imagePrompt } = await req.json()
     if (!imagePrompt) return NextResponse.json({ error: 'imagePrompt obrigatório' }, { status: 400 })
 
-    // Chave Google: somente do banco do usuário
-    const { data: tokenRow } = await supabase
-      .from('user_tokens')
-      .select('value')
-      .eq('user_id', user.id)
-      .eq('provider', 'google')
-      .maybeSingle()
-
-    const googleKey = tokenRow?.value
+    // Chave Google da plataforma (app_settings); fallback para env local.
+    const appKeys = await getAppKeys()
+    const googleKey = appKeys.googleKey || process.env.GOOGLE_API_KEY || ''
     if (!googleKey) return NextResponse.json(
-      { error: 'Chave Google Gemini não configurada. Acesse Tokens & APIs.' },
+      { error: 'Chave Google Gemini não configurada. Acesse o painel admin → Settings.' },
       { status: 400 }
     )
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getExpertForContext } from '@/lib/expert-config'
 
 interface MetaAccount {
   igAccountId: string
@@ -29,21 +30,15 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-    const { data: tokenRow } = await supabase
-      .from('user_tokens')
-      .select('value')
-      .eq('user_id', user.id)
-      .eq('provider', 'meta_token')
-      .single()
+    const expert = await getExpertForContext(user.id, supabase)
+    const token = expert?.igAccessToken || process.env.META_GRAPH_API_TOKEN || process.env.IG_TOKEN || ''
 
-    if (!tokenRow?.value) {
+    if (!token) {
       return NextResponse.json(
-        { error: 'Token Meta não configurado. Salve o token primeiro.' },
+        { error: 'Token Meta não configurado. Configure em Expert → DNA ou no fallback do .env.' },
         { status: 400 }
       )
     }
-
-    const token = tokenRow.value
 
     const accounts: MetaAccount[] = []
     const seen = new Set<string>()

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getExpertFromDB } from '@/lib/expert-config'
+import { getExpertForContext } from '@/lib/expert-config'
 import { publishCarousel } from '@/lib/instagram'
 import { createClient } from '@/lib/supabase/server'
+import { getWorkspaceContext } from '@/lib/workspace'
+import { log } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,32 +15,26 @@ export async function POST(req: NextRequest) {
     if (!imageUrls?.length) return NextResponse.json({ error: 'imageUrls obrigatório' }, { status: 400 })
     if (!caption) return NextResponse.json({ error: 'caption obrigatório' }, { status: 400 })
 
-    const expert = await getExpertFromDB(user.id, supabase)
+    const [{ workspaceId }, expert] = await Promise.all([
+      getWorkspaceContext(user.id, supabase),
+      getExpertForContext(user.id, supabase),
+    ])
+
     if (!expert) return NextResponse.json(
       { error: 'Perfil de expert não encontrado. Configure em Expert → DNA.' },
       { status: 400 }
     )
 
-    // Tokens Meta: somente do banco do usuário
-    const { data: tokens } = await supabase
-      .from('user_tokens')
-      .select('provider, value')
-      .eq('user_id', user.id)
-      .in('provider', ['meta_token', 'meta_account_id'])
-
-    let metaToken = ''
-    let metaAccountId = ''
-    for (const t of tokens || []) {
-      if (t.provider === 'meta_token') metaToken = t.value
-      if (t.provider === 'meta_account_id') metaAccountId = t.value
-    }
+    // Credenciais Meta por workspace/expert; fallback para variáveis de ambiente.
+    const metaToken = expert.igAccessToken || process.env.META_GRAPH_API_TOKEN || process.env.IG_TOKEN || ''
+    const metaAccountId = expert.igAccountId || process.env.META_IG_ACCOUNT_ID || process.env.IG_ACCOUNT_ID || ''
 
     if (!metaToken) return NextResponse.json(
-      { error: 'Meta Graph API Token não configurado. Acesse Tokens & APIs.' },
+      { error: 'Meta Graph API Token não configurado. Acesse Expert → DNA ou configure o fallback no .env.' },
       { status: 400 }
     )
     if (!metaAccountId) return NextResponse.json(
-      { error: 'Meta Account ID não configurado. Acesse Tokens & APIs.' },
+      { error: 'Meta Account ID não configurado. Acesse Expert → DNA ou configure o fallback no .env.' },
       { status: 400 }
     )
 
@@ -57,12 +53,24 @@ export async function POST(req: NextRequest) {
         .eq('user_id', user.id)
     }
 
+    log({
+      event: 'publish.success',
+      workspaceId,
+      userId: user.id,
+      payload: { carousel_id: carouselId ?? null, ig_post_id: postId, platform: 'instagram' },
+    })
+
     return NextResponse.json({
       postId,
       url: `https://www.instagram.com/${expert.handle.replace('@', '')}/`,
     })
   } catch (err: any) {
     console.error('[publish]', err.message)
+    log({
+      event: 'publish.error',
+      level: 'error',
+      payload: { error: err.message, platform: 'instagram' },
+    })
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

@@ -9,6 +9,7 @@ export interface ExpertConfig {
   displayName: string
   handle: string
   igAccountId: string
+  igAccessToken: string
   igTokenEnv: string
   highlightColor: string
   bioShort: string
@@ -26,6 +27,7 @@ export const JUAN_CARLOS_TEMPLATE: ExpertConfig = {
   displayName: 'Juan Carlos',
   handle: '@juancarlos.ai',
   igAccountId: '17841401220225117',
+  igAccessToken: '',
   igTokenEnv: 'IG_TOKEN_JUANCARLOS',
   highlightColor: '#9B59FF',
 
@@ -82,6 +84,7 @@ export function toExpertConfig(row: Record<string, unknown>): ExpertConfig {
     displayName: (row.display_name as string) || '',
     handle: (row.handle as string) || '',
     igAccountId: (row.ig_account_id as string) || '',
+    igAccessToken: (row.ig_access_token as string) || '',
     igTokenEnv: '',
     highlightColor: (row.highlight_color as string) || '#9B59FF',
     bioShort: (row.bio_short as string) || '',
@@ -107,6 +110,33 @@ export async function getExpertFromDB(
 
   if (error || !data) return null
   return toExpertConfig(data)
+}
+
+// Busca expert do workspace atual quando não há expert ligado diretamente ao usuário
+export async function getExpertForContext(
+  userId: string,
+  supabase: SupabaseClient
+): Promise<ExpertConfig | null> {
+  const byUser = await getExpertFromDB(userId, supabase)
+  if (byUser) return byUser
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('workspace_id')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (!profile?.workspace_id) return null
+
+  const { data: expert, error } = await supabase
+    .from('experts')
+    .select('*')
+    .eq('workspace_id', profile.workspace_id)
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !expert) return null
+  return toExpertConfig(expert)
 }
 
 // Compatibilidade legada (sem auth)

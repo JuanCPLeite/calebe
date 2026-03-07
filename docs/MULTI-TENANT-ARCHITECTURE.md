@@ -108,7 +108,9 @@ system_logs (
 
 -- experts e carousels: trocar user_id → workspace_id
 experts (
-  workspace_id uuid FK → workspaces  -- era user_id
+  workspace_id    uuid FK → workspaces, -- era user_id
+  ig_account_id   text,                 -- conta Instagram do cliente/workspace
+  ig_access_token text,                 -- token Meta usado na publicação
   ...
 )
 
@@ -134,6 +136,24 @@ Usuário gera conteúdo:
   3. Chama a IA com a chave da plataforma
   4. Debita uso do workspace (para controle de plano — futuro)
 ```
+
+---
+
+## Fluxo de Publicação (Meta / Instagram)
+
+```
+Workspace configura no Expert DNA:
+  experts.ig_account_id
+  experts.ig_access_token
+
+Usuário publica:
+  1. API resolve o expert do workspace
+  2. Lê ig_account_id + ig_access_token (server-side)
+  3. Publica no Graph API
+  4. Registra publish.success / publish.error em system_logs
+```
+
+> Fallback local de desenvolvimento: `META_GRAPH_API_TOKEN` e `META_IG_ACCOUNT_ID` em `.env.local`.
 
 ---
 
@@ -208,8 +228,8 @@ $$;
 
 ```
 1. Usuário se cadastra (auth.users criado pelo Supabase)
-2. Trigger cria profiles com role='member' e workspace_id=null
-3. Se for o primeiro usuário do sistema → role='owner' (ou configurado manualmente)
+2. Trigger cria `profiles` automaticamente
+3. Primeiro usuário do projeto vira `owner`; próximos entram como `member`
 4. Cliente paga → owner cria workspace para ele → envia convite
 5. Cliente aceita → workspace_members criado com role='admin'
 6. Cliente convida funcionários → workspace_members com role='member'

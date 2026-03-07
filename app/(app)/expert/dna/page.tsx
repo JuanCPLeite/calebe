@@ -8,6 +8,8 @@ import { createClient } from '@/lib/supabase/client'
 interface FormData {
   display_name: string
   handle: string
+  ig_account_id: string
+  ig_access_token: string
   niche: string
   bio_short: string
   product_name: string
@@ -21,6 +23,8 @@ interface FormData {
 const EMPTY: FormData = {
   display_name: '',
   handle: '',
+  ig_account_id: '',
+  ig_access_token: '',
   niche: '',
   bio_short: '',
   product_name: '',
@@ -148,6 +152,8 @@ function DnaForm() {
         setForm({
           display_name:           expert.display_name || '',
           handle:                 expert.handle || '',
+          ig_account_id:          expert.ig_account_id || '',
+          ig_access_token:        expert.ig_access_token || '',
           niche:                  expert.niche || '',
           bio_short:              expert.bio_short || '',
           product_name:           expert.product_name || '',
@@ -334,6 +340,15 @@ function DnaForm() {
           {field('Handle (@)', 'handle',
             'Seu @ do Instagram exatamente como aparece no perfil.',
             'Ex: @marinasouza.fit')}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          {field('Instagram Account ID', 'ig_account_id',
+            'ID numérico da conta Instagram Business/Creator usada na publicação via API Meta.',
+            'Ex: 17841401220225117')}
+          {field('Meta Access Token', 'ig_access_token',
+            'Token de publicação do Meta Graph API (long-lived). Fica salvo no workspace.',
+            'Ex: EAAJ...')}
         </div>
 
         {field('Nicho', 'niche',

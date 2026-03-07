@@ -1,0 +1,170 @@
+openapi: 3.0.3
+info:
+  title: Carousel Studio Admin API
+  version: 1.0.0
+  description: Endpoints administrativos (owner-only).
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/admin/settings:
+    get:
+      summary: Lê configurações globais de chaves
+      tags: [Admin Settings]
+      responses:
+        '200':
+          description: Configurações carregadas
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+    patch:
+      summary: Atualiza chaves globais
+      tags: [Admin Settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                anthropicKey: { type: string }
+                googleKey: { type: string }
+                openaiKey: { type: string }
+                exaKey: { type: string }
+      responses:
+        '200':
+          description: Configurações atualizadas
+        '400':
+          description: Payload inválido
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+  /api/admin/workspaces:
+    get:
+      summary: Lista workspaces
+      tags: [Admin Workspaces]
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: plan
+          schema:
+            type: string
+            enum: [starter, pro, agency]
+        - in: query
+          name: active
+          schema:
+            type: string
+            enum: ['true', 'false']
+      responses:
+        '200':
+          description: Lista de workspaces
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+    post:
+      summary: Cria workspace
+      tags: [Admin Workspaces]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, plan]
+              properties:
+                name:
+                  type: string
+                slug:
+                  type: string
+                plan:
+                  type: string
+                  enum: [starter, pro, agency]
+                ownerUserId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Workspace criado
+        '400':
+          description: Payload inválido
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+    patch:
+      summary: Atualiza workspace (nome/plano/status)
+      tags: [Admin Workspaces]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                plan:
+                  type: string
+                  enum: [starter, pro, agency]
+                active:
+                  type: boolean
+      responses:
+        '200':
+          description: Workspace atualizado
+        '400':
+          description: Payload inválido
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+  /api/admin/logs:
+    get:
+      summary: Lista logs de sistema
+      tags: [Admin Logs]
+      parameters:
+        - in: query
+          name: level
+          schema:
+            type: string
+            enum: [info, warn, error]
+        - in: query
+          name: event
+          schema: { type: string }
+        - in: query
+          name: workspaceId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: days
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: Lista de logs
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
+components:
+  securitySchemes:
+    SupabaseSession:
+      type: apiKey
+      in: cookie
+      name: sb-access-token

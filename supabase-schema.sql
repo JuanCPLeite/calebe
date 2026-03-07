@@ -24,6 +24,7 @@ create table if not exists experts (
   cta_final_template    text        default '',
   style_rules           text[]      default '{}',
   ig_account_id         text        default '',
+  ig_access_token       text        default '',
   audience_profile      jsonb       default '{}',
   created_at            timestamptz default now(),
   updated_at            timestamptz default now()
@@ -220,12 +221,22 @@ create table if not exists profiles (
   created_at   timestamptz not null default now()
 );
 
+-- Hardening de compatibilidade para bancos antigos:
+-- garante role preenchido e não nulo mesmo se a tabela já existia com schema legado.
+update profiles set role = 'member' where role is null;
+alter table profiles alter column role set default 'member';
+alter table profiles alter column role set not null;
+
 -- Trigger: criar profile automaticamente ao cadastrar usuário
 create or replace function handle_new_user()
 returns trigger language plpgsql security definer as $$
+declare
+  owner_exists boolean;
 begin
+  select exists(select 1 from profiles where role = 'owner') into owner_exists;
+
   insert into profiles (id, role)
-  values (new.id, 'member')
+  values (new.id, case when owner_exists then 'member' else 'owner' end)
   on conflict (id) do nothing;
   return new;
 end;
@@ -272,6 +283,7 @@ create index if not exists system_logs_event_idx         on system_logs (event, 
 
 -- experts: adiciona workspace_id (mantém user_id para compatibilidade)
 alter table experts add column if not exists workspace_id uuid references workspaces(id) on delete cascade;
+alter table experts add column if not exists ig_access_token text default '';
 
 -- carousels: adiciona workspace_id e created_by (mantém user_id para compatibilidade)
 alter table carousels add column if not exists workspace_id uuid references workspaces(id) on delete cascade;
@@ -367,6 +379,7 @@ create policy "owner reads logs" on system_logs for select
 
 -- experts: owner vê tudo; workspace members veem o seu
 drop policy if exists "own experts" on experts;
+drop policy if exists "workspace experts" on experts;
 create policy "workspace experts" on experts for all
   using (
     is_owner()
@@ -381,6 +394,7 @@ create policy "workspace experts" on experts for all
 
 -- expert_photos: owner vê tudo; acesso via expert do workspace
 drop policy if exists "own expert photos" on expert_photos;
+drop policy if exists "workspace expert photos" on expert_photos;
 create policy "workspace expert photos" on expert_photos for all
   using (
     is_owner()
@@ -393,6 +407,7 @@ create policy "workspace expert photos" on expert_photos for all
 
 -- carousels: owner vê tudo; workspace members veem os seus
 drop policy if exists "own carousels" on carousels;
+drop policy if exists "workspace carousels" on carousels;
 create policy "workspace carousels" on carousels for all
   using (
     is_owner()

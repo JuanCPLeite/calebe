@@ -5,11 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Topic } from '@/components/generate/topic-card'
 import { CarouselPreview, type Slide, type ExpertInfo } from '@/components/generate/carousel-preview'
-import { Sparkles, Mic, Loader2, ArrowLeft, Send, AlertCircle, Key, Calendar, Check, X } from 'lucide-react'
+import { Sparkles, Mic, Loader2, ArrowLeft, Send, AlertCircle, Calendar, Check, X } from 'lucide-react'
 import { TopicDiscovery } from '@/components/generate/topic-discovery'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
-import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { TEMPLATES, TEMPLATE_PRESETS } from '@/lib/templates'
 
@@ -40,7 +39,6 @@ export default function GeneratePage() {
   const [expert, setExpert]               = useState<ExpertInfo>(DEFAULT_EXPERT)
   const [niche, setNiche]                 = useState('seu nicho')
   const [generateError, setGenerateError] = useState('')
-  const [missingTokens, setMissingTokens] = useState<string[]>([])
   const [carouselId, setCarouselId]       = useState<string | null>(null)
   const [userId, setUserId]               = useState<string | null>(null)
   const [textLength, setTextLength]       = useState<'short' | 'medium' | 'long'>('medium')
@@ -61,9 +59,9 @@ export default function GeneratePage() {
     if (carouselId) sessionIdRef.current = carouselId
   }, [carouselId])
 
-  // Carrega expert + verifica tokens essenciais
+  // Carrega expert
   useEffect(() => {
-    async function loadExpertAndTokens() {
+    async function loadExpertContext() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       setUserId(user.id)
@@ -112,21 +110,9 @@ export default function GeneratePage() {
         })
       }
 
-      // Verifica tokens essenciais
-      const { data: tokens } = await supabase
-        .from('user_tokens')
-        .select('provider')
-        .eq('user_id', user.id)
-        .in('provider', ['anthropic', 'google'])
-
-      const configured = new Set((tokens || []).map((t: { provider: string }) => t.provider))
-      const missing: string[] = []
-      if (!configured.has('anthropic')) missing.push('Anthropic (Claude)')
-      if (!configured.has('google'))    missing.push('Google Gemini')
-      setMissingTokens(missing)
     }
 
-    loadExpertAndTokens()
+    loadExpertContext()
   }, [])
 
   // Aplica preset automaticamente quando vem de /templates?template=...
@@ -730,24 +716,6 @@ export default function GeneratePage() {
           <p className="text-xs text-violet-200">
             Template ativo: <span className="font-medium">{activeTemplateName}</span>
           </p>
-        </div>
-      )}
-
-      {/* Banner: tokens faltando */}
-      {missingTokens.length > 0 && (
-        <div className="flex items-start gap-3 bg-amber-950/30 border border-amber-700/40 rounded-xl px-4 py-3">
-          <Key className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-xs text-amber-200 font-medium mb-0.5">
-              Configure suas chaves de API para gerar carrosséis
-            </p>
-            <p className="text-xs text-amber-400/80">
-              Faltando: <strong>{missingTokens.join(', ')}</strong>.{' '}
-              <Link href="/tokens" className="underline underline-offset-2 hover:text-amber-200">
-                Configurar em Tokens & APIs →
-              </Link>
-            </p>
-          </div>
         </div>
       )}
 

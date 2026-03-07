@@ -65,19 +65,27 @@ Data de referência: 06/03/2026
 - [x] Todas as policies RLS atualizadas para considerar workspace
 
 **Backend:**
-- [ ] `lib/logger.ts` — helper fire-and-forget para system_logs
-- [ ] `lib/workspace.ts` — resolver workspace do usuário atual
-- [ ] `app/api/generate/content` — buscar tokens em `app_settings` em vez de `user_tokens`
-- [ ] Middleware de autorização para rotas `/admin/*` e `/team/*`
-- [ ] `app/api/admin/settings` — CRUD de app_settings (owner only)
-- [ ] `app/api/admin/workspaces` — listar/criar/suspender workspaces
+- [x] `lib/logger.ts` — helper fire-and-forget para system_logs
+- [x] `lib/workspace.ts` — resolver workspace do usuário atual
+- [x] `app/api/generate/content` — buscar tokens em `app_settings` em vez de `user_tokens`
+- [x] Middleware de autorização para rotas `/admin/*` e `/team/*`
+- [x] `app/api/admin/settings` — CRUD de app_settings (owner only)
+- [x] `app/api/admin/workspaces` — listar/criar/suspender workspaces
+- [ ] Migrar rotas restantes de `user_tokens` para `app_settings`/workspace
+  - [x] `app/api/topics`
+  - [x] `app/api/generate/images`
+  - [x] `app/api/publish`
+  - [x] `app/api/meta/*`
+  - [x] `app/api/cron/publish-scheduled`
+  - [x] `app/api/debug`
+  - [ ] `app/(app)/tokens` (tela legada: remover após UI admin/workspace ficar pronta)
 
 **Frontend — Painel Admin (`/admin`):**
 - [ ] `/admin` — dashboard: métricas globais + atividade recente
 - [ ] `/admin/settings` — chaves de IA com mascaramento + teste de conexão
 - [ ] `/admin/workspaces` — lista de clientes com plano, uso e ações
 - [ ] `/admin/workspaces/[id]` — detalhe: membros, uso, logs do workspace
-- [ ] `/admin/logs` — viewer com filtros (level, evento, workspace, período)
+- [x] `/admin/logs` — viewer com filtros (level, evento, workspace, período)
 - [ ] `/admin/users` — todos os usuários com role e workspace
 
 **Frontend — Workspace:**
@@ -126,3 +134,17 @@ Data de referência: 06/03/2026
 - [ ] Migrar `middleware.ts` para `proxy.ts` (Next 16)
 - [ ] Fontes locais para build offline
 - [ ] Retenção automática de logs (pg_cron deletar logs info > 90 dias)
+
+---
+
+## Checkpoint de execução
+
+### 2026-03-06 — ponto atual
+- Schema multi-tenant executado no Supabase.
+- Backend principal migrado de `user_tokens` para `app_settings`/workspace.
+- Publicação Meta agora usa `experts.ig_access_token` + `experts.ig_account_id` (fallback `.env`).
+- API de workspaces do admin implementada (`GET/POST/PATCH` em `/api/admin/workspaces`).
+- UI inicial do admin entregue: `/admin`, `/admin/settings`, `/admin/workspaces` (MVP funcional).
+- `/admin/logs` implementado (API + UI com filtros e busca local em payload).
+- Hardening de onboarding no schema: `profiles.role` não nulo + primeiro usuário vira `owner` automaticamente.
+- Próximo passo direto: `/admin/users` e detalhamento de `/admin/workspaces/[id]`.

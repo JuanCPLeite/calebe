@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { getExpertFromDB } from '@/lib/expert-config'
 import { createClient } from '@/lib/supabase/server'
 import { generateWithTemplate } from '@/lib/template-engine'
+import { getWorkspaceContext, getAppKeys } from '@/lib/workspace'
+import { log } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -15,7 +17,13 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'topic obrigatório' }), { status: 400 })
   }
 
-  const expert = await getExpertFromDB(user.id, supabase)
+  // Workspace e chaves da plataforma em paralelo
+  const [{ workspaceId, role }, appKeys, expert] = await Promise.all([
+    getWorkspaceContext(user.id, supabase),
+    getAppKeys(),
+    getExpertFromDB(user.id, supabase),
+  ])
+
   if (!expert) {
     return new Response(
       JSON.stringify({ error: 'Perfil de expert não encontrado. Configure em Expert → DNA.' }),
@@ -23,20 +31,19 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { data: tokenRow } = await supabase
-    .from('user_tokens')
-    .select('value')
-    .eq('user_id', user.id)
-    .eq('provider', 'anthropic')
-    .maybeSingle()
+  // Owner usa chave da plataforma; fallback para env local (desenvolvimento)
+  const anthropicKey = appKeys.anthropicKey || process.env.ANTHROPIC_API_KEY || ''
 
-  const anthropicKey = tokenRow?.value
   if (!anthropicKey) {
     return new Response(
-      JSON.stringify({ error: 'Chave Anthropic (Claude) não configurada. Acesse Tokens & APIs.' }),
+      JSON.stringify({ error: 'Chave Anthropic não configurada. Acesse o painel admin → Settings.' }),
       { status: 400 }
     )
   }
+
+  const resolvedTemplateId = templateId || 'frank-costa-10'
+  const contentOptions = { textLength, useFixedSlides: useFixedSlides !== false }
+  const startTime = Date.now()
 
   const encoder = new TextEncoder()
   function sse(data: object): Uint8Array {
@@ -46,27 +53,53 @@ export async function POST(req: NextRequest) {
   const body = new ReadableStream({
     async start(controller) {
       const gen = generateWithTemplate({
-        templateId: templateId || 'frank-costa-10',
+        templateId: resolvedTemplateId,
         topic,
         hook,
         expert,
         providerId: 'anthropic',
         apiKey: anthropicKey,
         supabase,
-        contentOptions: { textLength, useFixedSlides: useFixedSlides !== false },
+        contentOptions,
       })
 
       for await (const event of gen) {
         controller.enqueue(sse(event))
 
-        // Salva no histórico quando concluído
         if ('done' in event && event.done) {
+          // Salva no histórico com workspace_id
           supabase.from('carousels').insert({
-            user_id: user.id,
+            user_id:      user.id,
+            workspace_id: workspaceId,
+            created_by:   user.id,
             topic,
-            caption: event.caption,
-            slides: event.slides,
+            caption:      event.caption,
+            slides:       event.slides,
           }).then(() => {})
+
+          // Log de sucesso
+          log({
+            event: 'content.generated',
+            workspaceId,
+            userId: user.id,
+            payload: {
+              template_id:  resolvedTemplateId,
+              model:        'claude-opus-4-6',
+              topic,
+              slides_count: (event.slides as unknown[]).length,
+              duration_ms:  Date.now() - startTime,
+            },
+          })
+        }
+
+        if ('error' in event) {
+          log({
+            event:       'content.error',
+            level:       'error',
+            workspaceId,
+            userId:      user.id,
+            payload:     { template_id: resolvedTemplateId, model: 'claude-opus-4-6', topic, error: event.error },
+          })
         }
       }
 
@@ -76,8 +109,8 @@ export async function POST(req: NextRequest) {
 
   return new Response(body, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Content-Type':    'text/event-stream',
+      'Cache-Control':   'no-cache',
       'X-Accel-Buffering': 'no',
     },
   })

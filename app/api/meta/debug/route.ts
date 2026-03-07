@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getExpertForContext } from '@/lib/expert-config'
 
 const META_BASE = 'https://graph.facebook.com/v21.0'
 
@@ -8,15 +9,9 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
 
-  const { data: tokenRow } = await supabase
-    .from('user_tokens')
-    .select('value')
-    .eq('user_id', user.id)
-    .eq('provider', 'meta_token')
-    .single()
-
-  if (!tokenRow?.value) return NextResponse.json({ error: 'Token não configurado' }, { status: 400 })
-  const token = tokenRow.value
+  const expert = await getExpertForContext(user.id, supabase)
+  const token = expert?.igAccessToken || process.env.META_GRAPH_API_TOKEN || process.env.IG_TOKEN || ''
+  if (!token) return NextResponse.json({ error: 'Token não configurado' }, { status: 400 })
 
   const [me, accounts, businesses, igAccounts] = await Promise.all([
     fetch(`${META_BASE}/me?fields=id,name,instagram_business_account&access_token=${token}`).then(r => r.json()),

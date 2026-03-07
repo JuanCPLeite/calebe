@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getAppKeys } from '@/lib/workspace'
 import Anthropic from '@anthropic-ai/sdk'
 import type { Topic } from '@/components/generate/topic-card'
 
@@ -274,7 +274,7 @@ function classifyApiError(message: string, provider: string): string {
   if (msg.includes('credit') || msg.includes('balance') || msg.includes('billing'))
     return `Saldo insuficiente na conta ${provider}. Adicione créditos em console.${provider === 'Anthropic' ? 'anthropic.com' : 'exa.ai'}/billing.`
   if (msg.includes('invalid') && msg.includes('key') || msg.includes('authentication') || msg.includes('unauthorized') || msg.includes('401'))
-    return `Chave ${provider} inválida. Verifique em Tokens & APIs.`
+    return `Chave ${provider} inválida. Verifique no painel admin → Settings.`
   if (msg.includes('rate limit') || msg.includes('429'))
     return `Limite de requisições atingido na ${provider}. Tente em alguns segundos.`
   if (msg.includes('timeout') || msg.includes('network') || msg.includes('fetch'))
@@ -286,9 +286,6 @@ function classifyApiError(message: string, provider: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
     const body = await req.json()
     const {
       mode       = 'trending',
@@ -302,22 +299,10 @@ export async function POST(req: NextRequest) {
 
     const searchQuery = buildQuery(mode, niche, query, category)
 
-    // ── 1. Busca chaves do usuário no banco ─────────────────────────────────
-    let exaKey: string | undefined
-    let anthropicKey: string | undefined
-
-    if (user) {
-      const { data: tokens } = await supabase
-        .from('user_tokens')
-        .select('provider, value')
-        .eq('user_id', user.id)
-        .in('provider', ['exa', 'anthropic'])
-
-      for (const token of tokens || []) {
-        if (token.provider === 'exa' && token.value)        exaKey       = token.value
-        if (token.provider === 'anthropic' && token.value)  anthropicKey = token.value
-      }
-    }
+    // ── 1. Busca chaves globais da plataforma ───────────────────────────────
+    const appKeys = await getAppKeys()
+    const exaKey = appKeys.exaKey || process.env.EXA_API_KEY || ''
+    const anthropicKey = appKeys.anthropicKey || process.env.ANTHROPIC_API_KEY || ''
 
 
     // ── 2. EXA Search (melhor para paginação e filtros de data) ────────────
@@ -350,7 +335,7 @@ export async function POST(req: NextRequest) {
 
     // ── 4. Mock fallback ────────────────────────────────────────────────────
     // Se houve erro de API (crédito, chave inválida, etc.) ou não há chave → sem temas
-    const hasKey = !!(exaKey || anthropicKey)
+    const hasKey = Boolean(exaKey || anthropicKey)
     const mockTopics: Topic[] = (!hasKey && !apiError && mode === 'trending')
       ? MOCK_TOPICS.slice(offset, offset + limit)
       : []

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   Sparkles, LayoutDashboard, Dna, ImageIcon, Users,
-  Key, LayoutTemplate, ChevronRight, Zap, LogOut,
+  Key, LayoutTemplate, ChevronRight, Zap, LogOut, Shield, Settings, FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -33,6 +33,7 @@ export function Sidebar() {
   const supabase = createClient()
 
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
+  const [isOwner, setIsOwner] = useState(false)
 
   useEffect(() => {
     async function loadUser() {
@@ -46,6 +47,12 @@ export function Sidebar() {
         .eq('user_id', user.id)
         .maybeSingle()
 
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle()
+
       const displayName = expert?.display_name || user.email?.split('@')[0] || 'Usuário'
       const handle = expert?.handle || ''
       const initials = displayName
@@ -56,6 +63,7 @@ export function Sidebar() {
         .toUpperCase()
 
       setUserInfo({ email: user.email || '', displayName, handle, initials })
+      setIsOwner(profile?.role === 'owner')
     }
     loadUser()
   }, [])
@@ -101,6 +109,48 @@ export function Sidebar() {
             </Link>
           )
         })}
+
+        {isOwner && (
+          <>
+            <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-zinc-600">Admin</div>
+            <Link
+              href="/admin/workspaces"
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group',
+                pathname.startsWith('/admin/workspaces')
+                  ? 'bg-zinc-800 text-zinc-100'
+                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
+              )}
+            >
+              <Shield className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">Workspaces</span>
+            </Link>
+            <Link
+              href="/admin/settings"
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group',
+                pathname.startsWith('/admin/settings')
+                  ? 'bg-zinc-800 text-zinc-100'
+                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
+              )}
+            >
+              <Settings className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">Admin Settings</span>
+            </Link>
+            <Link
+              href="/admin/logs"
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group',
+                pathname.startsWith('/admin/logs')
+                  ? 'bg-zinc-800 text-zinc-100'
+                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
+              )}
+            >
+              <FileText className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">Admin Logs</span>
+            </Link>
+          </>
+        )}
       </nav>
 
       {/* Footer */}

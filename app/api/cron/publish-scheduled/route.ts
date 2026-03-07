@@ -10,6 +10,11 @@ interface CarouselSlide {
   bgImageStoragePath?: string
 }
 
+interface MetaCredentials {
+  token: string
+  accountId: string
+}
+
 function isDataUrl(value?: string): boolean {
   return !!value && value.startsWith('data:')
 }
@@ -84,6 +89,41 @@ async function resolveSlidePublishUrl(
   return null
 }
 
+async function resolveMetaCredentials(
+  supabase: ReturnType<typeof createAdminClient>,
+  carousel: { user_id: string; workspace_id?: string | null }
+): Promise<MetaCredentials | null> {
+  let token = ''
+  let accountId = ''
+
+  const { data: expertByUser } = await supabase
+    .from('experts')
+    .select('ig_access_token, ig_account_id')
+    .eq('user_id', carousel.user_id)
+    .maybeSingle()
+
+  token = (expertByUser as Record<string, string> | null)?.ig_access_token || ''
+  accountId = (expertByUser as Record<string, string> | null)?.ig_account_id || ''
+
+  if ((!token || !accountId) && carousel.workspace_id) {
+    const { data: expertByWorkspace } = await supabase
+      .from('experts')
+      .select('ig_access_token, ig_account_id')
+      .eq('workspace_id', carousel.workspace_id)
+      .limit(1)
+      .maybeSingle()
+
+    token = token || (expertByWorkspace as Record<string, string> | null)?.ig_access_token || ''
+    accountId = accountId || (expertByWorkspace as Record<string, string> | null)?.ig_account_id || ''
+  }
+
+  token = token || process.env.META_GRAPH_API_TOKEN || process.env.IG_TOKEN || ''
+  accountId = accountId || process.env.META_IG_ACCOUNT_ID || process.env.IG_ACCOUNT_ID || ''
+
+  if (!token || !accountId) return null
+  return { token, accountId }
+}
+
 /**
  * GET /api/cron/publish-scheduled
  *
@@ -136,27 +176,15 @@ export async function GET(req: NextRequest) {
           continue
         }
 
-        const { data: tokens, error: tokenErr } = await supabase
-          .from('user_tokens')
-          .select('provider, value')
-          .eq('user_id', carousel.user_id)
-          .in('provider', ['meta_token', 'meta_account_id'])
-        if (tokenErr) throw tokenErr
-
-        let metaToken = ''
-        let metaAccountId = ''
-        for (const t of tokens || []) {
-          if (t.provider === 'meta_token') metaToken = t.value
-          if (t.provider === 'meta_account_id') metaAccountId = t.value
-        }
-        if (!metaToken || !metaAccountId) {
-          results.push({ id: carousel.id, status: 'tokens_meta_ausentes' })
+        const meta = await resolveMetaCredentials(supabase, carousel)
+        if (!meta) {
+          results.push({ id: carousel.id, status: 'credenciais_meta_ausentes' })
           continue
         }
 
         const postId = await publishCarousel({
-          accountId: metaAccountId,
-          token: metaToken,
+          accountId: meta.accountId,
+          token: meta.token,
           imageUrls,
           caption: carousel.caption,
         })

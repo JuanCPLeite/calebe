@@ -100,7 +100,8 @@ Onde encontrar as chaves do Supabase:
 
 ## Passo 5 — Definir o owner da plataforma
 
-Após o primeiro login, defina seu usuário como owner via SQL Editor:
+Com o schema atual, o **primeiro usuário cadastrado** vira `owner` automaticamente.
+Ainda assim, mantenha o SQL abaixo como fallback operacional:
 
 ```sql
 -- Substitua pelo seu e-mail
@@ -111,8 +112,58 @@ WHERE id = (
 );
 ```
 
-> O trigger de cadastro cria todos os novos usuários com `role = 'member'` por padrão.
-> O owner precisa ser definido manualmente uma única vez.
+> Regra atual:
+> - Primeiro usuário do projeto: `owner` (automático)
+> - Próximos usuários: `member`
+> - Sempre é possível promover/rebaixar manualmente via SQL
+
+### Verificar se funcionou
+
+```sql
+SELECT
+  u.email,
+  p.id,
+  p.role,
+  p.workspace_id,
+  p.created_at
+FROM profiles p
+JOIN auth.users u ON u.id = p.id
+ORDER BY p.created_at ASC;
+```
+
+### Promover owner por ID (alternativa)
+
+```sql
+UPDATE profiles
+SET role = 'owner'
+WHERE id = 'UUID_DO_USUARIO';
+```
+
+### Trocar owner (playbook)
+
+```sql
+-- 1) Promote novo owner
+UPDATE profiles
+SET role = 'owner'
+WHERE id = (
+  SELECT id FROM auth.users WHERE email = 'novo-owner@email.com'
+);
+
+-- 2) (Opcional) rebaixa owner antigo para admin ou member
+UPDATE profiles
+SET role = 'admin'
+WHERE id = (
+  SELECT id FROM auth.users WHERE email = 'owner-antigo@email.com'
+);
+```
+
+### Em todo novo sistema/projeto
+
+1. Rode o schema completo (`supabase-schema.sql`)
+2. Crie/login com o usuário que será owner
+3. Execute o SQL de promoção para `owner`
+4. Valide no `SELECT` acima
+5. Acesse `/admin/settings` para configurar as chaves globais
 
 ---
 
@@ -221,7 +272,8 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 ### Para publicação no Instagram
 
 - [ ] Conta Meta Developer configurada
-- [ ] Token de acesso do Instagram configurado no expert
+- [ ] `Instagram Account ID` configurado em `/expert/dna`
+- [ ] `Meta Access Token` configurado em `/expert/dna` (ou fallback no `.env.local`)
 
 ### Para agendamento
 
@@ -253,6 +305,10 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 ### Publicação no Instagram falha
 - Verifique se o token Meta não expirou (tokens de curta duração expiram em 60 dias)
 - Confirme que a conta Instagram é Business ou Creator
+- Confirme que `ig_account_id` e `ig_access_token` estão preenchidos em `experts`
+
+### Após atualizar para a versão multi-tenant atual
+- Rode novamente `supabase-schema.sql` para garantir colunas novas idempotentes (ex.: `experts.ig_access_token`)
 
 ---
 

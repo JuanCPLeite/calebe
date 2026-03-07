@@ -44,7 +44,7 @@ CREATE INDEX ON system_logs (event, created_at DESC);
 ```typescript
 // lib/logger.ts
 
-import { createServiceClient } from '@/lib/supabase/service'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
@@ -69,11 +69,11 @@ interface LogOptions {
   payload?: Record<string, unknown>
 }
 
-export async function log(options: LogOptions): Promise<void> {
+export function log(options: LogOptions): void {
   const { event, level = 'info', workspaceId, userId, payload = {} } = options
 
   // Fire-and-forget — nunca bloqueia o fluxo principal
-  const supabase = createServiceClient()
+  const supabase = createAdminClient()
   supabase
     .from('system_logs')
     .insert({ event, level, workspace_id: workspaceId, user_id: userId, payload })
