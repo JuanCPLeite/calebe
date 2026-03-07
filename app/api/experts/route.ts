@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+type WorkspacePlan = 'starter' | 'pro' | 'agency'
+
+function normalizePlan(value: unknown): WorkspacePlan {
+  if (value === 'pro' || value === 'agency') return value
+  return 'starter'
+}
+
+function getExpertLimit(plan: WorkspacePlan): number {
+  if (plan === 'agency') return 5
+  if (plan === 'pro') return 3
+  return 1
+}
+
 async function getAuth() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -27,10 +40,37 @@ export async function GET() {
     .eq('workspace_id', workspaceId)
     .order('updated_at', { ascending: false })
 
+  const expertIds = (experts || []).map((e) => e.id)
+  let photoCountMap: Record<string, number> = {}
+  if (expertIds.length > 0) {
+    const { data: photos } = await supabase
+      .from('expert_photos')
+      .select('expert_id')
+      .in('expert_id', expertIds)
+    for (const row of photos || []) {
+      photoCountMap[row.expert_id] = (photoCountMap[row.expert_id] || 0) + 1
+    }
+  }
+
+  const { data: workspace } = await supabase
+    .from('workspaces')
+    .select('plan')
+    .eq('id', workspaceId)
+    .maybeSingle()
+  const plan = normalizePlan((workspace as any)?.plan)
+  const expertLimit = getExpertLimit(plan)
+  const expertsWithCounts = (experts || []).map((e) => ({
+    ...e,
+    photos_count: photoCountMap[e.id] || 0,
+  }))
+
   return NextResponse.json({
-    experts: experts || [],
+    experts: expertsWithCounts,
     activeExpertId: (profile as any)?.active_expert_id || null,
     workspaceId,
+    workspacePlan: plan,
+    expertLimit,
+    canCreateMore: expertsWithCounts.length < expertLimit,
   })
 }
 

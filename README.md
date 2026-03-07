@@ -75,8 +75,10 @@ npm run dev
 ## Fluxo recomendado de Expert (importante)
 
 1. Em `Expert > DNA`, crie/salve o expert primeiro.
-2. Depois vá em `Expert > Fotos Referência` para subir fotos desse expert.
-3. Se trocar o expert ativo no header, as fotos exibidas/salvas também mudam para o expert selecionado.
+2. Em `DNA Expert`, use a lista de experts do workspace para alternar entre perfis.
+3. O botão `Novo` no DNA respeita o limite do plano (starter/pro/agency).
+4. Depois vá em `Expert > Fotos Referência` para subir fotos desse expert.
+5. Em `Fotos Referência`, o botão `Novo` abre um modal para escolher qual expert já criado no DNA será vinculado às fotos.
 
 ---
 

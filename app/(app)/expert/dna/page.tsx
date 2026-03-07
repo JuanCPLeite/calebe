@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Save, Wand2, Plus, X, Sparkles, Camera, Loader2, Copy, Check } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getActiveExpertContext } from '@/lib/expert-client'
@@ -19,6 +19,15 @@ interface FormData {
   author_slide_template: string
   cta_final_template: string
   style_rules: string[]
+}
+
+type WorkspacePlan = 'starter' | 'pro' | 'agency'
+
+interface ExpertListItem {
+  id: string
+  display_name: string
+  handle: string
+  photos_count: number
 }
 
 const EMPTY: FormData = {
@@ -123,6 +132,7 @@ function ExampleModal({ onClose }: { onClose: () => void }) {
 
 function DnaForm() {
   const supabase = createClient()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const isOnboarding = searchParams.get('onboarding') === '1'
   const isCreatingNew = searchParams.get('new') === '1'
@@ -135,6 +145,11 @@ function DnaForm() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
   const [expertId, setExpertId] = useState<string | null>(null)
   const [showExample, setShowExample] = useState(false)
+  const [experts, setExperts] = useState<ExpertListItem[]>([])
+  const [workspacePlan, setWorkspacePlan] = useState<WorkspacePlan>('starter')
+  const [expertLimit, setExpertLimit] = useState(1)
+  const [activeExpertId, setActiveExpertId] = useState<string | null>(null)
+  const [switchingExpertId, setSwitchingExpertId] = useState<string | null>(null)
 
   const [avatarUrl, setAvatarUrl]             = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
@@ -148,6 +163,14 @@ function DnaForm() {
 
       const ctx = await getActiveExpertContext(supabase, user.id)
       setWorkspaceId(ctx.workspaceId)
+      const expertRes = await fetch('/api/experts')
+      const expertJson = await expertRes.json().catch(() => null)
+      if (expertRes.ok && expertJson) {
+        setExperts(expertJson.experts || [])
+        setWorkspacePlan((expertJson.workspacePlan as WorkspacePlan) || 'starter')
+        setExpertLimit(Number(expertJson.expertLimit) || 1)
+        setActiveExpertId(expertJson.activeExpertId || null)
+      }
       if (isCreatingNew) {
         setExpertId(null)
         setForm(EMPTY)
@@ -255,6 +278,27 @@ function DnaForm() {
     setTimeout(() => setSaved(false), 3000)
   }
 
+  async function handleSwitchExpert(nextExpertId: string) {
+    if (!nextExpertId || nextExpertId === activeExpertId) return
+    setSwitchingExpertId(nextExpertId)
+    try {
+      const res = await fetch('/api/experts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activeExpertId: nextExpertId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Falha ao trocar expert')
+      setActiveExpertId(nextExpertId)
+      router.push('/expert/dna')
+      router.refresh()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSwitchingExpertId(null)
+    }
+  }
+
   function set(field: keyof FormData, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
   }
@@ -299,6 +343,7 @@ function DnaForm() {
   const hl = form.highlight_color || '#9B59FF'
   const initials = form.display_name
     .split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?'
+  const canCreateMore = experts.length < expertLimit
 
   return (
     <div className="p-8 max-w-2xl">
@@ -327,6 +372,52 @@ function DnaForm() {
           <Wand2 className="w-4 h-4" />
           Ver exemplo
         </button>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-zinc-100">Experts do workspace</p>
+            <p className="text-xs text-zinc-500">
+              Plano: {workspacePlan} · {experts.length}/{expertLimit} experts
+            </p>
+          </div>
+          <button
+            onClick={() => router.push('/expert/dna?new=1')}
+            disabled={!canCreateMore}
+            className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed border border-zinc-700 text-zinc-200 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+            title={canCreateMore ? 'Criar novo expert' : 'Limite do plano atingido'}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Novo
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {experts.map((item) => {
+            const isActive = item.id === activeExpertId
+            const isSwitching = switchingExpertId === item.id
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleSwitchExpert(item.id)}
+                disabled={isSwitching}
+                className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                  isActive
+                    ? 'border-violet-500/60 bg-violet-900/20'
+                    : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'
+                }`}
+              >
+                <p className="text-sm text-zinc-100 font-medium truncate">{item.display_name || 'Sem nome'}</p>
+                <p className="text-xs text-zinc-500 truncate">{item.handle || 'sem @'} · {item.photos_count || 0} fotos</p>
+                {isSwitching && <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400 mt-1" />}
+              </button>
+            )
+          })}
+          {experts.length === 0 && (
+            <p className="text-xs text-zinc-500">Nenhum expert criado ainda. Clique em Novo para começar.</p>
+          )}
+        </div>
       </div>
 
       {/* ── Avatar ─────────────────────────────────────────────────── */}

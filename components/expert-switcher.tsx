@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Plus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Loader2 } from 'lucide-react'
 
 interface ExpertOption {
   id: string
@@ -15,7 +14,6 @@ export function ExpertSwitcher() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const [activeExpertId, setActiveExpertId] = useState('')
   const [experts, setExperts] = useState<ExpertOption[]>([])
@@ -63,14 +61,6 @@ export function ExpertSwitcher() {
     }
   }
 
-  async function handleCreate() {
-    setCreating(true)
-    setError('')
-    router.push('/expert/dna?new=1')
-    router.refresh()
-    setCreating(false)
-  }
-
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-xs text-zinc-500">
@@ -88,7 +78,7 @@ export function ExpertSwitcher() {
           <select
             value={activeExpertId}
             onChange={(e) => handleChange(e.target.value)}
-            disabled={saving || creating}
+            disabled={saving}
             className="h-8 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-100 min-w-52"
           >
             {experts.map((expert) => (
@@ -100,17 +90,6 @@ export function ExpertSwitcher() {
           {saving && <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />}
         </>
       )}
-
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={handleCreate}
-        disabled={creating || saving}
-        className="h-8 border-zinc-700 text-zinc-200"
-      >
-        {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-        Novo
-      </Button>
 
       {error && <span className="text-xs text-red-400">{error}</span>}
     </div>

@@ -170,3 +170,4 @@ Data de referência: 06/03/2026
 - Onboarding automático reforçado no schema: novo usuário já recebe workspace padrão + membership admin.
 - Painel owner ampliado com módulo global de postagens `/admin/carousels` (filtros por status/workspace/período).
 - `/admin/carousels` recebeu ações operacionais: detalhe, duplicar, cancelar agendamento, reenfileirar, excluir.
+- Fluxo de experts refinado: criação centralizada no DNA; Fotos Referência agora seleciona expert existente via modal.

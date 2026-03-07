@@ -281,11 +281,13 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 - [ ] Chave Anthropic configurada no admin
 - [ ] Expert DNA configurado pelo cliente (nome, nicho, CTA)
 - [ ] Expert ativo selecionado no header (quando houver múltiplos experts)
+- [ ] Se houver múltiplos experts, gerenciar a troca no próprio `DNA Expert` (lista de experts)
 
 ### Para geração de imagens
 
 - [ ] Chave Google Gemini configurada no admin
 - [ ] O expert já foi salvo em `/expert/dna` antes de usar `/expert/photos`
+- [ ] Em `/expert/photos`, usar o modal `Novo` para escolher qual expert criado no DNA terá as fotos vinculadas
 
 ### Para publicação no Instagram
 
