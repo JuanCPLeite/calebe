@@ -53,15 +53,16 @@ Data de referência: 06/03/2026
 > Objetivo: transformar em SaaS real com owner, clientes e funcionários.
 > Documentação: `docs/MULTI-TENANT-ARCHITECTURE.md`, `docs/ADMIN-PANEL.md`
 
-**Schema:**
-- [ ] Tabela `profiles` (role: owner/admin/member) com trigger de criação automática
-- [ ] Tabela `workspaces` (uma por cliente/time)
-- [ ] Tabela `workspace_members` (liga usuário a workspace com role)
-- [ ] Tabela `app_settings` (chaves de IA da plataforma — owner only)
-- [ ] Tabela `system_logs` (append-only, índices por workspace/level/event)
-- [ ] Migrar `experts` e `carousels`: `user_id` → `workspace_id` + `created_by`
-- [ ] RLS helpers: `current_workspace_id()`, `is_owner()`, `current_user_role()`
-- [ ] Atualizar todas as policies RLS
+**Schema:** ✅ concluído — rodar `supabase-schema.sql` no Supabase
+- [x] Tabela `profiles` (role: owner/admin/member) com trigger de criação automática
+- [x] Tabela `workspaces` (uma por cliente/time)
+- [x] Tabela `workspace_members` (liga usuário a workspace com role)
+- [x] Tabela `app_settings` (chaves de IA da plataforma — owner only, linha única)
+- [x] Tabela `system_logs` (append-only, índices por workspace/level/event)
+- [x] `experts` e `carousels`: colunas `workspace_id` + `created_by` adicionadas
+- [x] RLS helpers: `is_owner()`, `current_workspace_id()`, `user_workspace_role()`
+- [x] Trigger `handle_new_user` cria profile automaticamente no cadastro
+- [x] Todas as policies RLS atualizadas para considerar workspace
 
 **Backend:**
 - [ ] `lib/logger.ts` — helper fire-and-forget para system_logs
