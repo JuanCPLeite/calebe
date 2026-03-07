@@ -48,6 +48,7 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] UI `/admin/costs` com custo total, top workspaces, top usuários e modelos mais caros
 - [x] Workspace `/team` exibe limites de membros/créditos e bloqueia convite ao atingir limite
 - [x] Workspace `/dashboard` exibe alerta de risco/esgotamento de créditos para upgrade
+- [x] `/admin/carousels` com soft delete e restauração (auditoria preservada)
 - [ ] Refinos finais de UX nas telas admin (próximo foco: selector de workspace no header)
 
 ---
@@ -169,7 +170,8 @@ Filtros:
 - Duplicar carrossel
 - Cancelar agendamento
 - Reenfileirar publicação (limpa `ig_post_id/published_at` e agenda para agora)
-- Excluir carrossel
+- Excluir carrossel (soft delete)
+- Restaurar carrossel excluído
 
 ---
 

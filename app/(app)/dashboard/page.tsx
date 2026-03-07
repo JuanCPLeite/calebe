@@ -193,6 +193,7 @@ export default function DashboardPage() {
           .from('carousels')
           .select('id, topic, caption, expert_id, provider_used, model_used, ig_post_id, published_at, scheduled_at, created_at, slides')
           .eq('user_id', user.id)
+          .is('deleted_at', null)
           .order('created_at', { ascending: false })
           .limit(100),
         getActiveExpertContext(supabase, user.id),
@@ -236,7 +237,11 @@ export default function DashboardPage() {
     e.stopPropagation()
     if (!confirm('Excluir este carrossel? Esta ação não pode ser desfeita.')) return
     setDeleting(id)
-    await supabase.from('carousels').delete().eq('id', id)
+    const res = await fetch(`/api/carousels/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      setDeleting(null)
+      return
+    }
     setCarousels(prev => {
       const next = prev.filter(c => c.id !== id)
       setStats(computeStats(next))

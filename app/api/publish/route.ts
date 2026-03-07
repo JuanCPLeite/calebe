@@ -17,6 +17,19 @@ export async function POST(req: NextRequest) {
     if (!imageUrls?.length) return NextResponse.json({ error: 'imageUrls obrigatório' }, { status: 400 })
     if (!caption) return NextResponse.json({ error: 'caption obrigatório' }, { status: 400 })
 
+    if (typeof carouselId === 'string' && carouselId.trim()) {
+      const { data: carousel } = await supabase
+        .from('carousels')
+        .select('id')
+        .eq('id', carouselId)
+        .eq('user_id', user.id)
+        .is('deleted_at', null)
+        .maybeSingle()
+      if (!carousel) {
+        return NextResponse.json({ error: 'Carrossel não encontrado ou excluído' }, { status: 404 })
+      }
+    }
+
     const [{ workspaceId }, expert] = await Promise.all([
       getWorkspaceContext(user.id, supabase),
       getExpertForContext(user.id, supabase),
@@ -65,6 +78,7 @@ export async function POST(req: NextRequest) {
         .update({ ig_post_id: postId, published_at: new Date().toISOString() })
         .eq('id', carouselId)
         .eq('user_id', user.id)
+        .is('deleted_at', null)
     }
 
     log({

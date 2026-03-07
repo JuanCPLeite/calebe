@@ -61,6 +61,7 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - `/team` com visibilidade de limites (membros e créditos), alerta de consumo e bloqueio de convite ao atingir `memberLimit`
 - `/dashboard` com alerta de upgrade quando o consumo mensal de créditos atinge faixa de risco
 - Créditos e métricas de geração no workspace/admin priorizam `usage_events` (ledger), mantendo fallback legado em `carousels`
+- Carrosséis agora usam soft delete (`deleted_at/deleted_by/deleted_reason`) para auditoria sem perder histórico
 - Content Hub DB: platforms, content_formats, templates, template_prompts
 - UX DNA Expert em duas etapas: lista primeiro; formulário só após selecionar um DNA ou clicar em `Novo`
 - UX Fotos de Referência em duas etapas: lista primeiro; detalhes/fotos após selecionar expert
@@ -75,6 +76,7 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - geração de conteúdo/imagens/publicação bloqueada ao atingir `monthlyPostCredits`
 - `/generate` mostra aviso prévio de créditos via `/api/workspace/limits`
 - exclusão de carrossel não reduz histórico de uso/custo já registrado em `usage_events`
+- cron/publicação ignoram carrosséis excluídos logicamente
 
 ### Roadmap
 Ver `ROADMAP.md` para o plano completo.

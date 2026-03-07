@@ -20,6 +20,7 @@ export async function GET(
       .select('*')
       .eq('id', id)
       .eq('user_id', user.id)
+      .is('deleted_at', null)
       .single()
 
     if (error || !data) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 })
@@ -57,11 +58,48 @@ export async function PATCH(
       .update(allowed)
       .eq('id', id)
       .eq('user_id', user.id)
+      .is('deleted_at', null)
 
     if (error) throw error
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     console.error('[PATCH /api/carousels/[id]]', err.message)
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE /api/carousels/[id]
+ * Soft delete: oculta para o usuário, mantém histórico para auditoria.
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+
+    const body = await req.json().catch(() => ({} as Record<string, unknown>))
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+
+    const { error } = await supabase
+      .from('carousels')
+      .update({
+        deleted_at: new Date().toISOString(),
+        deleted_by: user.id,
+        deleted_reason: reason,
+      })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .is('deleted_at', null)
+
+    if (error) throw error
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    console.error('[DELETE /api/carousels/[id]]', err.message)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

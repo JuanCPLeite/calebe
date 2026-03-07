@@ -76,6 +76,7 @@ Uso típico:
 12. Cálculo de crédito mensal (`/api/workspace/limits`) agora prioriza `usage_events` (`content.generate` + `render`) com fallback legado.
 13. Métricas de geração em `/api/admin/workspaces` e `/api/admin/workspaces/[id]` também priorizam ledger de `usage_events`.
 14. `supabase-schema.sql` inclui backfill idempotente de `carousels.workspace_id` para bases legadas.
+15. Exclusão de carrossel migrou para soft delete, sem perder histórico financeiro/uso.
 
 ---
 

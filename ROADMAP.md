@@ -212,3 +212,4 @@ Data de referência: 07/03/2026
 - `/team` agora exibe uso de membros/créditos e desabilita convite ao atingir `memberLimit`.
 - `/dashboard` agora exibe alerta de risco/esgotamento de créditos para orientar upgrade.
 - Métricas de geração/créditos passaram a priorizar `usage_events` (ledger) com fallback legado em `carousels`.
+- Soft delete de carrossel implementado (auditoria preservada; usuário não vê item excluído).

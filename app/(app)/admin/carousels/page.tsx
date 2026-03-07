@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
-type StatusFilter = 'all' | 'draft' | 'scheduled' | 'published'
+type StatusFilter = 'all' | 'draft' | 'scheduled' | 'published' | 'deleted'
 
 interface Workspace {
   id: string
@@ -26,6 +26,9 @@ interface CarouselRow {
   ig_post_id: string | null
   published_at: string | null
   scheduled_at: string | null
+  deleted_at: string | null
+  deleted_by: string | null
+  deleted_reason: string | null
   created_at: string
   workspace: { name: string; slug: string } | null
   expert: { display_name: string; handle: string } | null
@@ -82,18 +85,20 @@ export default function AdminCarouselsPage() {
 
   const counters = useMemo(() => ({
     all: rows.length,
+    deleted: rows.filter((r) => !!r.deleted_at).length,
     published: rows.filter((r) => !!r.ig_post_id).length,
     scheduled: rows.filter((r) => !r.ig_post_id && !!r.scheduled_at).length,
     draft: rows.filter((r) => !r.ig_post_id && !r.scheduled_at).length,
   }), [rows])
 
   function statusBadge(row: CarouselRow) {
+    if (row.deleted_at) return <Badge className="bg-red-700/30 text-red-300">Excluído</Badge>
     if (row.ig_post_id) return <Badge className="bg-green-700/30 text-green-300">Publicado</Badge>
     if (row.scheduled_at) return <Badge className="bg-amber-700/30 text-amber-300">Agendado</Badge>
     return <Badge className="bg-zinc-700/40 text-zinc-300">Rascunho</Badge>
   }
 
-  async function runAction(id: string, action: 'cancel_schedule' | 'requeue_publish' | 'duplicate' | 'delete') {
+  async function runAction(id: string, action: 'cancel_schedule' | 'requeue_publish' | 'duplicate' | 'restore' | 'delete') {
     setActingId(id)
     setError('')
     try {
@@ -128,7 +133,7 @@ export default function AdminCarouselsPage() {
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3"><p className="text-xs text-zinc-500">Total</p><p className="text-xl text-zinc-100 font-semibold">{counters.all}</p></div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3"><p className="text-xs text-zinc-500">Publicados</p><p className="text-xl text-green-300 font-semibold">{counters.published}</p></div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3"><p className="text-xs text-zinc-500">Agendados</p><p className="text-xl text-amber-300 font-semibold">{counters.scheduled}</p></div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3"><p className="text-xs text-zinc-500">Rascunhos</p><p className="text-xl text-zinc-200 font-semibold">{counters.draft}</p></div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3"><p className="text-xs text-zinc-500">Excluídos</p><p className="text-xl text-red-300 font-semibold">{counters.deleted}</p></div>
       </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
@@ -148,6 +153,7 @@ export default function AdminCarouselsPage() {
             <option value="published">Publicado</option>
             <option value="scheduled">Agendado</option>
             <option value="draft">Rascunho</option>
+            <option value="deleted">Excluído</option>
           </select>
           <select
             value={workspaceFilter}
@@ -242,7 +248,7 @@ export default function AdminCarouselsPage() {
                           size="sm"
                           variant="outline"
                           className="h-8 px-2 border-zinc-700 text-zinc-200"
-                          disabled={actingId === row.id || !row.scheduled_at}
+                          disabled={actingId === row.id || !row.scheduled_at || !!row.deleted_at}
                           onClick={() => runAction(row.id, 'cancel_schedule')}
                         >
                           <CalendarX2 className="w-3.5 h-3.5" />
@@ -251,23 +257,35 @@ export default function AdminCarouselsPage() {
                           size="sm"
                           variant="outline"
                           className="h-8 px-2 border-zinc-700 text-zinc-200"
-                          disabled={actingId === row.id}
+                          disabled={actingId === row.id || !!row.deleted_at}
                           onClick={() => runAction(row.id, 'requeue_publish')}
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 px-2 border-red-900 text-red-300"
-                          disabled={actingId === row.id}
-                          onClick={() => {
-                            if (!confirm('Excluir este carrossel?')) return
-                            runAction(row.id, 'delete')
-                          }}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                        {row.deleted_at ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2 border-emerald-900 text-emerald-300"
+                            disabled={actingId === row.id}
+                            onClick={() => runAction(row.id, 'restore')}
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2 border-red-900 text-red-300"
+                            disabled={actingId === row.id}
+                            onClick={() => {
+                              if (!confirm('Ocultar este carrossel (soft delete)?')) return
+                              runAction(row.id, 'delete')
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -314,6 +332,8 @@ export default function AdminCarouselsPage() {
               <p className="text-xs text-zinc-500">Criado em: {new Date(selected.created_at).toLocaleString('pt-BR')}</p>
               <p className="text-xs text-zinc-500">Agendado: {selected.scheduled_at ? new Date(selected.scheduled_at).toLocaleString('pt-BR') : '—'}</p>
               <p className="text-xs text-zinc-500">Publicado: {selected.published_at ? new Date(selected.published_at).toLocaleString('pt-BR') : '—'}</p>
+              <p className="text-xs text-zinc-500">Excluído em: {selected.deleted_at ? new Date(selected.deleted_at).toLocaleString('pt-BR') : '—'}</p>
+              <p className="text-xs text-zinc-500">Motivo exclusão: {selected.deleted_reason || '—'}</p>
               <pre className="text-xs text-zinc-300 bg-zinc-950 border border-zinc-800 rounded-lg p-3 whitespace-pre-wrap break-words">
                 {selected.caption || '(sem legenda)'}
               </pre>

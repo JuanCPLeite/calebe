@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { log } from '@/lib/logger'
 
-type StatusFilter = 'all' | 'draft' | 'scheduled' | 'published'
+type StatusFilter = 'all' | 'draft' | 'scheduled' | 'published' | 'deleted'
 
 async function ensureOwner() {
   const supabase = await createClient()
@@ -29,7 +29,7 @@ async function ensureOwner() {
 }
 
 function normalizeStatus(value: string): StatusFilter {
-  if (value === 'draft' || value === 'scheduled' || value === 'published') return value
+  if (value === 'draft' || value === 'scheduled' || value === 'published' || value === 'deleted') return value
   return 'all'
 }
 
@@ -50,18 +50,19 @@ export async function GET(req: NextRequest) {
 
   let query = admin
     .from('carousels')
-    .select('id, workspace_id, user_id, expert_id, topic, caption, provider_used, model_used, ig_post_id, published_at, scheduled_at, created_at')
+    .select('id, workspace_id, user_id, expert_id, topic, caption, provider_used, model_used, ig_post_id, published_at, scheduled_at, deleted_at, deleted_by, deleted_reason, created_at')
     .gte('created_at', startDate)
     .order('created_at', { ascending: false })
     .limit(limit)
 
   if (workspaceId) query = query.eq('workspace_id', workspaceId)
-  if (status === 'published') query = query.not('ig_post_id', 'is', null)
+  if (status === 'deleted') query = query.not('deleted_at', 'is', null)
+  if (status === 'published') query = query.is('deleted_at', null).not('ig_post_id', 'is', null)
   if (status === 'scheduled') {
-    query = query.is('ig_post_id', null).not('scheduled_at', 'is', null)
+    query = query.is('deleted_at', null).is('ig_post_id', null).not('scheduled_at', 'is', null)
   }
   if (status === 'draft') {
-    query = query.is('ig_post_id', null).is('scheduled_at', null)
+    query = query.is('deleted_at', null).is('ig_post_id', null).is('scheduled_at', null)
   }
 
   const { data: rows, error } = await query
@@ -131,6 +132,7 @@ type CarouselAction =
   | 'cancel_schedule'
   | 'requeue_publish'
   | 'duplicate'
+  | 'restore'
   | 'delete'
 
 function isValidAction(value: unknown): value is CarouselAction {
@@ -138,6 +140,7 @@ function isValidAction(value: unknown): value is CarouselAction {
     value === 'cancel_schedule' ||
     value === 'requeue_publish' ||
     value === 'duplicate' ||
+    value === 'restore' ||
     value === 'delete'
   )
 }
@@ -171,6 +174,7 @@ export async function PATCH(req: NextRequest) {
       .from('carousels')
       .update({ scheduled_at: null })
       .eq('id', id)
+      .is('deleted_at', null)
     if (error) return NextResponse.json({ error: 'Falha ao cancelar agendamento' }, { status: 500 })
     return NextResponse.json({ ok: true, action })
   }
@@ -184,6 +188,7 @@ export async function PATCH(req: NextRequest) {
         scheduled_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .is('deleted_at', null)
     if (error) return NextResponse.json({ error: 'Falha ao reenfileirar publicação' }, { status: 500 })
     return NextResponse.json({ ok: true, action })
   }
@@ -211,10 +216,31 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: true, action, duplicatedId: duplicated.id })
   }
 
+  if (action === 'restore') {
+    const { error } = await admin
+      .from('carousels')
+      .update({
+        deleted_at: null,
+        deleted_by: null,
+        deleted_reason: '',
+      })
+      .eq('id', id)
+      .not('deleted_at', 'is', null)
+
+    if (error) return NextResponse.json({ error: 'Falha ao restaurar carrossel' }, { status: 500 })
+    return NextResponse.json({ ok: true, action })
+  }
+
   const { error } = await admin
     .from('carousels')
-    .delete()
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: auth.user.id,
+      deleted_reason: 'admin_delete',
+      scheduled_at: null,
+    })
     .eq('id', id)
+    .is('deleted_at', null)
 
   if (error) return NextResponse.json({ error: 'Falha ao excluir carrossel' }, { status: 500 })
   return NextResponse.json({ ok: true, action })

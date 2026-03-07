@@ -62,6 +62,9 @@ create table if not exists carousels (
   ig_post_id   text,
   published_at timestamptz,
   scheduled_at timestamptz,
+  deleted_at   timestamptz,
+  deleted_by   uuid        references auth.users(id) on delete set null,
+  deleted_reason text      default '',
   created_at   timestamptz default now()
 );
 
@@ -410,6 +413,9 @@ alter table carousels add column if not exists created_by   uuid references auth
 alter table carousels add column if not exists expert_id    uuid references experts(id) on delete set null;
 alter table carousels add column if not exists provider_used text;
 alter table carousels add column if not exists model_used text;
+alter table carousels add column if not exists deleted_at timestamptz;
+alter table carousels add column if not exists deleted_by uuid references auth.users(id) on delete set null;
+alter table carousels add column if not exists deleted_reason text default '';
 
 -- ─── Backfill de onboarding para bases existentes (idempotente) ──────────────
 

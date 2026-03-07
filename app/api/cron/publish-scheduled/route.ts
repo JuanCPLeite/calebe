@@ -158,6 +158,7 @@ export async function GET(req: NextRequest) {
     const { data: pending, error } = await supabase
       .from('carousels')
       .select('*')
+      .is('deleted_at', null)
       .lte('scheduled_at', new Date().toISOString())
       .is('ig_post_id', null)
       .not('scheduled_at', 'is', null)
@@ -210,6 +211,7 @@ export async function GET(req: NextRequest) {
           })
           .eq('id', carousel.id)
           .eq('user_id', carousel.user_id)
+          .is('deleted_at', null)
         if (updateErr) throw updateErr
 
         results.push({ id: carousel.id, status: 'publicado' })
