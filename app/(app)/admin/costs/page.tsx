@@ -97,6 +97,25 @@ interface CostData {
     projectedMarginUsd: number
     projectedMarginPct: number | null
   }>
+  tokenTelemetry?: {
+    tokenEvents: number
+    realTokenEvents: number
+    estimatedTokenEvents: number
+    realCoveragePct: number | null
+  }
+  realCostSummary?: {
+    totalCostUsd: number
+    totalCostBrl: number
+    byProvider: Array<{ provider: string; totalCostUsd: number; totalCostBrl: number }>
+  }
+  realCostDaily?: Array<{
+    provider: string
+    date: string
+    totalCostUsd: number
+    usdToBrl: number
+    totalCostBrl: number
+    syncedAt: string | null
+  }>
   alerts: Array<{ level: 'info' | 'warn'; message: string }>
 }
 
@@ -146,6 +165,7 @@ export default function AdminCostsPage() {
   const [prices, setPrices] = useState<PriceRow[]>([])
   const [savingPrice, setSavingPrice] = useState(false)
   const [seedingPrice, setSeedingPrice] = useState(false)
+  const [syncingRealCosts, setSyncingRealCosts] = useState(false)
   const [savingPolicy, setSavingPolicy] = useState(false)
   const [savingGuardrails, setSavingGuardrails] = useState(false)
   const [creditPolicy, setCreditPolicy] = useState<CreditPolicy>({ contentRender: 1, imageGenerate: 0.25, publish: 0 })
@@ -267,6 +287,27 @@ export default function AdminCostsPage() {
       setError(err.message || 'Erro ao semear preços')
     } finally {
       setSeedingPrice(false)
+    }
+  }
+
+  async function syncRealCosts() {
+    setSyncingRealCosts(true)
+    try {
+      const res = await fetch('/api/admin/costs/sync-real', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days: Number(days) || 30 }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Falha ao sincronizar custos reais')
+      if (Array.isArray(json.errors) && json.errors.length > 0) {
+        setError(`Sync parcial: ${json.errors.join(' | ')}`)
+      }
+      await load()
+    } catch (err: any) {
+      setError(err.message || 'Erro ao sincronizar custos reais')
+    } finally {
+      setSyncingRealCosts(false)
     }
   }
 
@@ -393,6 +434,67 @@ export default function AdminCostsPage() {
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
               <p className="text-xs text-zinc-500">Custo médio / evento</p>
               <p className="text-lg font-semibold text-zinc-100">{usd(avgPerEvent)}</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-sm font-semibold text-zinc-100">Custo real das plataformas (USD/BRL)</p>
+              <Button onClick={syncRealCosts} disabled={syncingRealCosts} variant="outline" className="border-zinc-700 text-zinc-200">
+                {syncingRealCosts ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Sincronizar custo real'}
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                <p className="text-xs text-zinc-500">Total real (USD)</p>
+                <p className="text-sm text-zinc-100 font-semibold">{usd(data.realCostSummary?.totalCostUsd || 0)}</p>
+              </div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                <p className="text-xs text-zinc-500">Total real (BRL)</p>
+                <p className="text-sm text-zinc-100 font-semibold">
+                  {(data.realCostSummary?.totalCostBrl || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </p>
+              </div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                <p className="text-xs text-zinc-500">Cobertura de tokens reais</p>
+                <p className="text-sm text-zinc-100 font-semibold">
+                  {data.tokenTelemetry?.realCoveragePct === null || data.tokenTelemetry?.realCoveragePct === undefined
+                    ? '—'
+                    : `${data.tokenTelemetry.realCoveragePct.toFixed(2)}%`}
+                </p>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  reais: {data.tokenTelemetry?.realTokenEvents || 0} | estimados: {data.tokenTelemetry?.estimatedTokenEvents || 0}
+                </p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-zinc-500 border-b border-zinc-800">
+                    <th className="py-2 pr-3">Provider</th>
+                    <th className="py-2 pr-3">Data</th>
+                    <th className="py-2 pr-3">USD</th>
+                    <th className="py-2 pr-3">Câmbio</th>
+                    <th className="py-2 pr-3">BRL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.realCostDaily || []).map((row, idx) => (
+                    <tr key={`${row.provider}:${row.date}:${idx}`} className="border-b border-zinc-900">
+                      <td className="py-2 pr-3 text-zinc-300">{row.provider}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{new Date(row.date).toLocaleDateString('pt-BR')}</td>
+                      <td className="py-2 pr-3 text-zinc-100">{usd(row.totalCostUsd)}</td>
+                      <td className="py-2 pr-3 text-zinc-300">{row.usdToBrl.toFixed(4)}</td>
+                      <td className="py-2 pr-3 text-zinc-100 font-medium">
+                        {row.totalCostBrl.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </td>
+                    </tr>
+                  ))}
+                  {(data.realCostDaily || []).length === 0 && (
+                    <tr><td colSpan={5} className="py-4 text-center text-zinc-500">Sem snapshots de custo real. Clique em "Sincronizar custo real".</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 

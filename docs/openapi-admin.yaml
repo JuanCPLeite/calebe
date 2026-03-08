@@ -355,6 +355,29 @@ paths:
           description: Não autenticado
         '403':
           description: Acesso negado
+  /api/admin/costs/sync-real:
+    post:
+      summary: Sincroniza custo real de billing (OpenAI/Anthropic) e converte para BRL
+      tags: [Admin Costs]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                days:
+                  type: integer
+                  minimum: 1
+                  maximum: 365
+                  default: 30
+      responses:
+        '200':
+          description: Sync executado (com possíveis erros parciais por provider)
+        '401':
+          description: Não autenticado
+        '403':
+          description: Acesso negado
     patch:
       summary: Atualiza guardrails de orçamento mensal
       tags: [Admin Costs]

@@ -404,6 +404,25 @@ create index if not exists usage_events_user_idx
 create index if not exists usage_events_provider_model_idx
   on usage_events (provider, model, created_at desc);
 
+-- Custo diário real por provider (fonte externa de billing) + câmbio para BRL
+create table if not exists provider_daily_costs (
+  id              uuid        primary key default gen_random_uuid(),
+  provider        text        not null, -- openai | anthropic | ...
+  cost_date       date        not null,
+  source          text        not null default 'provider_api',
+  total_cost_usd  numeric(18,8) not null default 0,
+  usd_to_brl      numeric(18,6) not null default 0,
+  total_cost_brl  numeric(18,8) not null default 0,
+  metadata        jsonb       not null default '{}'::jsonb,
+  synced_at       timestamptz not null default now(),
+  created_at      timestamptz not null default now()
+);
+
+create unique index if not exists provider_daily_costs_unique_idx
+  on provider_daily_costs (provider, cost_date, source);
+create index if not exists provider_daily_costs_date_idx
+  on provider_daily_costs (cost_date desc);
+
 -- ─── Colunas novas em tabelas existentes (idempotente) ────────────────────────
 
 -- experts: adiciona workspace_id (mantém user_id para compatibilidade)
@@ -532,6 +551,7 @@ alter table app_settings      enable row level security;
 alter table system_logs       enable row level security;
 alter table provider_price_catalog enable row level security;
 alter table usage_events      enable row level security;
+alter table provider_daily_costs enable row level security;
 
 -- workspaces: owner vê tudo; membros veem o seu
 drop policy if exists "select workspaces" on workspaces;
@@ -599,10 +619,15 @@ create policy "owner manages provider price catalog" on provider_price_catalog f
 -- usage_events: owner ve tudo; admin/member ve o proprio workspace (somente leitura)
 drop policy if exists "read usage events" on usage_events;
 create policy "read usage events" on usage_events for select
-  using (
-    is_owner()
-    or workspace_id = current_workspace_id()
-  );
+using (
+  is_owner()
+  or workspace_id = current_workspace_id()
+);
+
+-- provider_daily_costs: owner consulta. Escrita via service_role.
+drop policy if exists "owner reads provider daily costs" on provider_daily_costs;
+create policy "owner reads provider daily costs" on provider_daily_costs for select
+using (is_owner());
 
 -- ─── RLS — tabelas existentes atualizadas para workspace ─────────────────────
 

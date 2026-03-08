@@ -47,6 +47,7 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] API `POST /api/admin/costs/prices/seed` para preencher baseline de preços estimados
 - [x] API `GET/PATCH /api/admin/costs/credit-policy` para política de crédito por ação
 - [x] API `GET/PATCH /api/admin/costs/guardrails` para orçamento mensal (padrão + override por workspace)
+- [x] API `POST /api/admin/costs/sync-real` para sincronizar billing real (USD) e conversão BRL
 - [x] UI `/admin/costs` com custo total, top workspaces, top usuários e modelos mais caros
 - [x] Workspace `/team` exibe limites de membros/créditos e bloqueia convite ao atingir limite
 - [x] Workspace `/dashboard` exibe alerta de risco/esgotamento de créditos para upgrade
@@ -184,6 +185,7 @@ Filtros:
 - Custo total no período (USD)
 - Total de eventos de uso no período
 - Custo médio por evento
+- Custo real de billing (OpenAI/Anthropic) em USD e BRL
 
 ### Quebras principais
 
@@ -198,6 +200,7 @@ Filtros:
 - Efetividade por modelo (gerado x publicado)
 - Uso de orçamento mensal por workspace (USD)
 - Simulação de margem por plano (receita estimada x custo projetado)
+- Cobertura de tokens reais vs fallback estimado
 
 ### Filtros
 

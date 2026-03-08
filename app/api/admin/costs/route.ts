@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
 
     let usageQuery = admin
       .from('usage_events')
-      .select('workspace_id, user_id, carousel_id, provider, model, event_type, unit, quantity, total_cost_usd, created_at')
+      .select('workspace_id, user_id, carousel_id, provider, model, event_type, unit, quantity, total_cost_usd, metadata, created_at')
       .gte('created_at', from)
       .order('created_at', { ascending: false })
       .limit(5000)
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
     if (workspaceId) periodCarouselsQuery = periodCarouselsQuery.eq('workspace_id', workspaceId)
 
     const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
-    const [usageRes, prevUsageRes, workspacesRes, profilesRes, settingsRes, monthCarouselsRes, monthUsageRes, monthCostRes, periodCarouselsRes] = await Promise.all([
+    const [usageRes, prevUsageRes, workspacesRes, profilesRes, settingsRes, monthCarouselsRes, monthUsageRes, monthCostRes, periodCarouselsRes, realCostsRes] = await Promise.all([
       usageQuery,
       admin
         .from('usage_events')
@@ -96,6 +96,11 @@ export async function GET(req: NextRequest) {
         .gte('created_at', monthStart)
         .limit(50000),
       periodCarouselsQuery,
+      admin
+        .from('provider_daily_costs')
+        .select('provider, cost_date, total_cost_usd, usd_to_brl, total_cost_brl, synced_at')
+        .gte('cost_date', from.slice(0, 10))
+        .order('cost_date', { ascending: true }),
     ])
 
     if (usageRes.error) {
@@ -116,6 +121,7 @@ export async function GET(req: NextRequest) {
     const costGuardrails = parseCostGuardrails((settingsRes.data as any)?.cost_guardrails_json)
     const wsNameById = new Map(workspaces.map((w) => [w.id, w.name || w.id]))
     const userNameById = new Map(profiles.map((p) => [p.id, p.full_name || p.id]))
+    const realCostRows = realCostsRes.data || []
 
     let totalCostUsd = 0
     const byDay = new Map<string, number>()
@@ -205,6 +211,16 @@ export async function GET(req: NextRequest) {
         breakdown.publishCredits = Number((breakdown.publishCredits + weighted).toFixed(2))
       }
       userBreakdown.set(breakdownKey, breakdown)
+    }
+
+    const tokenRows = usage.filter((row) => row.event_type === 'content.generate' && (row.unit === 'token_in' || row.unit === 'token_out'))
+    const estimatedTokenRows = tokenRows.filter((row) => (row as any)?.metadata?.estimated === true)
+    const realTokenRows = tokenRows.length - estimatedTokenRows.length
+    const tokenTelemetry = {
+      tokenEvents: tokenRows.length,
+      realTokenEvents: realTokenRows,
+      estimatedTokenEvents: estimatedTokenRows.length,
+      realCoveragePct: tokenRows.length > 0 ? Number(((realTokenRows / tokenRows.length) * 100).toFixed(2)) : null,
     }
 
     const topWorkspaces = Array.from(byWorkspace.entries())
@@ -449,6 +465,34 @@ export async function GET(req: NextRequest) {
       })
       .sort((a, b) => a.projectedMarginUsd - b.projectedMarginUsd)
 
+    const realCostByProvider = new Map<string, { provider: string; totalCostUsd: number; totalCostBrl: number }>()
+    const realCostDaily = realCostRows.map((row) => ({
+      provider: row.provider || 'unknown',
+      date: row.cost_date,
+      totalCostUsd: Number(Number(row.total_cost_usd || 0).toFixed(8)),
+      usdToBrl: Number(Number(row.usd_to_brl || 0).toFixed(6)),
+      totalCostBrl: Number(Number(row.total_cost_brl || 0).toFixed(8)),
+      syncedAt: row.synced_at || null,
+    }))
+    for (const row of realCostRows) {
+      const provider = row.provider || 'unknown'
+      const current = realCostByProvider.get(provider) || { provider, totalCostUsd: 0, totalCostBrl: 0 }
+      current.totalCostUsd += Number(row.total_cost_usd || 0)
+      current.totalCostBrl += Number(row.total_cost_brl || 0)
+      realCostByProvider.set(provider, current)
+    }
+    const realCostSummary = {
+      totalCostUsd: Number(Array.from(realCostByProvider.values()).reduce((acc, row) => acc + row.totalCostUsd, 0).toFixed(8)),
+      totalCostBrl: Number(Array.from(realCostByProvider.values()).reduce((acc, row) => acc + row.totalCostBrl, 0).toFixed(8)),
+      byProvider: Array.from(realCostByProvider.values())
+        .map((row) => ({
+          provider: row.provider,
+          totalCostUsd: Number(row.totalCostUsd.toFixed(8)),
+          totalCostBrl: Number(row.totalCostBrl.toFixed(8)),
+        }))
+        .sort((a, b) => b.totalCostUsd - a.totalCostUsd),
+    }
+
     for (const item of creditUsage) {
       if (item.usagePercent >= 100) {
         alerts.push({
@@ -527,6 +571,9 @@ export async function GET(req: NextRequest) {
       costGuardrails,
       monthlyProjection,
       planMarginSimulation,
+      tokenTelemetry,
+      realCostSummary,
+      realCostDaily,
       alerts: alerts.slice(0, 12),
     })
   } catch (err: any) {
