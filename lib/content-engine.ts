@@ -63,6 +63,7 @@ Use no máximo 1-2 emojis por slide, só se natural.
    Ex: ferramenta mal usada = "carro de corrida em estrada de terra"
    Ex: automação ruim = "robô que liga às 3 da manhã"
    IMPORTANTE: varie as analogias conforme o tema — nunca repita os mesmos exemplos em carrosséis diferentes.
+   PROIBIDO usar analogias clichê/repetidas como: "Ferrari", "avião", "médico/cirurgião", "foguete", "gourmet".
 
 3. DADOS SEMPRE ESPECÍFICOS:
    Nunca "muito caro" → sempre "R$ X" ou "X horas" ou "X vezes mais"
@@ -132,10 +133,23 @@ Slide 8 — comparison
   Qual dos dois escala quando teu negócio dobra de tamanho?
 
 Slide 9 — proof
-  {[Afirmação contraintuitiva ou erro comum.]}
-  [Consequência de fazer errado — específica.]
-  Anota isso: [analogia concreta e INÉDITA — adaptada ao tema, variada a cada carrossel]
-  [O segredo não é a ferramenta. É saber qual processo usar.]
+  OBJETIVO: prova contextual e humana, diretamente ligada ao tema deste carrossel.
+  A prova DEVE referenciar o mesmo cenário, vocabulário ou dado dos slides anteriores — não inventar novo contexto.
+
+  ESCOLHA UM dos tipos de prova abaixo (varie a cada carrossel — nunca repita o mesmo tipo):
+  A) Resultado de cliente real: "um cliente com [perfil específico do tema] fez [ação] e saiu de X para Y em Z semanas"
+  B) Teste próprio com dado: "testei com [volume/escala real] e a diferença foi [número específico]"
+  C) Erro que custou caro: "vi [perfil do público] perder [R$ X ou X horas] por fazer [ação errada do tema]"
+  D) Antes/depois de processo: "antes: [rotina do slide 3 ou 4]. Depois: [resultado com dado]"
+  E) Benchmark do setor: "a média do mercado é X. Quem usa [abordagem do tema] chega a Y"
+  F) Observação de campo: "nas últimas [X semanas/meses] analisando [contexto do tema]: [padrão que encontrou]"
+
+  SE usar analogia para ilustrar (opcional), escolha UMA que faça sentido para o TEMA — varie sempre:
+  mecânico, chef, piloto, arquiteto, atleta, contador, engenheiro, técnico de TI, treinador, sommelier,
+  cirurgião, maestro, detetive, pescador, fotógrafo — escolha a que se encaixa no vocabulário do nicho.
+  Ferrari e "médico genérico" são permitidos MAS só se fizerem sentido direto com o tema — evite como padrão.
+
+  [Fechamento: "não é sobre ferramenta, é sobre processo + execução".]
   [CTA suave apontando pro conteúdo/produto.]
 
 ${useFixedSlides
@@ -198,6 +212,8 @@ ${useFixedSlides
 - Usar pelo menos 1 reframe ("A pergunta não é... A pergunta é:")
 - Usar pelo menos 1 lista numerada mostrando processo quebrado
 - Slide 8 DEVE ter formato Modo Antigo vs Com Automação com dados de tempo/custo
+- Slide 9 DEVE ser prova contextual ao tema e ao público (evite analogias prontas/clichês)
+- NUNCA usar nos slides: "Ferrari", "avião", "médico/cirurgião", "foguete" como prova genérica
 - imagePrompt é OBRIGATÓRIO em TODOS os 10 slides (incluindo slides 5 e 10)
 
 RESPONDA SOMENTE com JSON válido, sem markdown, sem explicações:

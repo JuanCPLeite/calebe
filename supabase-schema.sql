@@ -1012,6 +1012,92 @@ Evite generalidades — mostre cenas concretas e reconheciveis do dia a dia.$PRO
   1
 ) on conflict (template_id, step, provider, version) do nothing;
 
+-- Prompts: frank-costa-10 / slide-5 (apresentacao do autor adaptada ao tema)
+insert into template_prompts (template_id, step, provider, model, prompt_text, version) values (
+  'frank-costa-10', 'slide-5', 'anthropic', 'claude-sonnet-4-6',
+  $PROMPT$Voce e {{expert.displayName}} (@{{expert.handle}}), especialista em {{expert.niche}}.
+{{expert.bioShort}}
+
+Gere um slide de apresentacao do autor adaptado ao tema do carrossel: "{{topic}}"
+
+O slide deve:
+- Apresentar quem voce e e sua credencial relevante ESPECIFICAMENTE para este tema
+- Conectar sua expertise ao problema abordado no carrossel
+- Ser pessoal e direto, tom coloquial brasileiro
+- Terminar com CTA para seguir o perfil
+- Maximo 180 caracteres
+
+Use *negrito* para frases-chicote e {destaque} para dados/valores.
+
+Responda APENAS com JSON valido:
+{
+  "text": "texto do slide",
+  "imagePrompt": "photorealistic warm professional portrait or natural workplace scene related to {{topic}}, no text in image"
+}$PROMPT$,
+  1
+) on conflict (template_id, step, provider, version) do nothing;
+
+-- Prompts: frank-costa-10 / slide-9 (prova contextual)
+insert into template_prompts (template_id, step, provider, model, prompt_text, version) values (
+  'frank-costa-10', 'slide-9', 'anthropic', 'claude-sonnet-4-6',
+  $PROMPT$Voce e {{expert.displayName}}, especialista em {{expert.niche}}.
+
+Gere o slide 9 (prova) de um carrossel sobre: "{{topic}}"
+{{contextExtraLine}}
+TIPO DE PROVA ESCOLHIDO: {{proofTypeInstruction}}
+
+Regras obrigatorias:
+- A prova deve estar diretamente ligada ao tema "{{topic}}" — use o vocabulario e cenarios do nicho
+- Use linguagem de quem vive aquilo no dia a dia
+- Inclua ao menos 1 numero especifico (R$, horas, %, dias)
+- Termine com: "nao e sobre ferramenta, e sobre processo + execucao" adaptado ao tema
+- Finalize com CTA suave apontando pro conteudo/produto
+- Maximo 240 caracteres
+- Tom coloquial brasileiro: direto, sem rodeios
+
+Use *negrito* para frases-chicote e {destaque} para dados/valores.
+
+Se usar analogia, escolha UMA que faca sentido para o tema — varie: mecanico, chef, piloto, arquiteto,
+atleta, contador, engenheiro, detetive, pescador, fotografo, maestro, sommelier, veterinario, carpinteiro.
+
+Responda APENAS com JSON valido:
+{
+  "text": "texto do slide",
+  "imagePrompt": "photorealistic scene of skilled expert using specialized tool fitting the topic '{{topic}}', no text in image, high detail"
+}$PROMPT$,
+  1
+) on conflict (template_id, step, provider, version) do nothing;
+
+-- Prompts: frank-costa-10 / slide-10 (CTA final com estilo e acoes)
+insert into template_prompts (template_id, step, provider, model, prompt_text, version) values (
+  'frank-costa-10', 'slide-10', 'anthropic', 'claude-sonnet-4-6',
+  $PROMPT$Voce e {{expert.displayName}} (@{{expert.handle}}).
+
+Gere um CTA final criativo para um carrossel sobre: "{{topic}}"
+
+Produto: {{expert.productName}}
+CTA do produto: {{expert.productCta}}
+
+ESTILO ESCOLHIDO: {{ctaStyleInstruction}}
+
+{{ctaActionsLine}}
+
+Regras:
+- Use as acoes de CTA escolhidas de forma integrada e natural no texto
+- Inclua o CTA do produto de forma natural
+- Encerramento forte, sem cliches como "nao perca" ou "transforme sua vida"
+- Maximo 200 caracteres
+
+Use *negrito* para frase principal e {destaque} para o CTA do produto.
+
+Responda APENAS com JSON valido:
+{
+  "text": "texto do slide",
+  "imagePrompt": "photorealistic scene of person relaxed at desk, business running smoothly, laptop and coffee, warm lighting, no text in image"
+}$PROMPT$,
+  1
+) on conflict (template_id, step, provider, version) do nothing;
+
 -- RLS para tabelas de conteudo hub (leitura publica — sem dados de usuario)
 alter table platforms        enable row level security;
 alter table content_formats  enable row level security;

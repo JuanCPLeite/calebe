@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -52,6 +52,7 @@ interface CarouselPreviewProps {
   slides: Slide[]
   caption: string
   expert: ExpertInfo
+  topic?: string
   onSlidesChange: (slides: Slide[]) => void
   onGenerateImages: () => void
   onRegenerateSlide?: (slideNum: number) => void
@@ -72,10 +73,28 @@ const EMOJI_LIST = ['🔥','💡','✅','🚀','⭐','💪','📈','🎯','👉'
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
+const PROOF_TYPE_LABELS: Record<string, string> = {
+  A: 'Resultado de cliente real',
+  B: 'Teste próprio com dado',
+  C: 'Erro que custou caro',
+  D: 'Antes/depois de processo',
+  E: 'Benchmark do setor',
+  F: 'Observação de campo',
+}
+
+const CTA_STYLE_LABELS: Record<string, string> = {
+  urgente:     'Urgente',
+  suave:       'Suave',
+  provocativo: 'Provocativo',
+  humor:       'Com humor',
+  direto:      'Ultra-direto',
+}
+
 export function CarouselPreview({
   slides,
   caption,
   expert,
+  topic,
   onSlidesChange,
   onGenerateImages,
   onRegenerateSlide,
@@ -88,6 +107,46 @@ export function CarouselPreview({
   const [dragOverIndex, setDragOverIndex]     = useState<number | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const captionRef = useRef<HTMLTextAreaElement>(null)
+
+  // ── Estado dos painéis de regeração de slide ──────────────────────────────
+  const [regenLoading, setRegenLoading]     = useState(false)
+  const [regenError, setRegenError]         = useState('')
+  const [showRegenPanel, setShowRegenPanel] = useState(false)
+  const [proofType, setProofType]           = useState('A')
+  const [contextExtra, setContextExtra]     = useState('')
+  const [ctaStyle, setCtaStyle]             = useState('direto')
+  const [ctaActions, setCtaActions]         = useState<string[]>(['Salvar'])
+
+  // Fecha o painel ao trocar de slide
+  useEffect(() => { setShowRegenPanel(false); setRegenError('') }, [activeSlide])
+
+  async function handleRegenSlideText(slideIndex: number) {
+    if (!topic) return
+    const s = slides[slideIndex]
+    setRegenLoading(true)
+    setRegenError('')
+    try {
+      const res = await fetch('/api/generate/slide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slideNum:     s.num,
+          topic,
+          proofType:    s.num === 9  ? proofType   : undefined,
+          contextExtra: s.num === 9  ? contextExtra : undefined,
+          ctaStyle:     s.num === 10 ? ctaStyle     : undefined,
+          ctaActions:   s.num === 10 ? ctaActions   : undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setRegenError(data.error || 'Erro ao regerar slide'); return }
+      updateSlide(slideIndex, { text: data.text, imagePrompt: data.imagePrompt })
+    } catch (e: any) {
+      setRegenError(e.message)
+    } finally {
+      setRegenLoading(false)
+    }
+  }
 
   function wrapCaption(open: string, close: string) {
     if (!captionRef.current || !onCaptionChange) return
@@ -473,6 +532,20 @@ export function CarouselPreview({
                     <RotateCcw className="w-3.5 h-3.5" />
                     Refazer imagem
                   </button>
+                  {topic && [5, 9, 10].includes(slide.num) && (
+                    <button
+                      onClick={() => { setShowRegenPanel(v => !v); setRegenError('') }}
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                        showRegenPanel
+                          ? 'bg-violet-600/20 border-violet-500/60 text-violet-300'
+                          : 'border-zinc-800 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/80 hover:border-zinc-700'
+                      )}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Refazer slide
+                    </button>
+                  )}
                   <div className="w-px h-5 bg-zinc-800" />
                 </>
               )}
@@ -545,6 +618,128 @@ export function CarouselPreview({
               )}
             </div>
           </div>
+
+          {/* ── Painel de regeração de slide (slides 5, 9 e 10) ──────────── */}
+          {!isSplitSlide(slide) && topic && [5, 9, 10].includes(slide.num) && showRegenPanel && (
+            <div style={{ width: PREVIEW_W, maxWidth: '100%' }}>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 flex flex-col gap-3">
+
+                {/* Slide 5 — Apresentação com IA */}
+                {slide.num === 5 && (
+                  <>
+                    <p className="text-xs text-zinc-500 leading-relaxed">
+                      Gera uma apresentação adaptada ao tema deste carrossel, em vez do texto fixo.
+                    </p>
+                    <button
+                      onClick={() => handleRegenSlideText(activeSlide)}
+                      disabled={regenLoading}
+                      className="flex items-center justify-center gap-2 w-full py-2 rounded-lg text-xs font-medium bg-violet-600/20 border border-violet-600/40 text-violet-300 hover:bg-violet-600/30 disabled:opacity-40 transition-colors"
+                    >
+                      {regenLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                      Gerar apresentação com IA
+                    </button>
+                  </>
+                )}
+
+                {/* Slide 9 — Prova */}
+                {slide.num === 9 && (
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-zinc-500">Tipo de prova</label>
+                      <select
+                        value={proofType}
+                        onChange={e => setProofType(e.target.value)}
+                        className="bg-zinc-800 text-zinc-300 text-xs rounded-lg border border-zinc-700 px-3 py-2 outline-none focus:border-violet-500 cursor-pointer"
+                      >
+                        {Object.entries(PROOF_TYPE_LABELS).map(([k, v]) => (
+                          <option key={k} value={k}>{k}. {v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-zinc-500">Contexto extra <span className="text-zinc-700">(opcional)</span></label>
+                      <input
+                        type="text"
+                        value={contextExtra}
+                        onChange={e => setContextExtra(e.target.value)}
+                        placeholder="Ex: e-commerce, 500 leads/dia, loja física..."
+                        className="bg-zinc-800 text-zinc-300 text-xs rounded-lg border border-zinc-700 px-3 py-2 outline-none focus:border-violet-500 placeholder:text-zinc-600"
+                      />
+                    </div>
+                    <button
+                      onClick={() => handleRegenSlideText(activeSlide)}
+                      disabled={regenLoading}
+                      className="flex items-center justify-center gap-2 w-full py-2 rounded-lg text-xs font-medium bg-violet-600/20 border border-violet-600/40 text-violet-300 hover:bg-violet-600/30 disabled:opacity-40 transition-colors"
+                    >
+                      {regenLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                      Regerar prova
+                    </button>
+                  </>
+                )}
+
+                {/* Slide 10 — CTA Final */}
+                {slide.num === 10 && (
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-zinc-500">Estilo do CTA</label>
+                      <select
+                        value={ctaStyle}
+                        onChange={e => setCtaStyle(e.target.value)}
+                        className="bg-zinc-800 text-zinc-300 text-xs rounded-lg border border-zinc-700 px-3 py-2 outline-none focus:border-violet-500 cursor-pointer"
+                      >
+                        {Object.entries(CTA_STYLE_LABELS).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-zinc-500">Ação do CTA <span className="text-zinc-700">(marque até 2)</span></label>
+                      <div className="flex flex-wrap gap-2">
+                        {['Seguir', 'Salvar', 'Compartilhar', 'Comentar', 'Marcar alguém', 'Responder nos stories', 'Enviar para um amigo'].map(action => {
+                          const selected = ctaActions.includes(action)
+                          return (
+                            <button
+                              key={action}
+                              onClick={() => {
+                                if (selected) {
+                                  setCtaActions(ctaActions.filter(a => a !== action))
+                                } else if (ctaActions.length < 2) {
+                                  setCtaActions([...ctaActions, action])
+                                }
+                              }}
+                              className={cn(
+                                'px-3 py-1.5 rounded-lg text-xs border transition-colors',
+                                selected
+                                  ? 'bg-violet-600/30 border-violet-500/60 text-violet-300'
+                                  : 'border-zinc-700 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
+                              )}
+                            >
+                              {action}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRegenSlideText(activeSlide)}
+                      disabled={regenLoading}
+                      className="flex items-center justify-center gap-2 w-full py-2 rounded-lg text-xs font-medium bg-violet-600/20 border border-violet-600/40 text-violet-300 hover:bg-violet-600/30 disabled:opacity-40 transition-colors"
+                    >
+                      {regenLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                      Regerar CTA
+                    </button>
+                  </>
+                )}
+
+                {regenError && (
+                  <p className="text-xs text-red-400 flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {regenError}
+                  </p>
+                )}
+
+              </div>
+            </div>
+          )}
 
         </div>
 

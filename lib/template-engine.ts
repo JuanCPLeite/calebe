@@ -104,6 +104,16 @@ function buildVars(
   }
 }
 
+function frankAntiClicheRules(): string {
+  return `
+REGRAS ANTI-REPETIÇÃO (OBRIGATÓRIAS):
+- Slide 9 ("proof") deve usar prova contextual ao tema/público, com situação real.
+- Evite analogias prontas e repetidas.
+- PROIBIDO usar como "prova genérica": Ferrari, avião, médico/cirurgião, foguete.
+- Se citar analogia, ela deve nascer do contexto do nicho e do tópico deste carrossel.
+`.trim()
+}
+
 // ─── SSE events ───────────────────────────────────────────────────────────────
 
 export type SSEEvent =
@@ -156,6 +166,14 @@ export async function* generateWithTemplate({
       ? buildSplitUserPrompt(topic)
       : buildUserPrompt(topic, hook, contentOptions)
 
+  const isFrankTemplate = templateId === 'frank-costa-10'
+  const guardedSystemPrompt = isFrankTemplate
+    ? `${systemPrompt}\n\n${frankAntiClicheRules()}`
+    : systemPrompt
+  const guardedUserPrompt = isFrankTemplate
+    ? `${userPrompt}\n\n${frankAntiClicheRules()}`
+    : userPrompt
+
   const provider = createProvider(providerId, apiKey)
   const resolvedModel = modelOverride?.trim() || model || provider.defaultModel
 
@@ -168,8 +186,8 @@ export async function* generateWithTemplate({
       tokenUsage = undefined
 
       for await (const chunk of provider.streamText({
-        system: systemPrompt,
-        user: userPrompt,
+        system: guardedSystemPrompt,
+        user: guardedUserPrompt,
         model: resolvedModel,
         onUsage: (usage) => {
           tokenUsage = usage

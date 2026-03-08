@@ -800,6 +800,7 @@ export default function GeneratePage() {
             slides={slides}
             caption={caption}
             expert={expert}
+            topic={selectedTopic}
             onSlidesChange={setSlides}
             onCaptionChange={setCaption}
             onGenerateImages={handleGenerateImages}

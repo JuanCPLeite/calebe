@@ -539,6 +539,7 @@ export default function CarouselDetailPage() {
           slides={slides}
           caption={caption}
           expert={expert}
+          topic={carousel?.topic}
           onSlidesChange={setSlides}
           onCaptionChange={setCaption}
           onGenerateImages={handleGenerateImages}
