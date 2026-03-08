@@ -101,10 +101,10 @@ async function generateWithClaude(
   limit: number,
   anthropicKey: string,
   dateFilter: string = '7d',
+  isSplit: boolean = false,
 ): Promise<Topic[]> {
   const client = new Anthropic({ apiKey: anthropicKey })
 
-  // Extrai o tema principal da searchQuery (remove sufixo "tendências 2026...")
   const tema = searchQuery.split(' tendências')[0].split(' novidades')[0].trim()
 
   const now = new Date()
@@ -116,6 +116,19 @@ async function generateWithClaude(
     '3m':  'nos últimos 3 meses',
   }
   const periodo = periodoLabel[dateFilter] || 'nos últimos 7 dias'
+
+  const splitFields = isSplit ? `
+      "splitTitle": "PERFIL NEGATIVO VS. PERFIL POSITIVO em caixa alta, ex: FREELANCER RAIZ VS. FREELANCER PROFISSIONAL",
+      "splitSubtitle": "pergunta provocativa de capa que gera curiosidade, ex: Qual dos dois é você?",
+      "splitAltTitles": [
+        { "labelEsquerda": "Nome perfil negativo alternativo", "labelDireita": "Nome perfil positivo alternativo" }
+      ],` : ''
+
+  const splitRules = isSplit ? `
+- splitTitle: dois perfis contrastantes em CAIXA ALTA separados por " VS. " — específicos e reconhecíveis
+- splitSubtitle: pergunta provocativa e direta sobre o contraste (máx 60 chars)
+- splitAltTitles: 1 contraste alternativo para o mesmo tema` : `
+- hook: frase de abertura impactante sobre ${tema} — direto, em português coloquial`
 
   const response = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -134,8 +147,8 @@ Responda SOMENTE com JSON válido, sem markdown, sem texto extra:
     {
       "id": "t1",
       "title": "título direto e específico sobre ${tema} (máx 70 chars)",
-      "viralScore": 78,
-      "hook": "frase de abertura impactante sobre ${tema} — direto, em português",
+      "viralScore": 78,${splitFields}
+      "hook": "frase de abertura impactante — direto, em português",
       "gain": "o que o seguidor vai aprender ou ganhar com esse carrossel",
       "angle": "Tendência urgente",
       "growth": "+230%",
@@ -151,8 +164,8 @@ Regras OBRIGATÓRIAS:
 - Tópicos variados e com ângulos diferentes entre si
 - viralScore: 15–99 baseado no potencial de engajamento
 - angle: "Tendência urgente" | "Oportunidade" | "Educacional" | "Análise"
-- hook e gain sempre em português brasileiro coloquial
-- Retorne exatamente ${limit} tópicos`,
+- gain sempre em português brasileiro coloquial
+- Retorne exatamente ${limit} tópicos${splitRules}`,
     }],
   })
 
@@ -174,6 +187,57 @@ Regras OBRIGATÓRIAS:
   } catch (e) {
     console.warn('[topics/claude] falha ao parsear JSON:', e)
     return []
+  }
+}
+
+// ─── Enriquece tópicos EXA com splitTitle para X vs Y ────────────────────────
+
+async function enrichWithSplitTitles(topics: Topic[], niche: string, anthropicKey: string): Promise<Topic[]> {
+  const client = new Anthropic({ apiKey: anthropicKey })
+  const titlesInput = topics.map((t, i) => `${i + 1}. ${t.title}`).join('\n')
+
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: `Para cada tema abaixo, gere um título de carrossel comparativo "X vs Y" no estilo Instagram viral.
+
+Nicho: ${niche}
+Temas:
+${titlesInput}
+
+Responda APENAS com JSON válido:
+{
+  "results": [
+    {
+      "splitTitle": "PERFIL NEGATIVO VS. PERFIL POSITIVO em caixa alta",
+      "splitSubtitle": "pergunta provocativa curta (máx 60 chars)"
+    }
+  ]
+}
+
+Regras:
+- splitTitle: dois perfis contrastantes em CAIXA ALTA com " VS. " — concretos e reconhecíveis
+- splitSubtitle: pergunta que gera curiosidade e identidade
+- Retorne exatamente ${topics.length} resultados na mesma ordem`,
+    }],
+  })
+
+  const text = response.content.find(b => b.type === 'text')?.text ?? ''
+  const match = text.match(/\{[\s\S]*\}/)
+  if (!match) return topics
+
+  try {
+    const parsed = JSON.parse(match[0])
+    const results = parsed.results || []
+    return topics.map((t, i) => ({
+      ...t,
+      splitTitle: results[i]?.splitTitle ?? undefined,
+      splitSubtitle: results[i]?.splitSubtitle ?? undefined,
+    }))
+  } catch {
+    return topics
   }
 }
 
@@ -232,6 +296,9 @@ const MOCK_TOPICS: Topic[] = [
     hook: 'Seu WhatsApp pode responder clientes enquanto você dorme — menos de R$ 50/mês.',
     gain: 'Empresários vão montar atendimento automático sem contratar ninguém.',
     angle: 'Custo oculto',
+    splitTitle: 'ATENDIMENTO MANUAL VS. ATENDIMENTO AUTOMATIZADO',
+    splitSubtitle: 'Qual dos dois está perdendo vendas às 23h?',
+    splitAltTitles: [{ labelEsquerda: 'Dono Apagando Incêndio', labelDireita: 'Dono Com Sistema Rodando' }],
     altAngles: [
       { label: 'Medo de perder', hook: 'Seu concorrente já automatizou o WhatsApp. Você ainda não sabe.' },
       { label: 'Tutorial', hook: '5 passos para o WhatsApp responder por você — sem programar nada.' },
@@ -243,6 +310,8 @@ const MOCK_TOPICS: Topic[] = [
     hook: 'Errei gastando R$ 1.200 no Make antes de descobrir o n8n. Vou te poupar esse erro.',
     gain: 'Profissionais vão escolher a ferramenta certa e economizar tempo e dinheiro.',
     angle: 'Erro pessoal',
+    splitTitle: 'QUEM USA MAKE VS. QUEM USA N8N',
+    splitSubtitle: 'A diferença de R$ 800/mês que ninguém te contou.',
   },
   {
     id: 'm3', title: 'Agente IA para e-commerce que vende no automático', viralScore: 61,
@@ -250,6 +319,8 @@ const MOCK_TOPICS: Topic[] = [
     hook: 'Minha loja vende sem eu estar online. O agente cuida de tudo — da pergunta ao pagamento.',
     gain: 'Lojistas vão entender como configurar um agente que opera 24/7 sem intervenção.',
     angle: 'Resultado real',
+    splitTitle: 'LOJA SEM AGENTE VS. LOJA COM AGENTE DE IA',
+    splitSubtitle: 'Quem vende mais enquanto dorme?',
   },
   {
     id: 'm4', title: 'Automação que se paga em menos de 30 dias', viralScore: 54,
@@ -257,6 +328,8 @@ const MOCK_TOPICS: Topic[] = [
     hook: 'Em 11 dias o sistema pagou o próprio custo. Hoje é puro lucro operacional.',
     gain: 'Empreendedores vão calcular o ROI real de automações e saber por onde começar.',
     angle: 'ROI rápido',
+    splitTitle: 'PROCESSO MANUAL VS. PROCESSO AUTOMATIZADO',
+    splitSubtitle: 'Qual dos dois escala sem contratar mais gente?',
   },
   {
     id: 'm5', title: 'ChatGPT Canvas eliminando designers', viralScore: 68,
@@ -264,6 +337,8 @@ const MOCK_TOPICS: Topic[] = [
     hook: 'Rasguei um contrato de R$ 3.000/mês com designer depois de testar o Canvas.',
     gain: 'Donos de negócio vão produzir material visual profissional sem agência.',
     angle: 'Choque de custo',
+    splitTitle: 'NEGÓCIO COM AGÊNCIA VS. NEGÓCIO COM IA',
+    splitSubtitle: 'R$ 3.000/mês de diferença. Vale a pena?',
   },
 ]
 
@@ -295,8 +370,10 @@ export async function POST(req: NextRequest) {
       dateFilter = '7d',
       limit      = 5,
       offset     = 0,
+      templateId = 'frank-costa-10',
     } = body
 
+    const isSplit = templateId === 'positivo-negativo'
     const searchQuery = buildQuery(mode, niche, query, category)
 
     // ── 1. Busca chaves globais da plataforma ───────────────────────────────
@@ -313,6 +390,11 @@ export async function POST(req: NextRequest) {
         const { topics, hasMore } = await searchWithExa(
           searchQuery, niche, limit, offset, dateFilter, exaKey,
         )
+        // Para X vs Y, enriquece os tópicos do EXA com splitTitle via Claude
+        if (isSplit && anthropicKey && topics.length > 0) {
+          const enriched = await enrichWithSplitTitles(topics, niche, anthropicKey)
+          return NextResponse.json({ topics: enriched, hasMore, source: 'exa' })
+        }
         return NextResponse.json({ topics, hasMore, source: 'exa' })
       } catch (err: any) {
         console.warn('[topics/exa] falhou:', err.message)
@@ -323,7 +405,7 @@ export async function POST(req: NextRequest) {
     // ── 3. Claude — geração por conhecimento (rápido, usa chave Anthropic) ──
     if (anthropicKey) {
       try {
-        const topics = await generateWithClaude(searchQuery, limit, anthropicKey, dateFilter)
+        const topics = await generateWithClaude(searchQuery, limit, anthropicKey, dateFilter, isSplit)
         if (topics.length > 0) {
           return NextResponse.json({ topics, hasMore: false, source: 'claude' })
         }

@@ -128,6 +128,8 @@ export interface GenerateOptions {
   templateId: string
   topic: string
   hook?: string
+  splitTitle?: string
+  splitSubtitle?: string
   expert: ExpertConfig
   providerId: ProviderId
   apiKey: string
@@ -136,10 +138,52 @@ export interface GenerateOptions {
   modelOverride?: string
 }
 
+function extractFirstJsonBlock(input: string): string | null {
+  const match = input.match(/\{[\s\S]*\}/)
+  return match ? match[0] : null
+}
+
+async function repairJsonWithProvider(
+  provider: ReturnType<typeof createProvider>,
+  model: string,
+  raw: string
+): Promise<any> {
+  const repairSystem = `You are a strict JSON repair tool.
+Return only valid JSON.
+Do not add commentary, markdown, or code fences.
+Preserve the original meaning and fields.`
+
+  const repairUser = `Fix the following malformed JSON output to valid JSON.
+Rules:
+- Keep the same schema and keys.
+- Ensure all strings are properly escaped.
+- Remove trailing commas.
+- Output only a single valid JSON object.
+
+MALFORMED_JSON_START
+${raw}
+MALFORMED_JSON_END`
+
+  let repaired = ''
+  for await (const chunk of provider.streamText({
+    system: repairSystem,
+    user: repairUser,
+    model,
+  })) {
+    repaired += chunk
+  }
+
+  const repairedJson = extractFirstJsonBlock(repaired)
+  if (!repairedJson) throw new Error('Falha ao reparar JSON: bloco não encontrado')
+  return JSON.parse(repairedJson)
+}
+
 export async function* generateWithTemplate({
   templateId,
   topic,
   hook,
+  splitTitle,
+  splitSubtitle,
   expert,
   providerId,
   apiKey,
@@ -163,7 +207,7 @@ export async function* generateWithTemplate({
   const userPrompt = userTemplate
     ? interpolate(userTemplate, vars)
     : isSplit
-      ? buildSplitUserPrompt(topic)
+      ? buildSplitUserPrompt(topic, splitTitle || hook, splitSubtitle)
       : buildUserPrompt(topic, hook, contentOptions)
 
   const isFrankTemplate = templateId === 'frank-costa-10'
@@ -198,10 +242,16 @@ export async function* generateWithTemplate({
         yield { chunk, slidesGenerated }
       }
 
-      const jsonMatch = accumulated.match(/\{[\s\S]*\}/)
+      const jsonMatch = extractFirstJsonBlock(accumulated)
       if (!jsonMatch) throw new Error('A IA não retornou JSON válido')
 
-      const parsed = JSON.parse(jsonMatch[0])
+      let parsed: any
+      try {
+        parsed = JSON.parse(jsonMatch)
+      } catch {
+        // Fallback: tenta reparar automaticamente quando a IA quebra JSON (aspas/trailing comma/etc.)
+        parsed = await repairJsonWithProvider(provider, resolvedModel, jsonMatch)
+      }
 
       yield {
         done: true,

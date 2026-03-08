@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const { slideNum, imagePrompt } = await req.json()
+    const { slideNum, imagePrompt, noExpertPhoto, aspectRatio } = await req.json()
     if (!imagePrompt) return NextResponse.json({ error: 'imagePrompt obrigatório' }, { status: 400 })
 
     // Chave Google da plataforma (app_settings); fallback para env local.
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const result = await generateSlideImage(slideNum, imagePrompt, expertPhotoBase64, googleKey)
+    const result = await generateSlideImage(slideNum, imagePrompt, noExpertPhoto ? undefined : expertPhotoBase64, googleKey, aspectRatio || '16:9')
 
     await recordUsageEvent({
       workspaceId,

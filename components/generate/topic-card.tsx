@@ -17,23 +17,40 @@ export interface Topic {
   gain: string
   angle: string
   altAngles?: { label: string; hook: string }[]
+  // Campos específicos para o template X vs Y
+  splitTitle?: string
+  splitSubtitle?: string
+  splitAltTitles?: { labelEsquerda: string; labelDireita: string }[]
 }
 
 interface TopicCardProps {
   topic: Topic
   rank: number
+  templateId?: string
   onSelect: (topic: Topic, hook: string) => void
 }
 
-export function TopicCard({ topic, rank, onSelect }: TopicCardProps) {
+export function TopicCard({ topic, rank, templateId, onSelect }: TopicCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [selectedAngle, setSelectedAngle] = useState(0)
+  const [selectedSplitTitle, setSelectedSplitTitle] = useState(0)
+
+  const isSplit = templateId === 'positivo-negativo'
 
   const allAngles = [
     { label: topic.angle, hook: topic.hook },
     ...(topic.altAngles || []),
   ]
   const currentHook = allAngles[selectedAngle]?.hook ?? topic.hook
+
+  const allSplitTitles = [
+    ...(topic.splitTitle ? [{ labelEsquerda: topic.splitTitle.split(' VS. ')[0] ?? '', labelDireita: topic.splitTitle.split(' VS. ')[1] ?? '' }] : []),
+    ...(topic.splitAltTitles || []),
+  ]
+  const currentSplitTitle = allSplitTitles[selectedSplitTitle]
+  const currentSplitFull = currentSplitTitle
+    ? `${currentSplitTitle.labelEsquerda} VS. ${currentSplitTitle.labelDireita}`
+    : topic.splitTitle ?? topic.title
 
   const scoreColor =
     topic.viralScore >= 80 ? 'text-orange-400' :
@@ -77,9 +94,12 @@ export function TopicCard({ topic, rank, onSelect }: TopicCardProps) {
           </div>
         </div>
 
-        {/* Hook preview */}
+        {/* Hook / Split preview */}
         <p className="hidden md:block text-xs text-zinc-400 max-w-48 truncate italic">
-          "{topic.hook.slice(0, 55)}..."
+          {isSplit && topic.splitTitle
+            ? topic.splitTitle
+            : `"${topic.hook.slice(0, 55)}..."`
+          }
         </p>
 
         <ChevronDown className={cn('w-4 h-4 text-zinc-500 flex-shrink-0 transition-transform', expanded && 'rotate-180')} />
@@ -100,58 +120,124 @@ export function TopicCard({ topic, rank, onSelect }: TopicCardProps) {
             <span className={cn('text-xs font-bold', scoreColor)}>{topic.viralScore}/100</span>
           </div>
 
-          {/* Hook */}
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <Zap className="w-3 h-3" /> Hook sugerido
-            </div>
-            <p className="text-sm text-zinc-100 italic bg-zinc-800/60 rounded-lg px-3 py-2">
-              "{currentHook}"
-            </p>
-          </div>
-
-          {/* Gain */}
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-              <Target className="w-3 h-3" /> Ganho do carrossel para sua audiência
-            </div>
-            <p className="text-sm text-zinc-300 bg-zinc-800/60 rounded-lg px-3 py-2">
-              {topic.gain}
-            </p>
-          </div>
-
-          {/* Ângulos alternativos */}
-          {allAngles.length > 1 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                <Lightbulb className="w-3 h-3" /> Ângulos possíveis
+          {isSplit ? (
+            /* ── X vs Y: título do contraste ── */
+            <>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                  <Zap className="w-3 h-3" /> Título do contraste
+                </div>
+                {currentSplitTitle ? (
+                  <div className="bg-zinc-800/60 rounded-lg px-3 py-2.5 flex items-center justify-center gap-3">
+                    <span className="text-sm font-bold text-white">{currentSplitTitle.labelEsquerda}</span>
+                    <span className="text-xs font-black text-violet-400">VS.</span>
+                    <span className="text-sm font-bold text-white">{currentSplitTitle.labelDireita}</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-500 italic bg-zinc-800/60 rounded-lg px-3 py-2">
+                    Título será gerado com base no tema
+                  </p>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {allAngles.map((a, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setSelectedAngle(i)}
-                    className={cn(
-                      'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors',
-                      selectedAngle === i
-                        ? 'bg-violet-600 text-white'
-                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100'
-                    )}
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-              {selectedAngle > 0 && (
-                <p className="text-xs text-zinc-400 italic">"{allAngles[selectedAngle]?.hook}"</p>
+
+              {topic.splitSubtitle && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                    <Target className="w-3 h-3" /> Pergunta de capa
+                  </div>
+                  <p className="text-sm text-zinc-300 italic bg-zinc-800/60 rounded-lg px-3 py-2">
+                    "{topic.splitSubtitle}"
+                  </p>
+                </div>
               )}
-            </div>
+
+              {allSplitTitles.length > 1 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                    <Lightbulb className="w-3 h-3" /> Contrastes alternativos
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {allSplitTitles.map((t, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedSplitTitle(i)}
+                        className={cn(
+                          'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors',
+                          selectedSplitTitle === i
+                            ? 'bg-violet-600 text-white'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100'
+                        )}
+                      >
+                        {t.labelEsquerda} vs {t.labelDireita}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                  <Users className="w-3 h-3" /> Ganho para sua audiência
+                </div>
+                <p className="text-sm text-zinc-300 bg-zinc-800/60 rounded-lg px-3 py-2">
+                  {topic.gain}
+                </p>
+              </div>
+            </>
+          ) : (
+            /* ── Frank: hook + ângulos ── */
+            <>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                  <Zap className="w-3 h-3" /> Hook sugerido
+                </div>
+                <p className="text-sm text-zinc-100 italic bg-zinc-800/60 rounded-lg px-3 py-2">
+                  "{currentHook}"
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                  <Target className="w-3 h-3" /> Ganho do carrossel para sua audiência
+                </div>
+                <p className="text-sm text-zinc-300 bg-zinc-800/60 rounded-lg px-3 py-2">
+                  {topic.gain}
+                </p>
+              </div>
+
+              {allAngles.length > 1 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                    <Lightbulb className="w-3 h-3" /> Ângulos possíveis
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {allAngles.map((a, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedAngle(i)}
+                        className={cn(
+                          'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors',
+                          selectedAngle === i
+                            ? 'bg-violet-600 text-white'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100'
+                        )}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedAngle > 0 && (
+                    <p className="text-xs text-zinc-400 italic">"{allAngles[selectedAngle]?.hook}"</p>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {/* CTA */}
           <Button
             className="w-full bg-violet-600 hover:bg-violet-500 text-white"
-            onClick={() => onSelect(topic, currentHook)}
+            onClick={() => onSelect(topic, isSplit ? currentSplitFull : currentHook)}
           >
             <Zap className="w-4 h-4 mr-2" />
             Gerar carrossel com este tema

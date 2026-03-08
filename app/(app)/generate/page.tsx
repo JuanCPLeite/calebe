@@ -99,8 +99,8 @@ export default function GeneratePage() {
   const [userId, setUserId]               = useState<string | null>(null)
   const [textLength, setTextLength]       = useState<'short' | 'medium' | 'long'>('medium')
   const [useFixedSlides, setUseFixedSlides] = useState(true)
-  const [activeTemplateName, setActiveTemplateName] = useState<string>('')
-  const [activeTemplateId, setActiveTemplateId]     = useState<string>('')
+  const [activeTemplateName, setActiveTemplateName] = useState<string>('Brand Equity')
+  const [activeTemplateId, setActiveTemplateId]     = useState<string>('frank-costa-10')
   const [scheduledAt, setScheduledAt]     = useState('')
   const [showScheduler, setShowScheduler] = useState(false)
   const [scheduling, setScheduling]       = useState(false)
@@ -331,6 +331,17 @@ export default function GeneratePage() {
 
   // ── Geração de conteúdo ──────────────────────────────────────────────────
   async function handleGenerate(topic: Topic, hook: string) {
+    const isSplitTemplate = activeTemplateId === 'positivo-negativo'
+    const resolvedSplitTitle = isSplitTemplate
+      ? ((hook || topic.splitTitle || topic.title || '').trim())
+      : ''
+    const resolvedSplitSubtitle = isSplitTemplate
+      ? ((topic.splitSubtitle || '').trim())
+      : ''
+    const resolvedTopic = isSplitTemplate
+      ? (topic.title || resolvedSplitTitle || 'Tema comparativo')
+      : topic.title
+
     const limits = await loadWorkspaceLimits()
     if (limits && !limits.canGenerate) {
       const blockedByBudget = limits.budgetLimitUsd > 0 && limits.usedBudgetUsd >= limits.budgetLimitUsd
@@ -342,7 +353,7 @@ export default function GeneratePage() {
       return
     }
 
-    setSelectedTopic(topic.title)
+    setSelectedTopic(isSplitTemplate && resolvedSplitTitle ? resolvedSplitTitle : resolvedTopic)
     setGenerating(true)
     setStage('generating')
     setGenerateError('')
@@ -360,8 +371,10 @@ export default function GeneratePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic: topic.title,
+          topic: resolvedTopic,
           hook,
+          splitTitle: resolvedSplitTitle || undefined,
+          splitSubtitle: resolvedSplitSubtitle || undefined,
           textLength,
           useFixedSlides,
           templateId: activeTemplateId,
@@ -533,32 +546,91 @@ export default function GeneratePage() {
     }
   }
 
+  // ── Helper: chama a API de geração de imagem com retry ────────────────
+  async function fetchGeneratedImage(slideNum: number, imagePrompt: string, noExpertPhoto = false, aspectRatio = '16:9'): Promise<string> {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch('/api/generate/images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slideNum, imagePrompt, noExpertPhoto, aspectRatio }),
+        })
+        const data = await res.json()
+        if (data.error) throw new Error(data.error)
+        return data.dataUrl as string
+      } catch (err) {
+        if (attempt === 3) throw err
+      }
+    }
+    throw new Error('Falha ao gerar imagem após 3 tentativas')
+  }
+
   // ── Gera imagem + card de UM slide ──────────────────────────────────────
   async function generateOneSlide(slide: Slide): Promise<void> {
+    // ── Split-cover: 1 imagem desfocada de fundo (sem foto do expert) ──
+    if (slide.layout === 'split-cover') {
+      const basePrompt = slide.imagePrompt
+      if (!basePrompt) return
+      const prompt = [
+        `cinematic portrait background related to: ${basePrompt}.`,
+        'vertical composition, full frame subject, dark moody atmosphere, warm amber tones, photorealistic.',
+        'clean background with no signage.',
+        'STRICT RULE: no text, no letters, no words, no logos, no watermarks anywhere.',
+      ].join(' ')
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
+      try {
+        const dataUrl = await fetchGeneratedImage(slide.num, prompt, true, '4:5')
+        setSlides(prev => prev.map(s => s.num === slide.num ? { ...s, imagePath: dataUrl } : s))
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
+      } catch (err) {
+        console.error(`Erro capa split ${slide.num}:`, err)
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'error' }))
+      }
+      return
+    }
+
+    // ── Split-content: 1 ilustração dividida (sem foto do expert) ──
+    if (slide.layout === 'split-content') {
+      const negLabel = (slide.labelEsquerda || '').replace(/\*\*/g, '').trim()
+      const posLabel = (slide.labelDireita  || '').replace(/\*\*/g, '').trim()
+      const negScene = (slide.esquerda      || '').replace(/\*\*/g, '').slice(0, 120)
+      const posScene = (slide.direita       || '').replace(/\*\*/g, '').slice(0, 120)
+      const topic    = slide.text || slide.imagePrompt || 'professional comparison'
+
+      const prompt = `Vertical split-screen illustration of the same professional in two contrasting situations related to: ${topic}.
+
+Left side: ${negScene || `${negLabel} — stressed and overwhelmed, struggling with the situation, visible tension, warm orange dramatic lighting, emotional expression`}.
+
+Right side: ${posScene || `${posLabel} — confident and accomplished, successfully handling the situation, modern bright environment, positive professional atmosphere`}.
+
+The same character appears on both sides with identical facial features, hairstyle, and clothing.
+
+Style: high-end editorial illustration, semi-realistic digital painting, cinematic lighting, soft shadows, depth of field, highly detailed, modern concept art.
+
+Perfect vertical split composition.
+
+No text, no captions, no labels, no graphics, no watermarks.`
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
+      try {
+        const dataUrl = await fetchGeneratedImage(slide.num, prompt, true, '4:5')
+        setSlides(prev => prev.map(s => s.num === slide.num ? { ...s, imagePath: dataUrl } : s))
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
+      } catch (err) {
+        console.error(`Erro split-content ${slide.num}:`, err)
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'error' }))
+      }
+      return
+    }
+
+    // ── Frank / demais slides: fluxo original ──
     const imagePrompt = slide.imagePrompt || FALLBACK_IMAGE_PROMPTS[slide.type]
     if (!imagePrompt) return
 
     setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
 
     try {
-      let imageData: any = null
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const imageRes = await fetch('/api/generate/images', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slideNum: slide.num, imagePrompt }),
-          })
-          const data = await imageRes.json()
-          if (data.error) throw new Error(data.error)
-          imageData = data
-          break
-        } catch (err) {
-          if (attempt === 3) throw err
-        }
-      }
-
-      const imageBase64 = imageData.dataUrl.replace(/^data:[^;]+;base64,/, '')
+      const imageDataUrl = await fetchGeneratedImage(slide.num, imagePrompt)
+      const imageBase64 = imageDataUrl.replace(/^data:[^;]+;base64,/, '')
 
       // Render do card e upload da bg image em paralelo
       const [cardRes, bgImageStoragePath] = await Promise.all([
@@ -591,7 +663,7 @@ export default function GeneratePage() {
       }
       setSlides(prev => prev.map(s =>
         s.num === slide.num
-          ? { ...s, imagePath: imageData.dataUrl, bgImageStoragePath: bgImageStoragePath ?? undefined, cardPath, cardStoragePath: stored?.path }
+          ? { ...s, imagePath: imageDataUrl, bgImageStoragePath: bgImageStoragePath ?? undefined, cardPath, cardStoragePath: stored?.path }
           : s
       ))
       setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
@@ -858,13 +930,56 @@ export default function GeneratePage() {
         <p className="text-sm text-zinc-500 mt-1">Escolha um tema viral ou escreva o seu próprio</p>
       </div>
 
-      {activeTemplateName && (
-        <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3">
-          <p className="text-xs text-violet-200">
-            Template ativo: <span className="font-medium">{activeTemplateName}</span>
-          </p>
+      {/* Seletor de formato */}
+      <div>
+        <p className="text-xs text-zinc-500 mb-3">Formato do carrossel</p>
+        <div className="grid grid-cols-2 gap-3">
+          {TEMPLATES.filter(t => t.available).map(t => {
+            const isActive = activeTemplateId === t.id
+            const icon = t.layout === 'split' ? '⚡' : '📚'
+            const hint = t.layout === 'split'
+              ? 'Dois lados · Provocativo · Alto engajamento'
+              : 'Educativo · Constrói autoridade · Hook poderoso'
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setActiveTemplateId(t.id)
+                  setActiveTemplateName(t.name)
+                  const preset = TEMPLATE_PRESETS[t.id]
+                  if (preset) {
+                    setTextLength(preset.textLength)
+                    setUseFixedSlides(preset.useFixedSlides)
+                  }
+                }}
+                className={cn(
+                  'text-left rounded-xl border p-4 transition-all duration-150',
+                  isActive
+                    ? 'border-violet-500/60 bg-violet-500/10 ring-1 ring-violet-500/30'
+                    : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-800/50'
+                )}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base leading-none">{icon}</span>
+                    <span className={cn('text-sm font-semibold', isActive ? 'text-violet-200' : 'text-zinc-200')}>
+                      {t.name}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-zinc-600 flex-shrink-0 mt-0.5">{t.slideCount} slides</span>
+                </div>
+                <p className="text-xs text-zinc-500 leading-relaxed">{hint}</p>
+                {isActive && (
+                  <div className="mt-2.5 flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                    <span className="text-[10px] text-violet-400 font-medium">Selecionado</span>
+                  </div>
+                )}
+              </button>
+            )
+          })}
         </div>
-      )}
+      </div>
 
       {/* Banner: erro da última geração */}
       {generateError && (
@@ -932,27 +1047,29 @@ export default function GeneratePage() {
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">Slides 5 e 10:</span>
-          <div className="flex rounded-lg bg-zinc-800 p-0.5 gap-0.5">
-            <button
-              onClick={() => setUseFixedSlides(true)}
-              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                useFixedSlides ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-300'
-              }`}
-            >
-              Template fixo
-            </button>
-            <button
-              onClick={() => setUseFixedSlides(false)}
-              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                !useFixedSlides ? 'bg-violet-600 text-white' : 'text-zinc-400 hover:text-zinc-300'
-              }`}
-            >
-              Gerar com IA
-            </button>
+        {activeTemplateId === 'frank-costa-10' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500">Slides 5 e 10:</span>
+            <div className="flex rounded-lg bg-zinc-800 p-0.5 gap-0.5">
+              <button
+                onClick={() => setUseFixedSlides(true)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  useFixedSlides ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-300'
+                }`}
+              >
+                Template fixo
+              </button>
+              <button
+                onClick={() => setUseFixedSlides(false)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  !useFixedSlides ? 'bg-violet-600 text-white' : 'text-zinc-400 hover:text-zinc-300'
+                }`}
+              >
+                Gerar com IA
+              </button>
+            </div>
           </div>
-        </div>
+        )}
         <div className="flex items-center gap-2">
           <span className="text-xs text-zinc-500">Provider:</span>
           <select
@@ -1023,7 +1140,7 @@ export default function GeneratePage() {
       </div>
 
       {/* Topic Discovery */}
-      <TopicDiscovery niche={niche} onSelect={handleGenerate} />
+      <TopicDiscovery niche={niche} templateId={activeTemplateId} onSelect={handleGenerate} />
     </div>
   )
 }

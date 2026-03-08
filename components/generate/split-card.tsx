@@ -27,6 +27,7 @@ export interface SplitSlide {
   cardPath?: string
   approved?: boolean
   imagePrompt?: string
+  imagePath?: string
 }
 
 interface SplitCardProps {
@@ -58,70 +59,90 @@ function Bold({ text, fontSize, color = '#fff' }: { text: string; fontSize: numb
 
 function CoverContent({ slide, scale, accent }: { slide: SplitSlide; scale: number; accent: string }) {
   const fs = (v: number) => v * scale
-  return (
-    <div style={{ position: 'absolute', inset: 0, background: '#0c0c0c' }}>
-      {/* Ambient gradients */}
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: 'radial-gradient(ellipse at 60% 40%, rgba(180,100,30,0.25) 0%, transparent 55%), radial-gradient(ellipse at 35% 65%, rgba(120,70,20,0.18) 0%, transparent 50%)',
-        filter: 'blur(2px)',
-      }} />
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
 
-      {/* Content */}
+  // Quebra "ESQUERDA VS. DIREITA" em duas partes para o título
+  const vsMatch = slide.text.match(/^(.+?)\s+VS\.?\s+(.+)$/i)
+  const leftTitle  = vsMatch ? vsMatch[1].trim().toUpperCase() : slide.text.toUpperCase()
+  const rightTitle = vsMatch ? vsMatch[2].trim().toUpperCase() : ''
+
+  // Suporte a **negrito** no subtítulo
+  const subtitleParts = slide.subtitulo
+    ? slide.subtitulo.split(/(\*\*[^*]+\*\*)/g)
+    : []
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: '#0a0a0a' }}>
+
+      {/* ── Foto de fundo desfocada (quando disponível) ── */}
+      {slide.imagePath ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={slide.imagePath}
+            alt=""
+            style={{
+              position: 'absolute', inset: 0,
+              width: '100%', height: '100%',
+              objectFit: 'cover',
+              filter: `blur(${fs(22)}px)`,
+              transform: 'scale(1.08)',
+            }}
+          />
+          {/* Overlay horizontal: escuro à esquerda, deixa foto aparecer à direita */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(to right, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.72) 40%, rgba(0,0,0,0.35) 65%, rgba(0,0,0,0.60) 100%)',
+          }} />
+          {/* Overlay vertical: escurece topo e base */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, transparent 22%, transparent 72%, rgba(0,0,0,0.65) 100%)',
+          }} />
+        </>
+      ) : (
+        /* Sem foto: gradiente ambiente quente como fallback */
+        <>
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(ellipse at 68% 45%, rgba(160,90,20,0.30) 0%, transparent 55%), radial-gradient(ellipse at 30% 70%, rgba(100,55,15,0.20) 0%, transparent 50%)',
+          }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)' }} />
+        </>
+      )}
+
+      {/* ── Texto ── */}
       <div style={{
         position: 'relative', zIndex: 1, height: '100%',
         display: 'flex', flexDirection: 'column', justifyContent: 'center',
-        padding: `0 ${fs(90)}px`,
-        gap: fs(24),
+        padding: `${fs(100)}px ${fs(88)}px`,
+        gap: fs(28),
       }}>
-        {/* Label pills */}
-        <div style={{ display: 'flex', gap: fs(16) }}>
-          <span style={{
-            background: '#fff', color: '#111', fontWeight: 800, fontSize: fs(22),
-            padding: `${fs(6)}px ${fs(22)}px`, borderRadius: fs(4),
-          }}>
-            {slide.labelEsquerda || 'Errado'}
-          </span>
-          <span style={{
-            background: accent, color: '#fff', fontWeight: 800, fontSize: fs(22),
-            padding: `${fs(6)}px ${fs(22)}px`, borderRadius: fs(4),
-          }}>
-            {slide.labelDireita || 'Certo'}
-          </span>
-        </div>
-
-        {/* VS divider */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: fs(24) }}>
-          <div style={{ flex: 1, height: fs(1), background: 'rgba(255,255,255,0.1)' }} />
-          <span style={{ color: accent, fontWeight: 900, fontSize: fs(28), letterSpacing: fs(2) }}>VS</span>
-          <div style={{ flex: 1, height: fs(1), background: 'rgba(255,255,255,0.1)' }} />
-        </div>
-
-        {/* Main title */}
-        <h1 style={{
+        {/* Título 4 linhas: ESQUERDA (1-2) / VS. DIREITA (3-4) */}
+        <div style={{
           fontFamily: '"Arial Black", "Arial", "Helvetica Neue", sans-serif',
-          fontSize: fs(108),
           fontWeight: 900,
-          color: '#fff',
-          lineHeight: 0.95,
-          margin: 0,
           textTransform: 'uppercase',
-          letterSpacing: fs(1),
+          fontSize: fs(106),
+          color: '#fff',
+          lineHeight: 0.9,
+          letterSpacing: fs(0.5),
         }}>
-          {slide.text}
-        </h1>
+          <div>{leftTitle}</div>
+          <div style={{ marginTop: fs(12) }}>
+            {rightTitle ? `VS. ${rightTitle}` : 'VS.'}
+          </div>
+        </div>
 
-        {/* Subtitle */}
-        <p style={{
-          fontSize: fs(38),
-          color: '#bbb',
-          fontStyle: 'italic',
-          lineHeight: 1.4,
-          margin: 0,
-        }}>
-          {slide.subtitulo}
-        </p>
+        {/* Subtítulo — sem itálico, com **negrito** para ênfase */}
+        {slide.subtitulo && (
+          <p style={{ fontSize: fs(38), color: '#d4d4d4', lineHeight: 1.45, margin: 0, fontWeight: 400 }}>
+            {subtitleParts.map((part, i) =>
+              part.startsWith('**') && part.endsWith('**')
+                ? <strong key={i} style={{ fontWeight: 800, color: '#fff' }}>{part.slice(2, -2)}</strong>
+                : <span key={i}>{part}</span>
+            )}
+          </p>
+        )}
       </div>
     </div>
   )
@@ -182,65 +203,108 @@ function Person({ stressed, scale }: { stressed: boolean; scale: number }) {
 
 function ContentSlideContent({ slide, scale, accent }: { slide: SplitSlide; scale: number; accent: string }) {
   const fs = (v: number) => v * scale
-  const titleBarH = CARD_H * 0.19 * scale
+
+  // Cada metade tem overflow:hidden e width:50%.
+  // O <img> dentro tem width:200% (= card inteiro) e height:100%.
+  // objectPosition ancora o lado correto → overflow:hidden corta o resto.
+  const imgStyle = (side: 'left' | 'right'): React.CSSProperties => ({
+    position: 'absolute',
+    top: 0,
+    ...(side === 'left' ? { left: 0 } : { right: 0 }),
+    width: '200%',    // img spans full card width
+    height: '100%',   // full container height
+    objectFit: 'cover',
+    objectPosition: side === 'left' ? 'left top' : 'right top',
+  })
+
   return (
-    <div style={{ position: 'absolute', inset: 0, background: '#111', display: 'flex', flexDirection: 'column' }}>
-      {/* Title bar */}
-      <div style={{
-        height: titleBarH,
-        background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: `0 ${fs(40)}px`, borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0,
-      }}>
-        <h3 style={{
-          fontFamily: '"Arial Black", "Arial", "Helvetica Neue", sans-serif',
-          fontSize: fs(48), fontWeight: 900, color: '#fff',
-          margin: 0, textAlign: 'center', textTransform: 'uppercase',
-          letterSpacing: fs(0.8), lineHeight: 1.1,
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#111' }}>
+
+      {/* ── LEFT HALF — imagem full-bleed (100% da altura do card) ── */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '50%', height: '100%', overflow: 'hidden' }}>
+        {slide.imagePath ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={slide.imagePath} alt="" style={imgStyle('left')} />
+        ) : (
+          <>
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(155deg, #5a3a1e 0%, #3d2815 30%, #1a100a 100%)' }} />
+            <Person stressed scale={scale} />
+          </>
+        )}
+        {/* Gradiente base para texto */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: '52%',
+          background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.65) 40%, rgba(0,0,0,0.92) 70%, #000 100%)',
+        }} />
+        {/* Label + texto */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          padding: `0 ${fs(16)}px ${fs(40)}px`, gap: fs(14),
         }}>
-          {slide.text}
-        </h3>
+          <div style={{ background: '#fff', padding: `${fs(7)}px ${fs(22)}px`, borderRadius: fs(5), boxShadow: '0 2px 8px rgba(0,0,0,0.6)', flexShrink: 0 }}>
+            <span style={{ fontWeight: 800, fontSize: fs(24), color: '#111' }}>{slide.labelEsquerda}</span>
+          </div>
+          <Bold text={slide.esquerda || ''} fontSize={fs(26)} />
+        </div>
       </div>
 
-      {/* Split area */}
-      <div style={{ display: 'flex', flex: 1 }}>
-
-        {/* ── LEFT (negative) ──────────────────────────────────────── */}
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', borderRight: '1px solid rgba(255,255,255,0.07)' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(155deg, #5a3a1e 0%, #3d2815 30%, #1a100a 100%)' }} />
-          <Person stressed scale={scale} />
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.15) 30%, rgba(0,0,0,0.58) 55%, rgba(0,0,0,0.88) 78%, rgba(0,0,0,0.96) 100%)' }} />
-          <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0,
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            padding: `0 ${fs(22)}px ${fs(36)}px`, gap: fs(16),
-          }}>
-            <div style={{ background: '#fff', padding: `${fs(9)}px ${fs(28)}px`, borderRadius: fs(6), boxShadow: '0 2px 6px rgba(0,0,0,0.3)' }}>
-              <span style={{ fontWeight: 800, fontSize: fs(26), color: '#111' }}>{slide.labelEsquerda}</span>
-            </div>
-            <Bold text={slide.esquerda || ''} fontSize={fs(28)} />
+      {/* ── RIGHT HALF — imagem full-bleed (100% da altura do card) ── */}
+      <div style={{ position: 'absolute', top: 0, right: 0, width: '50%', height: '100%', overflow: 'hidden' }}>
+        {slide.imagePath ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={slide.imagePath} alt="" style={imgStyle('right')} />
+        ) : (
+          <>
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(155deg, #35363d 0%, #282830 30%, #141418 100%)' }} />
+            <Person stressed={false} scale={scale} />
+            <div style={{ position: 'absolute', top: '8%', left: '25%', width: '55%', height: '28%', background: `radial-gradient(ellipse, ${accent}18 0%, transparent 70%)` }} />
+          </>
+        )}
+        {/* Gradiente base para texto */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: '52%',
+          background: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.65) 40%, rgba(0,0,0,0.92) 70%, #000 100%)',
+        }} />
+        {/* Label + texto */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          padding: `0 ${fs(16)}px ${fs(40)}px`, gap: fs(14),
+        }}>
+          <div style={{ background: accent, padding: `${fs(7)}px ${fs(22)}px`, borderRadius: fs(5), boxShadow: '0 2px 8px rgba(0,0,0,0.6)', flexShrink: 0 }}>
+            <span style={{ fontWeight: 800, fontSize: fs(24), color: '#fff' }}>{slide.labelDireita}</span>
           </div>
+          <Bold text={slide.direita || ''} fontSize={fs(26)} />
         </div>
-
-        {/* ── RIGHT (positive) ─────────────────────────────────────── */}
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(155deg, #35363d 0%, #282830 30%, #141418 100%)' }} />
-          <Person stressed={false} scale={scale} />
-          {/* Accent glow */}
-          <div style={{ position: 'absolute', top: '8%', left: '25%', width: '55%', height: '28%', background: `radial-gradient(ellipse, ${accent}18 0%, transparent 70%)` }} />
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.15) 30%, rgba(0,0,0,0.58) 55%, rgba(0,0,0,0.88) 78%, rgba(0,0,0,0.96) 100%)' }} />
-          <div style={{
-            position: 'absolute', bottom: 0, left: 0, right: 0,
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            padding: `0 ${fs(22)}px ${fs(36)}px`, gap: fs(16),
-          }}>
-            <div style={{ background: accent, padding: `${fs(9)}px ${fs(28)}px`, borderRadius: fs(6), boxShadow: '0 2px 6px rgba(0,0,0,0.3)' }}>
-              <span style={{ fontWeight: 800, fontSize: fs(26), color: '#fff' }}>{slide.labelDireita}</span>
-            </div>
-            <Bold text={slide.direita || ''} fontSize={fs(28)} />
-          </div>
-        </div>
-
       </div>
+
+      {/* ── Divisor vertical central ── */}
+      <div style={{ position: 'absolute', top: 0, left: '50%', width: fs(1.5), height: '100%', background: 'rgba(255,255,255,0.08)', zIndex: 1 }} />
+
+      {/* ── Título — overlay no topo, largura total, sobre as duas metades ── */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2 }}>
+        {/* Gradiente escuro no topo para o título ser legível */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: fs(240),
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.90) 0%, rgba(0,0,0,0.55) 65%, transparent 100%)',
+        }} />
+        <div style={{
+          position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: `${fs(38)}px ${fs(36)}px ${fs(38)}px`,
+        }}>
+          <h3 style={{
+            fontFamily: '"Arial Black", "Arial", "Helvetica Neue", sans-serif',
+            fontSize: fs(44), fontWeight: 900, color: '#fff',
+            margin: 0, textAlign: 'center', textTransform: 'uppercase',
+            letterSpacing: fs(0.6), lineHeight: 1.15,
+            textShadow: '0 2px 10px rgba(0,0,0,0.9)',
+          }}>
+            {slide.text}
+          </h3>
+        </div>
+      </div>
+
     </div>
   )
 }

@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 })
   }
 
-  const { topic, hook, textLength, useFixedSlides, templateId, providerId, model } = await req.json()
+  const { topic, hook, splitTitle, splitSubtitle, textLength, useFixedSlides, templateId, providerId, model } = await req.json()
   if (!topic) {
     return new Response(JSON.stringify({ error: 'topic obrigatório' }), { status: 400 })
   }
@@ -155,6 +155,8 @@ export async function POST(req: NextRequest) {
         templateId: resolvedTemplateId,
         topic,
         hook,
+        splitTitle,
+        splitSubtitle,
         expert,
         providerId: selectedProviderId,
         apiKey: providerApiKey,

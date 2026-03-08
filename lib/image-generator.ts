@@ -122,8 +122,9 @@ export async function generateSlideImage(
   slideNum: number,
   imagePrompt: string,
   expertPhotoBase64?: string,
-  googleApiKey?: string
+  googleApiKey?: string,
+  aspectRatio = '16:9',
 ): Promise<GenerateImageResult> {
-  const base64 = await callGeminiApi(imagePrompt, '16:9', expertPhotoBase64, 'image/jpeg', googleApiKey)
+  const base64 = await callGeminiApi(imagePrompt, aspectRatio, expertPhotoBase64, 'image/jpeg', googleApiKey)
   return { slideNum, base64, mimeType: 'image/jpeg' }
 }

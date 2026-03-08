@@ -15,6 +15,7 @@ type DateFilter  = '24h' | '7d' | '30d' | '3m'
 
 interface TopicDiscoveryProps {
   niche: string
+  templateId?: string
   onSelect: (topic: Topic, hook: string) => void
 }
 
@@ -42,7 +43,7 @@ const LIMIT_OPTIONS = [5, 10, 15, 20]
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
+export function TopicDiscovery({ niche, templateId, onSelect }: TopicDiscoveryProps) {
   const [mode, setMode]                 = useState<Mode>('trending')
   const [dateFilter, setDateFilter]     = useState<DateFilter>('24h')
   const [searchQuery, setSearchQuery]   = useState('')
@@ -88,6 +89,7 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
         body: JSON.stringify({
           mode: opts.mode,
           niche,
+          templateId,
           query: opts.query,
           category: opts.category,
           dateFilter: opts.dateFilter,
@@ -111,15 +113,15 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
     } finally {
       setLoading(false)
     }
-  }, [niche])
+  }, [niche, templateId])
 
-  // Carrega trending ao montar e quando filtro/nicho muda
+  // Carrega trending ao montar e quando filtro/nicho/template muda
   useEffect(() => {
     if (mode === 'trending') {
       setOffset(0)
       fetchTopics({ mode: 'trending', dateFilter, limit, offset: 0 })
     }
-  }, [mode, dateFilter, limit, niche])
+  }, [mode, dateFilter, limit, niche, templateId])
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -347,6 +349,7 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
             topics={topics}
             loading={loading}
             hasMore={hasMore}
+            templateId={templateId}
             onSelect={onSelect}
             onLoadMore={handleLoadMore}
           />
@@ -384,6 +387,7 @@ export function TopicDiscovery({ niche, onSelect }: TopicDiscoveryProps) {
             topics={topics}
             loading={loading}
             hasMore={hasMore}
+            templateId={templateId}
             onSelect={onSelect}
             onLoadMore={handleLoadMore}
           />
@@ -454,12 +458,14 @@ function TopicList({
   topics,
   loading,
   hasMore,
+  templateId,
   onSelect,
   onLoadMore,
 }: {
   topics: Topic[]
   loading: boolean
   hasMore: boolean
+  templateId?: string
   onSelect: (topic: Topic, hook: string) => void
   onLoadMore: () => void
 }) {
@@ -475,7 +481,7 @@ function TopicList({
   return (
     <div className="space-y-2.5">
       {topics.map((topic, i) => (
-        <TopicCard key={topic.id} topic={topic} rank={i + 1} onSelect={onSelect} />
+        <TopicCard key={topic.id} topic={topic} rank={i + 1} templateId={templateId} onSelect={onSelect} />
       ))}
 
       {/* Carregar mais */}

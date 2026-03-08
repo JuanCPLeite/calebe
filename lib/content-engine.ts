@@ -215,6 +215,7 @@ ${useFixedSlides
 - Slide 9 DEVE ser prova contextual ao tema e ao público (evite analogias prontas/clichês)
 - NUNCA usar nos slides: "Ferrari", "avião", "médico/cirurgião", "foguete" como prova genérica
 - imagePrompt é OBRIGATÓRIO em TODOS os 10 slides (incluindo slides 5 e 10)
+- IMPORTANTE JSON: dentro dos campos de texto, evite aspas duplas ("). Use aspas simples (') ou sem aspas para não quebrar o JSON.
 
 RESPONDA SOMENTE com JSON válido, sem markdown, sem explicações:
 
@@ -319,10 +320,10 @@ Retorne APENAS JSON válido, sem markdown, sem backticks:
       "type": "cover",
       "layout": "split-cover",
       "text": "TÍTULO X VS. Y (ex: LÍDER BONZINHO VS. LÍDER HUMANO)",
-      "subtitulo": "Pergunta provocativa que gera curiosidade?",
+      "subtitulo": "Frase curta que gera curiosidade — use **negrito** nas palavras de maior impacto",
       "labelEsquerda": "Nome do perfil negativo (ex: Líder Bonzinho)",
       "labelDireita": "Nome do perfil positivo (ex: Líder Humano)",
-      "imagePrompt": ""
+      "imagePrompt": "cinematic portrait of a professional person related to the topic, moody dark atmosphere, warm amber bokeh background, dramatic lighting, photorealistic, vertical composition 4:5, no text, no letters, no logos, no watermark"
     },
     {
       "num": 1,
@@ -333,7 +334,7 @@ Retorne APENAS JSON válido, sem markdown, sem backticks:
       "direita": "Texto do lado positivo com **palavras-chave** em negrito. Máximo 3 frases.",
       "labelEsquerda": "Nome do perfil negativo",
       "labelDireita": "Nome do perfil positivo",
-      "imagePrompt": "Prompt em inglês para gerar imagem relacionada ao slide (sem texto na imagem)"
+      "imagePrompt": "vertical split-screen semi-realistic business illustration: LEFT HALF shows the SAME professional person in a negative scenario (stressed/overwhelmed), RIGHT HALF shows the SAME professional person in a positive scenario (confident/assertive), matching face/hair/clothing on both sides, at least one visible person in each side, full-height subjects, 4:5 vertical frame, no text, no letters, no logos, no watermark"
     },
     {
       "num": 11,
@@ -348,8 +349,14 @@ Retorne APENAS JSON válido, sem markdown, sem backticks:
 }`
 }
 
-export function buildSplitUserPrompt(topic: string): string {
+export function buildSplitUserPrompt(topic: string, splitTitle?: string, splitSubtitle?: string): string {
+  const chosenSplitTitle = (splitTitle || '').trim()
+  const chosenSplitSubtitle = (splitSubtitle || '').trim()
   return `Crie um carrossel comparativo "X vs Y" sobre o tema: "${topic}"
+
+${chosenSplitTitle ? `CONTRASTE OBRIGATÓRIO PARA A CAPA:
+- use exatamente este título principal: "${chosenSplitTitle}"` : ''}
+${chosenSplitSubtitle ? `- use esta linha de apoio/pergunta na capa: "${chosenSplitSubtitle}"` : ''}
 
 O carrossel deve ter:
 - Capa com título impactante mostrando o contraste dos dois perfis
