@@ -957,6 +957,26 @@ REGRAS DE COPYWRITING:
 9. CTA final DEVE provocar comentarios, marcacoes ou compartilhamentos
 10. Conteudo deve ser PRATICO e ESPECIFICO — situacoes reais, nao generalidades
 
+REGRAS PARA IMAGE PROMPT:
+Cada slide de conteudo DEVE ter um imagePrompt seguindo EXATAMENTE este template obrigatorio:
+
+"Single illustration with a vertical split-screen composition showing two contrasting situations of the SAME [profissao relevante ao nicho].
+Left side of the image: [descreva a situacao NEGATIVA visualmente — acao especifica, expressao, ambiente. Iluminacao escura, tons quentes, expressao frustrada].
+Right side of the image: [descreva a situacao POSITIVA visualmente — acao especifica, expressao, ambiente. Iluminacao clara, expressao confiante].
+Both scenes exist inside the SAME image, divided vertically in the middle.
+The same character appears on both sides with identical facial features, hairstyle and clothing.
+IMPORTANT: This is ONE single image with a split composition — NOT two separate images.
+Style: semi-realistic digital painting, cinematic lighting, editorial business illustration, highly detailed, professional concept art, realistic characters, dramatic shadows, linkedin leadership editorial illustration style. Left side darker dramatic lighting and stressed mood. Right side brighter confident lighting and positive mood.
+Aspect ratio 4:5 vertical composition.
+No text, no typography, no captions."
+
+Regras adicionais para imagePrompt:
+- O personagem deve ser SEMPRE relevante ao nicho: {{expert.niche}}
+  Exemplos: artesanato → artisan woman; lideranca → business manager; vendas → sales professional; educacao → teacher; financas → financial advisor
+- Descreva cenas CONCRETAS e ESPECIFICAS — nao genericidades
+- SEMPRE escrever imagePrompt em INGLES
+- Slides de capa (split-cover) e CTA (split-cta): imagePrompt deve ser "" (string vazia)
+
 Retorne APENAS JSON valido, sem markdown, sem backticks:
 {
   "topic": "tema real do carrossel",
@@ -981,7 +1001,7 @@ Retorne APENAS JSON valido, sem markdown, sem backticks:
       "direita": "Texto do lado positivo com **palavras-chave**. Maximo 3 frases.",
       "labelEsquerda": "Nome do perfil negativo",
       "labelDireita": "Nome do perfil positivo",
-      "imagePrompt": "Prompt em ingles para imagem relacionada ao slide (sem texto na imagem)"
+      "imagePrompt": "Single illustration with a vertical split-screen composition showing two contrasting situations of the SAME [profissao]. Left side of the image: [situacao negativa especifica, iluminacao escura, expressao frustrada]. Right side of the image: [situacao positiva especifica, iluminacao clara, expressao confiante]. Both scenes exist inside the SAME image, divided vertically in the middle. The same character appears on both sides with identical facial features, hairstyle and clothing. IMPORTANT: This is ONE single image with a split composition - NOT two separate images. Style: semi-realistic digital painting, cinematic lighting, editorial business illustration, highly detailed, professional concept art, realistic characters, dramatic shadows, linkedin leadership editorial illustration style. Left side darker dramatic lighting and stressed mood. Right side brighter confident lighting and positive mood. Aspect ratio 4:5 vertical composition. No text, no typography, no captions."
     },
     {
       "num": 11,

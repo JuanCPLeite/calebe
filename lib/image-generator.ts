@@ -50,7 +50,7 @@ function callGeminiApi(
 
   const fullPrompt = expertPhotoBase64
     ? `${EXPERT_INSTRUCTION}\nScene: ${prompt} NO text, NO words, NO letters in the image.`
-    : `${prompt} SEM texto, SEM palavras, SEM letras na imagem.`
+    : prompt
 
   const parts: any[] = [{ text: fullPrompt }]
   if (expertPhotoBase64) {
@@ -60,7 +60,7 @@ function callGeminiApi(
   const body = JSON.stringify({
     contents: [{ parts }],
     generationConfig: {
-      responseModalities: ['TEXT', 'IMAGE'],
+      responseModalities: ['IMAGE'],
       imageConfig: { aspectRatio, imageSize: '2K' },
     },
   })

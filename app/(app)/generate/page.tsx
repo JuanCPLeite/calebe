@@ -589,27 +589,32 @@ export default function GeneratePage() {
       return
     }
 
-    // ── Split-content: 1 ilustração dividida (sem foto do expert) ──
+    // ── Split-content: usa imagePrompt gerado pelo Claude (template estruturado) ──
     if (slide.layout === 'split-content') {
       const negLabel = (slide.labelEsquerda || '').replace(/\*\*/g, '').trim()
       const posLabel = (slide.labelDireita  || '').replace(/\*\*/g, '').trim()
       const negScene = (slide.esquerda      || '').replace(/\*\*/g, '').slice(0, 120)
       const posScene = (slide.direita       || '').replace(/\*\*/g, '').slice(0, 120)
-      const topic    = slide.text || slide.imagePrompt || 'professional comparison'
+      const topic    = slide.text || 'professional comparison'
 
-      const prompt = `Vertical split-screen illustration of the same professional in two contrasting situations related to: ${topic}.
+      // Usa imagePrompt do Claude se disponível, senão constrói fallback
+      const prompt = slide.imagePrompt || `Single illustration with a vertical split-screen composition showing two contrasting situations of the SAME professional.
 
-Left side: ${negScene || `${negLabel} — stressed and overwhelmed, struggling with the situation, visible tension, warm orange dramatic lighting, emotional expression`}.
+Left side of the image: ${negScene || `${negLabel} — stressed and overwhelmed, struggling with the situation, visible tension, darker lighting, warm tones, frustrated expression`}.
 
-Right side: ${posScene || `${posLabel} — confident and accomplished, successfully handling the situation, modern bright environment, positive professional atmosphere`}.
+Right side of the image: ${posScene || `${posLabel} — confident and accomplished, successfully handling the situation, brighter lighting, positive professional atmosphere`}.
 
-The same character appears on both sides with identical facial features, hairstyle, and clothing.
+Both scenes exist inside the SAME image, divided vertically in the middle.
 
-Style: high-end editorial illustration, semi-realistic digital painting, cinematic lighting, soft shadows, depth of field, highly detailed, modern concept art.
+The same character appears on both sides with identical facial features, hairstyle and clothing.
 
-Perfect vertical split composition.
+IMPORTANT: This is ONE single image with a split composition — NOT two separate images.
 
-No text, no captions, no labels, no graphics, no watermarks.`
+Style: semi-realistic digital painting, cinematic lighting, editorial business illustration, highly detailed, professional concept art, realistic characters, dramatic shadows, linkedin leadership editorial illustration style. Left side darker dramatic lighting and stressed mood. Right side brighter confident lighting and positive mood.
+
+Aspect ratio 4:5 vertical composition.
+
+No text, no typography, no captions.`
       setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
       try {
         const dataUrl = await fetchGeneratedImage(slide.num, prompt, true, '4:5')
@@ -621,6 +626,9 @@ No text, no captions, no labels, no graphics, no watermarks.`
       }
       return
     }
+
+    // ── Split-CTA: sem imagem de fundo (CtaContent usa background sólido) ──
+    if (slide.layout === 'split-cta') return
 
     // ── Frank / demais slides: fluxo original ──
     const imagePrompt = slide.imagePrompt || FALLBACK_IMAGE_PROMPTS[slide.type]
