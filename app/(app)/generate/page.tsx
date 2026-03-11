@@ -904,7 +904,7 @@ No text, no typography, no captions.`
           </div>
           <div className="space-y-2">
             <p className="text-sm font-medium text-zinc-100">
-              Gerando carrossel com {availableModels.find((m) => m.model === selectedModel)?.label || selectedModel}...
+              Gerando carrossel...
             </p>
             {clampedSlides > 0 ? (
               <>
