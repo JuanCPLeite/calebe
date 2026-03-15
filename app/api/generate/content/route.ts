@@ -166,8 +166,6 @@ export async function POST(req: NextRequest) {
       })
 
       for await (const event of gen) {
-        controller.enqueue(sse(event))
-
         if ('done' in event && event.done) {
           // Salva no histórico com workspace_id
           const { data: insertedCarousel } = await supabase.from('carousels').insert({
@@ -183,6 +181,7 @@ export async function POST(req: NextRequest) {
           }).select('id').maybeSingle()
 
           const carouselId = insertedCarousel?.id || null
+          controller.enqueue(sse({ ...event, carouselId }))
 
           // Estimativa inicial de tokens para analise de custo.
           const expertText = [
@@ -261,6 +260,8 @@ export async function POST(req: NextRequest) {
               duration_ms:  Date.now() - startTime,
             },
           })
+        } else {
+          controller.enqueue(sse(event))
         }
 
         if ('error' in event) {

@@ -4,11 +4,12 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ExternalLink, Calendar, CheckCircle2, Clock, Trash2,
-  Copy, Search, LayoutGrid, List, Loader2,
+  Copy, Search, LayoutGrid, List, Loader2, RotateCcw, CheckSquare, Square,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { FrankCard } from '@/components/generate/frank-card'
+import { SplitCard, type SplitSlide } from '@/components/generate/split-card'
 import { getActiveExpertContext } from '@/lib/expert-client'
 
 interface Carousel {
@@ -65,6 +66,10 @@ function getThumbnail(c: Carousel) {
   return Array.isArray(c.slides) && c.slides.length > 0
     ? (c.slides[0] as any)?.cardPath || (c.slides[0] as any)?.imagePath
     : null
+}
+
+function isSplitCarousel(c: Carousel) {
+  return Array.isArray(c.slides) && (c.slides[0] as any)?.layout?.startsWith('split')
 }
 
 function getStatus(c: Carousel): 'published' | 'scheduled' | 'draft' {
@@ -180,11 +185,15 @@ export default function DashboardPage() {
   const [stats,       setStats]      = useState({ total: 0, published: 0, scheduled: 0 })
   const [deleting,    setDeleting]   = useState<string | null>(null)
   const [duplicating, setDuplicating]= useState<string | null>(null)
+  const [reposting,   setReposting]  = useState<string | null>(null)
+  const [openingLink, setOpeningLink]= useState<string | null>(null)
+  const [bulkAction,  setBulkAction] = useState<string | null>(null)
   const [search,      setSearch]     = useState('')
   const [filter,      setFilter]     = useState<FilterTab>('all')
   const [view,        setView]       = useState<ViewMode>('list')
   const [viewReady,   setViewReady]  = useState(false)
   const [workspaceLimits, setWorkspaceLimits] = useState<WorkspaceLimits | null>(null)
+  const [selectedIds, setSelectedIds]= useState<string[]>([])
 
   useEffect(() => {
     const saved = localStorage.getItem(DASHBOARD_VIEW_KEY)
@@ -253,51 +262,139 @@ export default function DashboardPage() {
     return list
   }, [carousels, search, filter])
 
-  async function handleDelete(e: React.MouseEvent, id: string) {
-    e.stopPropagation()
-    if (!confirm('Excluir este carrossel? Esta ação não pode ser desfeita.')) return
-    setDeleting(id)
-    const res = await fetch(`/api/carousels/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      setDeleting(null)
-      return
-    }
-    setCarousels(prev => {
-      const next = prev.filter(c => c.id !== id)
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => filtered.some((item) => item.id === id)))
+  }, [filtered])
+
+  async function runCarouselAction(ids: string[], action: 'duplicate' | 'repost' | 'get_permalink' | 'delete_system' | 'delete_instagram' | 'delete_both') {
+    const res = await fetch('/api/carousels/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, action }),
+    })
+    const data = await res.json()
+    if (!res.ok && res.status !== 207) throw new Error(data.error || 'Falha ao executar ação')
+    return Array.isArray(data.results) ? data.results : []
+  }
+
+  function removeCarouselsFromState(ids: string[]) {
+    setCarousels((prev) => {
+      const next = prev.filter((item) => !ids.includes(item.id))
       setStats(computeStats(next))
       return next
     })
-    setDeleting(null)
+    setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)))
+  }
+
+  function updateCarousel(id: string, patch: Partial<Carousel>) {
+    setCarousels((prev) => {
+      const next = prev.map((item) => item.id === id ? { ...item, ...patch } : item)
+      setStats(computeStats(next))
+      return next
+    })
+  }
+
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.stopPropagation()
+    if (!confirm('Excluir este carrossel do sistema?')) return
+    setDeleting(id)
+    try {
+      const results = await runCarouselAction([id], 'delete_system')
+      const failed = results.find((item: any) => !item.ok)
+      if (failed) throw new Error(failed.error || 'Falha ao excluir carrossel')
+      removeCarouselsFromState([id])
+    } catch {
+      setDeleting(null)
+      return
+    } finally {
+      setDeleting(null)
+    }
   }
 
   async function handleDuplicate(e: React.MouseEvent, c: Carousel) {
     e.stopPropagation()
     setDuplicating(c.id)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setDuplicating(null); return }
-
-    const { data } = await supabase
-      .from('carousels')
-      .insert({
-        user_id:  user.id,
-        topic:    `${c.topic} (cópia)`,
-        caption:  c.caption,
-        slides:   c.slides,
-        expert_id: c.expert_id ?? null,
-        provider_used: c.provider_used ?? null,
-        model_used: c.model_used ?? null,
-      })
-      .select('id, topic, caption, expert_id, provider_used, model_used, ig_post_id, published_at, scheduled_at, created_at, slides')
-      .single()
-
-    if (data) {
-      setCarousels(prev => {
-        const next = [data as Carousel, ...prev]
-        setStats(computeStats(next))
-        return next
-      })
+    try {
+      const results = await runCarouselAction([c.id], 'duplicate')
+      const failed = results.find((item: any) => !item.ok)
+      if (failed) throw new Error(failed.error || 'Falha ao duplicar carrossel')
+      window.location.reload()
+    } finally {
+      setDuplicating(null)
     }
-    setDuplicating(null)
+  }
+
+  async function handleRepost(e: React.MouseEvent, c: Carousel) {
+    e.stopPropagation()
+    setReposting(c.id)
+    try {
+      const results = await runCarouselAction([c.id], 'repost')
+      const failed = results.find((item: any) => !item.ok)
+      if (failed) throw new Error(failed.error || 'Falha ao repostar')
+      const success = results.find((item: any) => item.ok)
+      if (success?.permalink) {
+        window.open(success.permalink as string, '_blank', 'noopener,noreferrer')
+      }
+      window.location.reload()
+    } catch {
+      setReposting(null)
+      return
+    } finally {
+      setReposting(null)
+    }
+  }
+
+  async function handleOpenPost(e: React.MouseEvent, c: Carousel) {
+    e.stopPropagation()
+    if (!c.ig_post_id) return
+    setOpeningLink(c.id)
+    try {
+      const results = await runCarouselAction([c.id], 'get_permalink')
+      const success = results.find((item: any) => item.ok)
+      const url = success?.permalink || `https://www.instagram.com/p/${c.ig_post_id}/`
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } finally {
+      setOpeningLink(null)
+    }
+  }
+
+  async function handleBulkDelete(action: 'delete_system' | 'delete_instagram' | 'delete_both') {
+    if (!selectedIds.length) return
+    const labels: Record<typeof action, string> = {
+      delete_system: 'Excluir os selecionados do sistema?',
+      delete_instagram: 'Remover os selecionados do Instagram?',
+      delete_both: 'Excluir os selecionados do sistema e do Instagram?',
+    }
+    if (!confirm(labels[action])) return
+
+    setBulkAction(action)
+    try {
+      const results = await runCarouselAction(selectedIds, action)
+      const successIds = results.filter((item: any) => item.ok).map((item: any) => item.id as string)
+      if (action === 'delete_instagram') {
+        for (const id of successIds) {
+          updateCarousel(id, { ig_post_id: null, published_at: null })
+        }
+        setSelectedIds((prev) => prev.filter((id) => !successIds.includes(id)))
+      } else {
+        removeCarouselsFromState(successIds)
+      }
+    } finally {
+      setBulkAction(null)
+    }
+  }
+
+  function toggleSelection(id: string) {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id])
+  }
+
+  function toggleSelectAllVisible() {
+    const visibleIds = filtered.map((item) => item.id)
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id))
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) return prev.filter((id) => !visibleIds.includes(id))
+      return Array.from(new Set([...prev, ...visibleIds]))
+    })
   }
 
   const FILTER_TABS: { key: FilterTab; label: string; count: number }[] = [
@@ -312,16 +409,34 @@ export default function DashboardPage() {
     return (
       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
         {c.ig_post_id && (
-          <a
-            href={`https://www.instagram.com/p/${c.ig_post_id}/`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={(e) => handleOpenPost(e, c)}
             title="Ver no Instagram"
             className="p-1.5 rounded-lg text-violet-400 hover:text-violet-300 hover:bg-violet-900/20 transition-colors"
           >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
+            {openingLink === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5" />}
+          </button>
         )}
+        <button
+          onClick={e => handleRepost(e, c)}
+          disabled={reposting === c.id}
+          title="Repostar"
+          className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-40 transition-colors"
+        >
+          {reposting === c.id
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : <RotateCcw className="w-3.5 h-3.5" />}
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            toggleSelection(c.id)
+          }}
+          title={selectedIds.includes(c.id) ? 'Desmarcar' : 'Selecionar'}
+          className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+        >
+          {selectedIds.includes(c.id) ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+        </button>
         <button
           onClick={e => handleDuplicate(e, c)}
           disabled={duplicating === c.id}
@@ -470,6 +585,44 @@ export default function DashboardPage() {
             className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-8 pr-3 py-1.5 text-sm text-zinc-300 placeholder:text-zinc-600 outline-none focus:border-zinc-600 transition-colors"
           />
         </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={toggleSelectAllVisible}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:border-zinc-700"
+          >
+            {filtered.length > 0 && filtered.every((item) => selectedIds.includes(item.id))
+              ? <CheckSquare className="w-3.5 h-3.5" />
+              : <Square className="w-3.5 h-3.5" />}
+            Selecionar visíveis
+          </button>
+          {selectedIds.length > 0 && (
+            <>
+              <span className="text-xs text-zinc-500">{selectedIds.length} selecionados</span>
+              <button
+                onClick={() => handleBulkDelete('delete_instagram')}
+                disabled={bulkAction !== null}
+                className="rounded-lg border border-amber-900/60 bg-amber-950/20 px-3 py-1.5 text-xs text-amber-300 disabled:opacity-50"
+              >
+                {bulkAction === 'delete_instagram' ? 'Processando...' : 'Excluir Instagram'}
+              </button>
+              <button
+                onClick={() => handleBulkDelete('delete_system')}
+                disabled={bulkAction !== null}
+                className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-200 disabled:opacity-50"
+              >
+                {bulkAction === 'delete_system' ? 'Processando...' : 'Excluir sistema'}
+              </button>
+              <button
+                onClick={() => handleBulkDelete('delete_both')}
+                disabled={bulkAction !== null}
+                className="rounded-lg border border-red-900/60 bg-red-950/20 px-3 py-1.5 text-xs text-red-300 disabled:opacity-50"
+              >
+                {bulkAction === 'delete_both' ? 'Processando...' : 'Excluir ambos'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Conteúdo */}
@@ -502,10 +655,18 @@ export default function DashboardPage() {
                 className="flex items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 cursor-pointer hover:border-zinc-600 hover:bg-zinc-800/60 transition-colors group"
               >
                 {/* Thumbnail */}
-                <div className="w-12 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-white border border-zinc-700 flex items-center justify-center">
+                <div className="w-12 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-zinc-900 border border-zinc-700 flex items-center justify-center">
                   {thumb ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={thumb} alt="" className="w-full h-full object-cover" />
+                  ) : isSplitCarousel(c) ? (
+                    <div className="w-full h-full overflow-hidden pointer-events-none">
+                      <SplitCard
+                        slide={c.slides[0] as unknown as SplitSlide}
+                        accentColor={expert?.highlight_color ?? '#F59E0B'}
+                        displayWidth={48}
+                      />
+                    </div>
                   ) : expert && c.slides[0]?.text ? (
                     <div className="w-full h-full overflow-hidden pointer-events-none">
                       <FrankCard
@@ -529,6 +690,16 @@ export default function DashboardPage() {
                     <span className="text-xl">🖼️</span>
                   )}
                 </div>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleSelection(c.id)
+                  }}
+                  className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                >
+                  {selectedIds.includes(c.id) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                </button>
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-zinc-100 truncate">{c.topic}</p>
@@ -571,6 +742,14 @@ export default function DashboardPage() {
                   {thumb ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={thumb} alt="" className="w-full h-full object-cover" />
+                  ) : isSplitCarousel(c) ? (
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                      <SplitCard
+                        slide={c.slides[0] as unknown as SplitSlide}
+                        accentColor={expert?.highlight_color ?? '#F59E0B'}
+                        displayWidth={300}
+                      />
+                    </div>
                   ) : expert && c.slides[0]?.text ? (
                     <ResponsiveFrankThumb
                       text={c.slides[0].text}
@@ -594,6 +773,26 @@ export default function DashboardPage() {
 
                   {/* Ações no hover */}
                   <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleSelection(c.id)
+                      }}
+                      title={selectedIds.includes(c.id) ? 'Desmarcar' : 'Selecionar'}
+                      className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-900/90 text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors shadow"
+                    >
+                      {selectedIds.includes(c.id) ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      onClick={e => handleRepost(e, c)}
+                      disabled={reposting === c.id}
+                      title="Repostar"
+                      className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-900/90 text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors shadow"
+                    >
+                      {reposting === c.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <RotateCcw className="w-3.5 h-3.5" />}
+                    </button>
                     <button
                       onClick={e => handleDuplicate(e, c)}
                       disabled={duplicating === c.id}
@@ -625,15 +824,13 @@ export default function DashboardPage() {
                     <span className="text-[10px] text-zinc-600">{formatDate(c.created_at)}</span>
                   </div>
                   {c.ig_post_id && (
-                    <a
-                      href={`https://www.instagram.com/p/${c.ig_post_id}/`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
                       className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
-                      onClick={e => e.stopPropagation()}
+                      onClick={(e) => handleOpenPost(e, c)}
                     >
-                      <ExternalLink className="w-3 h-3" /> Ver no Instagram
-                    </a>
+                      {openingLink === c.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />} Abrir post
+                    </button>
                   )}
                 </div>
               </div>

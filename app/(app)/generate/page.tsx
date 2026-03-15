@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Topic } from '@/components/generate/topic-card'
 import { CarouselPreview, type Slide, type ExpertInfo } from '@/components/generate/carousel-preview'
-import { Sparkles, Mic, Loader2, ArrowLeft, Send, AlertCircle, Calendar, Check, X } from 'lucide-react'
+import { Sparkles, Mic, Loader2, ArrowLeft, Send, AlertCircle, Calendar, Check, X, ChevronRight } from 'lucide-react'
 import { TopicDiscovery } from '@/components/generate/topic-discovery'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -13,7 +13,13 @@ import { getActiveExpertContext } from '@/lib/expert-client'
 import { useSearchParams } from 'next/navigation'
 import { TEMPLATES, TEMPLATE_PRESETS } from '@/lib/templates'
 
-type Stage = 'discovery' | 'generating' | 'editing'
+type Stage = 'template' | 'discovery' | 'angles' | 'generating' | 'editing'
+
+interface AngleOption {
+  title: string
+  subtitle: string
+  description: string
+}
 type WorkspacePlan = 'starter' | 'pro' | 'agency'
 type ProviderId = 'anthropic' | 'openai'
 
@@ -76,10 +82,23 @@ function usd(value: number): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 })
 }
 
+function normalizeSplitCoverTitle(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+vs\.?\s+/gi, ' VS. ')
+    .toUpperCase()
+}
+
+function getTemplateHint(templateId: string): string {
+  return templateId === 'positivo-negativo'
+    ? 'Contrastes fortes, comparações e perguntas de capa'
+    : 'Hooks, autoridade e conteúdo educativo em carrossel'
+}
+
 export default function GeneratePage() {
   const supabase = createClient()
   const searchParams = useSearchParams()
-  const [stage, setStage]                 = useState<Stage>('discovery')
+  const [stage, setStage]                 = useState<Stage>('template')
   const [generating, setGenerating]       = useState(false)
   const [generatingImages, setGeneratingImages] = useState(false)
   const [slides, setSlides]               = useState<Slide[]>([])
@@ -104,7 +123,10 @@ export default function GeneratePage() {
   const [scheduledAt, setScheduledAt]     = useState('')
   const [showScheduler, setShowScheduler] = useState(false)
   const [scheduling, setScheduling]       = useState(false)
-  const [savedTopicRef, setSavedTopicRef] = useState<string | null>(null)
+  const [angleOptions, setAngleOptions]   = useState<AngleOption[]>([])
+  const [loadingAngles, setLoadingAngles] = useState(false)
+  const [pendingAngleTopic, setPendingAngleTopic] = useState<{ topic: Topic; hook: string } | null>(null)
+  const [customAngle, setCustomAngle]     = useState('')
   const [workspacePlan, setWorkspacePlan] = useState<WorkspacePlan>('starter')
   const [workspaceLimits, setWorkspaceLimits] = useState<WorkspaceLimits | null>(null)
   const [selectedProviderId, setSelectedProviderId] = useState<ProviderId>('anthropic')
@@ -113,6 +135,21 @@ export default function GeneratePage() {
   const sessionIdRef                      = useRef<string>(`temp-${Date.now()}`)
   const reRenderTimers                    = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
   const lastRenderedSettings              = useRef<Record<number, { x: number; y: number; h: number; pos: string }>>({})
+  // Guard para evitar que handleGenerate seja chamado concorrentemente (double-click, etc.)
+  const isGeneratingRef                   = useRef(false)
+  // Trigger para auto-geração de imagens no template X vs Y
+  const autoGenImagesRef                  = useRef(false)
+
+  function getSplitContentIndex(slideNum: number, sourceSlides: Slide[] = slides): number | undefined {
+    const targetIndex = sourceSlides.findIndex((slide) => slide.num === slideNum)
+    if (targetIndex < 0 || sourceSlides[targetIndex]?.layout !== 'split-content') return undefined
+
+    let count = 0
+    for (let i = 0; i < targetIndex; i++) {
+      if (sourceSlides[i].layout === 'split-content') count += 1
+    }
+    return count + 1
+  }
 
   // Mantém sessionId sincronizado com o carouselId real assim que disponível
   useEffect(() => {
@@ -249,36 +286,17 @@ export default function GeneratePage() {
     }
     setActiveTemplateName(template.name)
     setActiveTemplateId(templateId)
+    setStage('discovery')
   }, [searchParams])
 
-  // ── Cria registro no banco ao entrar em editing ───────────────────────────
+  // ── Auto-geração de imagens após conteúdo X vs Y ───────────────────────────
+  // Permanece no stage 'generating' e transita para 'editing' só quando imagens ficam prontas
   useEffect(() => {
-    if (stage !== 'editing' || !slides.length || savedTopicRef === selectedTopic) return
-
-    async function createCarousel() {
-      try {
-        const res = await fetch('/api/carousels', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            topic: selectedTopic,
-            caption,
-            slides,
-            providerId: selectedProviderId,
-            model: selectedModel,
-          }),
-        })
-        const data = await res.json()
-        if (data.id) {
-          setCarouselId(data.id)
-          setSavedTopicRef(selectedTopic)
-        }
-      } catch (e) {
-        console.error('Falha ao criar carousel:', e)
-      }
-    }
-    createCarousel()
-  }, [stage, selectedTopic])
+    if (!autoGenImagesRef.current || slides.length === 0 || generatingImages) return
+    autoGenImagesRef.current = false
+    handleGenerateImages(() => setStage('editing'))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slides.length, generatingImages])
 
   // ── Auto-save com debounce de 1.5s ────────────────────────────────────────
   useEffect(() => {
@@ -287,10 +305,11 @@ export default function GeneratePage() {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = setTimeout(async () => {
       try {
-        // Remove campos grandes (base64) — só persiste paths e URLs pequenas
+        // Remove campos base64 — persiste apenas paths/URLs
         const slidesForSave = slides.map(({ imagePath, cardPath, ...rest }) => ({
           ...rest,
-          ...(cardPath && !cardPath.startsWith('data:') ? { cardPath } : {}),
+          ...(imagePath && !imagePath.startsWith('data:') ? { imagePath } : {}),
+          ...(cardPath  && !cardPath.startsWith('data:')  ? { cardPath }  : {}),
         }))
         await fetch(`/api/carousels/${carouselId}`, {
           method: 'PATCH',
@@ -329,11 +348,28 @@ export default function GeneratePage() {
     })
   }, [slides])
 
+  function handleTemplateSelect(templateId: string, templateName: string) {
+    setActiveTemplateId(templateId)
+    setActiveTemplateName(templateName)
+    const preset = TEMPLATE_PRESETS[templateId]
+    if (preset) {
+      setTextLength(preset.textLength)
+      setUseFixedSlides(preset.useFixedSlides)
+    }
+    setCustomTopic('')
+    setGenerateError('')
+    setStage('discovery')
+  }
+
   // ── Geração de conteúdo ──────────────────────────────────────────────────
   async function handleGenerate(topic: Topic, hook: string) {
+    // Previne chamadas concorrentes (double-click, click rápido em TopicCard, etc.)
+    if (isGeneratingRef.current) return
+    isGeneratingRef.current = true
+
     const isSplitTemplate = activeTemplateId === 'positivo-negativo'
     const resolvedSplitTitle = isSplitTemplate
-      ? ((hook || topic.splitTitle || topic.title || '').trim())
+      ? normalizeSplitCoverTitle(hook || topic.splitTitle || topic.title || '')
       : ''
     const resolvedSplitSubtitle = isSplitTemplate
       ? ((topic.splitSubtitle || '').trim())
@@ -365,6 +401,7 @@ export default function GeneratePage() {
     setCarouselId(null)
     setScheduledAt('')
     setShowScheduler(false)
+    sessionIdRef.current = `temp-${Date.now()}`
 
     try {
       const res = await fetch('/api/generate/content', {
@@ -420,6 +457,10 @@ export default function GeneratePage() {
           }
 
           if (event.done) {
+            if (typeof event.carouselId === 'string' && event.carouselId) {
+              setCarouselId(event.carouselId)
+              sessionIdRef.current = event.carouselId
+            }
             setSlides((event.slides as Slide[]).map(s => ({
               ...s,
               approved: false,
@@ -428,7 +469,12 @@ export default function GeneratePage() {
               imageObjectY: 50,
             })))
             setCaption(event.caption || '')
-            setStage('editing')
+            if (isSplitTemplate) {
+              // Fica na tela de gerando até as imagens estarem prontas
+              autoGenImagesRef.current = true
+            } else {
+              setStage('editing')
+            }
             break outer
           }
         }
@@ -438,6 +484,7 @@ export default function GeneratePage() {
       setGenerateError(err.message || 'Erro ao gerar carrossel.')
       setStage('discovery')
     } finally {
+      isGeneratingRef.current = false
       setGenerating(false)
       setSlidesGenerated(0)
       setRetryMessage('')
@@ -457,7 +504,53 @@ export default function GeneratePage() {
       gain: '',
       angle: 'Personalizado',
     }
-    await handleGenerate(mockTopic, customTopic)
+    if (activeTemplateId === 'positivo-negativo') {
+      await handleDiscoverAngles(mockTopic, customTopic)
+    } else {
+      await handleGenerate(mockTopic, customTopic)
+    }
+  }
+
+  // ── Descobre ângulos para o template X vs Y ────────────────────────────────
+  async function handleDiscoverAngles(topic: Topic, hook: string) {
+    setLoadingAngles(true)
+    setPendingAngleTopic({ topic, hook })
+    setAngleOptions([])
+    setCustomAngle('')
+    setStage('angles')
+    try {
+      const res = await fetch('/api/generate/angles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topic.title }),
+      })
+      const data = await res.json()
+      setAngleOptions(data.angles || [])
+    } catch (e) {
+      console.error('Falha ao gerar ângulos:', e)
+    } finally {
+      setLoadingAngles(false)
+    }
+  }
+
+  // ── Seleciona um ângulo e dispara geração ──────────────────────────────────
+  async function handleSelectAngle(angle: AngleOption) {
+    if (!pendingAngleTopic) return
+    const modifiedTopic: Topic = {
+      ...pendingAngleTopic.topic,
+      splitTitle: angle.title,
+      splitSubtitle: angle.subtitle,
+    }
+    await handleGenerate(modifiedTopic, angle.title)
+  }
+
+  async function handleSelectCustomAngle() {
+    if (!customAngle.trim() || !pendingAngleTopic) return
+    const modifiedTopic: Topic = {
+      ...pendingAngleTopic.topic,
+      splitTitle: normalizeSplitCoverTitle(customAngle),
+    }
+    await handleGenerate(modifiedTopic, customAngle)
   }
 
   function handleVoice() {
@@ -565,8 +658,55 @@ export default function GeneratePage() {
     throw new Error('Falha ao gerar imagem após 3 tentativas')
   }
 
+  async function renderSplitCardDataUrl(targetSlide: Slide, options?: { imageDataUrl?: string; sourceSlides?: Slide[] }): Promise<string> {
+    const imageDataUrl = options?.imageDataUrl
+    const imageBase64 = imageDataUrl?.startsWith('data:') ? imageDataUrl.replace(/^data:[^;]+;base64,/, '') : undefined
+    const imageUrl = imageDataUrl && !imageDataUrl.startsWith('data:')
+      ? imageDataUrl
+      : targetSlide.imagePath && !targetSlide.imagePath.startsWith('data:')
+        ? targetSlide.imagePath
+        : undefined
+
+    const res = await fetch('/api/render/card', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        template: 'split',
+        slide: {
+          layout: targetSlide.layout,
+          text: targetSlide.text,
+          subtitulo: targetSlide.subtitulo,
+          esquerda: targetSlide.esquerda,
+          direita: targetSlide.direita,
+          labelEsquerda: targetSlide.labelEsquerda,
+          labelDireita: targetSlide.labelDireita,
+          subtexto: targetSlide.subtexto,
+          hashtags: targetSlide.hashtags,
+        },
+        accentColor: expert.highlightColor,
+        contentIndex: getSplitContentIndex(targetSlide.num, options?.sourceSlides ?? slides),
+        imageBase64,
+        imageUrl,
+      }),
+    })
+    const data = await res.json()
+    if (data.error) throw new Error(data.error)
+    return `data:image/png;base64,${data.cardBase64}`
+  }
+
   // ── Gera imagem + card de UM slide ──────────────────────────────────────
   async function generateOneSlide(slide: Slide): Promise<void> {
+    // ── Helper interno: upload de imagem split + signed URL ──────────────────
+    async function uploadSplitImage(slideNum: number, dataUrl: string): Promise<string> {
+      const imageBase64 = dataUrl.replace(/^data:[^;]+;base64,/, '')
+      const storagePath = await uploadBgImageToStorage(slideNum, imageBase64)
+      if (!storagePath) return dataUrl
+      const { data: signed } = await supabase.storage
+        .from('carousel-images')
+        .createSignedUrl(storagePath, 60 * 60 * 24 * 365)
+      return signed?.signedUrl || dataUrl
+    }
+
     // ── Split-cover: 1 imagem desfocada de fundo (sem foto do expert) ──
     if (slide.layout === 'split-cover') {
       const basePrompt = slide.imagePrompt
@@ -579,8 +719,16 @@ export default function GeneratePage() {
       ].join(' ')
       setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
       try {
-        const dataUrl = await fetchGeneratedImage(slide.num, prompt, true, '4:5')
-        setSlides(prev => prev.map(s => s.num === slide.num ? { ...s, imagePath: dataUrl } : s))
+        const dataUrl   = await fetchGeneratedImage(slide.num, prompt, true, '4:5')
+        const persisted = await uploadSplitImage(slide.num, dataUrl)
+        const splitCardDataUrl = await renderSplitCardDataUrl(
+          { ...slide, imagePath: persisted },
+          { imageDataUrl: dataUrl, sourceSlides: slides }
+        )
+        const stored = await uploadCardToStorage(slide.num, splitCardDataUrl.replace(/^data:image\/png;base64,/, ''))
+        setSlides(prev => prev.map(s => s.num === slide.num
+          ? { ...s, imagePath: persisted, cardPath: stored?.url || splitCardDataUrl, cardStoragePath: stored?.path }
+          : s))
         setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
       } catch (err) {
         console.error(`Erro capa split ${slide.num}:`, err)
@@ -595,7 +743,6 @@ export default function GeneratePage() {
       const posLabel = (slide.labelDireita  || '').replace(/\*\*/g, '').trim()
       const negScene = (slide.esquerda      || '').replace(/\*\*/g, '').slice(0, 120)
       const posScene = (slide.direita       || '').replace(/\*\*/g, '').slice(0, 120)
-      const topic    = slide.text || 'professional comparison'
 
       // Usa imagePrompt do Claude se disponível, senão constrói fallback
       const prompt = slide.imagePrompt || `Single illustration with a vertical split-screen composition showing two contrasting situations of the SAME professional.
@@ -617,8 +764,16 @@ Aspect ratio 4:5 vertical composition.
 No text, no typography, no captions.`
       setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
       try {
-        const dataUrl = await fetchGeneratedImage(slide.num, prompt, true, '4:5')
-        setSlides(prev => prev.map(s => s.num === slide.num ? { ...s, imagePath: dataUrl } : s))
+        const dataUrl   = await fetchGeneratedImage(slide.num, prompt, true, '4:5')
+        const persisted = await uploadSplitImage(slide.num, dataUrl)
+        const splitCardDataUrl = await renderSplitCardDataUrl(
+          { ...slide, imagePath: persisted },
+          { imageDataUrl: dataUrl, sourceSlides: slides }
+        )
+        const stored = await uploadCardToStorage(slide.num, splitCardDataUrl.replace(/^data:image\/png;base64,/, ''))
+        setSlides(prev => prev.map(s => s.num === slide.num
+          ? { ...s, imagePath: persisted, cardPath: stored?.url || splitCardDataUrl, cardStoragePath: stored?.path }
+          : s))
         setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
       } catch (err) {
         console.error(`Erro split-content ${slide.num}:`, err)
@@ -628,7 +783,21 @@ No text, no typography, no captions.`
     }
 
     // ── Split-CTA: sem imagem de fundo (CtaContent usa background sólido) ──
-    if (slide.layout === 'split-cta') return
+    if (slide.layout === 'split-cta') {
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
+      try {
+        const splitCardDataUrl = await renderSplitCardDataUrl(slide, { sourceSlides: slides })
+        const stored = await uploadCardToStorage(slide.num, splitCardDataUrl.replace(/^data:image\/png;base64,/, ''))
+        setSlides(prev => prev.map(s => s.num === slide.num
+          ? { ...s, cardPath: stored?.url || splitCardDataUrl, cardStoragePath: stored?.path }
+          : s))
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
+      } catch (err) {
+        console.error(`Erro split-cta ${slide.num}:`, err)
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'error' }))
+      }
+      return
+    }
 
     // ── Frank / demais slides: fluxo original ──
     const imagePrompt = slide.imagePrompt || FALLBACK_IMAGE_PROMPTS[slide.type]
@@ -681,10 +850,11 @@ No text, no typography, no captions.`
     }
   }
 
-  async function handleGenerateImages() {
+  async function handleGenerateImages(onComplete?: () => void) {
     setGeneratingImages(true)
     await Promise.all(slides.map(slide => generateOneSlide(slide)))
     setGeneratingImages(false)
+    onComplete?.()
     // Salva imediatamente após gerar todas as imagens, sem esperar o debounce de 1.5s,
     // para garantir que bgImageStoragePath seja persistido antes do usuário navegar.
     if (carouselId) {
@@ -693,7 +863,8 @@ No text, no typography, no captions.`
         setSlides(current => {
           const slidesForSave = current.map(({ imagePath, cardPath, ...rest }) => ({
             ...rest,
-            ...(cardPath && !cardPath.startsWith('data:') ? { cardPath } : {}),
+            ...(imagePath && !imagePath.startsWith('data:') ? { imagePath } : {}),
+            ...(cardPath  && !cardPath.startsWith('data:')  ? { cardPath }  : {}),
           }))
           fetch(`/api/carousels/${carouselId}`, {
             method: 'PATCH',
@@ -725,22 +896,31 @@ No text, no typography, no captions.`
 
     setPublishing(true)
     try {
-      const sessionId = `carousel-${Date.now()}`
-      const saveRes = await fetch('/api/save-images', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slides: slidesToPublish.map(s => ({ num: s.num, dataUrl: s.cardPath || s.imagePath })),
-          sessionId,
-        }),
-      })
-      const saveData = await saveRes.json()
-      if (saveData.error) throw new Error(saveData.error)
+      const existingUrls = slidesToPublish
+        .map((slide) => slide.cardPath || slide.imagePath || '')
+        .filter((value) => value && !value.startsWith('data:'))
+
+      const imageUrls = existingUrls.length === slidesToPublish.length
+        ? existingUrls
+        : await (async () => {
+            const sessionId = `carousel-${Date.now()}`
+            const saveRes = await fetch('/api/save-images', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                slides: slidesToPublish.map(s => ({ num: s.num, dataUrl: s.cardPath || s.imagePath })),
+                sessionId,
+              }),
+            })
+            const saveData = await saveRes.json()
+            if (saveData.error) throw new Error(saveData.error)
+            return saveData.urls as string[]
+          })()
 
       const publishRes = await fetch('/api/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrls: saveData.urls, caption }),
+        body: JSON.stringify({ imageUrls, caption, carouselId }),
       })
       const publishData = await publishRes.json()
       if (publishData.error) throw new Error(publishData.error)
@@ -785,7 +965,8 @@ No text, no typography, no captions.`
     }
   }
 
-  const imagesReady = slides.length > 0 && slides.every(s => imageProgress[s.num] === 'done')
+  const readySlidesCount = slides.filter(s => imageProgress[s.num] === 'done').length
+  const imagesReady = slides.length > 0 && readySlidesCount === slides.length
 
   // ── Tela de edição ───────────────────────────────────────────────────────
   if (stage === 'editing') {
@@ -801,17 +982,31 @@ No text, no typography, no captions.`
           <div className="w-px h-5 bg-zinc-800 flex-shrink-0" />
           <h1 className="text-sm font-medium text-zinc-400 flex-1 truncate min-w-0">{selectedTopic}</h1>
 
-          {/* Agendador */}
-          {carouselId && !publishedUrl && (
-            <div className="relative flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {!publishedUrl && (
+              <span className="hidden xl:inline text-[11px] text-zinc-500 whitespace-nowrap">
+                {imagesReady
+                  ? 'Aprovacao opcional'
+                  : `${readySlidesCount}/${slides.length} slides prontos`}
+              </span>
+            )}
+
+            {/* Agendador */}
+            {!publishedUrl && (
+              <div className="relative flex-shrink-0">
               <button
                 onClick={() => setShowScheduler(v => !v)}
+                disabled={!carouselId}
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-colors border',
+                  !carouselId
+                    ? 'border-zinc-800 text-zinc-600 cursor-not-allowed'
+                    : '',
                   scheduledAt
                     ? 'border-violet-600/50 text-violet-300 bg-violet-900/20 hover:bg-violet-900/35'
                     : 'border-zinc-700 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
                 )}
+                title={carouselId ? 'Agendar publicacao' : 'Salvando carrossel para habilitar agendamento'}
               >
                 <Calendar className="w-3.5 h-3.5" />
                 {scheduledAt
@@ -819,7 +1014,7 @@ No text, no typography, no captions.`
                   : 'Agendar'
                 }
               </button>
-              {showScheduler && (
+              {showScheduler && carouselId && (
                 <div className="absolute right-0 top-10 z-50 bg-zinc-900 border border-zinc-700/80 rounded-xl p-4 shadow-2xl flex flex-col gap-3 min-w-[230px]">
                   <p className="text-xs text-zinc-400 font-medium">Publicar automaticamente em:</p>
                   <input
@@ -848,31 +1043,32 @@ No text, no typography, no captions.`
                   </div>
                 </div>
               )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {publishedUrl ? (
-            <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
-              <Button size="sm" className="bg-green-600 hover:bg-green-500 text-white gap-1.5 h-8">
-                <Check className="w-3.5 h-3.5" /> Ver no Instagram
+            {publishedUrl ? (
+              <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                <Button size="sm" className="bg-green-600 hover:bg-green-500 text-white gap-1.5 h-8">
+                  <Check className="w-3.5 h-3.5" /> Ver no Instagram
+                </Button>
+              </a>
+            ) : (
+              <Button
+                size="sm"
+                className={cn(
+                  'gap-1.5 text-white h-8 flex-shrink-0',
+                  imagesReady ? 'bg-violet-600 hover:bg-violet-500' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                )}
+                onClick={handlePublish}
+                disabled={!imagesReady || publishing}
+              >
+                {publishing
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Publicando...</>
+                  : <><Send className="w-3.5 h-3.5" /> Publicar</>
+                }
               </Button>
-            </a>
-          ) : (
-            <Button
-              size="sm"
-              className={cn(
-                'gap-1.5 text-white h-8 flex-shrink-0',
-                imagesReady ? 'bg-violet-600 hover:bg-violet-500' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-              )}
-              onClick={handlePublish}
-              disabled={!imagesReady || publishing}
-            >
-              {publishing
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Publicando...</>
-                : <><Send className="w-3.5 h-3.5" /> Publicar</>
-              }
-            </Button>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -893,9 +1089,87 @@ No text, no typography, no captions.`
     )
   }
 
+  // ── Ângulos X vs Y ────────────────────────────────────────────────────────
+  if (stage === 'angles') {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
+        <div>
+          <button
+            onClick={() => setStage('discovery')}
+            className="mb-4 inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 px-3 py-1.5 text-xs text-zinc-500 hover:border-zinc-700 hover:text-zinc-200 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Voltar
+          </button>
+          <h1 className="text-xl font-semibold text-zinc-100">Escolha o ângulo</h1>
+          <p className="text-sm text-zinc-500 mt-1">
+            Tema: <span className="text-zinc-300">{pendingAngleTopic?.topic.title}</span>
+          </p>
+        </div>
+
+        {loadingAngles ? (
+          <div className="flex items-center gap-3 py-8 justify-center">
+            <Loader2 className="w-5 h-5 text-violet-400 animate-spin" />
+            <span className="text-sm text-zinc-400">Analisando desdobramentos do tema...</span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {angleOptions.map((angle, i) => (
+              <button
+                key={i}
+                onClick={() => handleSelectAngle(angle)}
+                className="w-full text-left rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 hover:border-violet-600/50 hover:bg-zinc-800/50 transition-all group"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-violet-600/20 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-violet-600/40 transition-colors">
+                    <span className="text-violet-400 text-xs font-bold">{i + 1}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-zinc-100 leading-snug">{angle.title}</p>
+                    <p className="text-xs text-violet-300 mt-0.5">{angle.subtitle}</p>
+                    <p className="text-xs text-zinc-500 mt-1">{angle.description}</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-zinc-600 flex-shrink-0 mt-1 group-hover:text-violet-400 transition-colors" />
+                </div>
+              </button>
+            ))}
+
+            {angleOptions.length === 0 && !loadingAngles && (
+              <p className="text-sm text-zinc-500 text-center py-4">Nenhum ângulo gerado. Escreva o seu abaixo.</p>
+            )}
+
+            <div className="pt-2 border-t border-zinc-800">
+              <p className="text-xs text-zinc-500 mb-2">Ou escreva seu próprio contraste:</p>
+              <div className="flex gap-2">
+                <input
+                  value={customAngle}
+                  onChange={e => setCustomAngle(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSelectCustomAngle()}
+                  placeholder="ex: FREELA VS. CLT"
+                  className="flex-1 h-9 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-violet-500"
+                />
+                <Button
+                  className="bg-violet-600 hover:bg-violet-500 text-white"
+                  disabled={!customAngle.trim()}
+                  onClick={handleSelectCustomAngle}
+                >
+                  <Sparkles className="w-4 h-4 mr-1.5" />
+                  Gerar
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // ── Gerando ──────────────────────────────────────────────────────────────
   if (stage === 'generating') {
     const clampedSlides = Math.min(slidesGenerated, 10)
+    const isGeneratingImages = generatingImages && slides.length > 0
+    const imagesReadyCount = Object.values(imageProgress).filter(v => v === 'done').length
+    const totalImages = slides.length
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center space-y-5">
@@ -904,9 +1178,21 @@ No text, no typography, no captions.`
           </div>
           <div className="space-y-2">
             <p className="text-sm font-medium text-zinc-100">
-              Gerando carrossel...
+              {isGeneratingImages ? 'Gerando imagens...' : 'Gerando carrossel...'}
             </p>
-            {clampedSlides > 0 ? (
+            {isGeneratingImages ? (
+              <>
+                <p className="text-xs text-zinc-400">
+                  <span className="text-violet-400 font-semibold">{imagesReadyCount}</span> de {totalImages} imagens prontas
+                </p>
+                <div className="w-48 h-1 bg-zinc-800 rounded-full mx-auto overflow-hidden">
+                  <div
+                    className="h-full bg-violet-500 rounded-full transition-all duration-300"
+                    style={{ width: `${totalImages > 0 ? (imagesReadyCount / totalImages) * 100 : 0}%` }}
+                  />
+                </div>
+              </>
+            ) : clampedSlides > 0 ? (
               <>
                 <p className="text-xs text-zinc-400">
                   Slide <span className="text-violet-400 font-semibold">{clampedSlides}</span> de 10
@@ -930,62 +1216,89 @@ No text, no typography, no captions.`
     )
   }
 
+  if (stage === 'template') {
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-10 space-y-8">
+        <div className="space-y-2">
+          <h1 className="text-xl font-semibold text-zinc-100">Escolha o template</h1>
+          <p className="text-sm text-zinc-500">Selecione o formato primeiro. Depois eu mostro a busca e os controles de geração desse template.</p>
+        </div>
+
+        {workspaceLimits && (
+          <div className={`rounded-xl border px-4 py-3 ${
+            workspaceLimits.canGenerate
+              ? workspaceLimits.usagePercent >= 80
+                ? 'border-amber-700/40 bg-amber-950/20'
+                : 'border-zinc-800 bg-zinc-900/30'
+              : 'border-red-700/40 bg-red-950/20'
+          }`}>
+            <p className={`text-xs font-medium ${
+              workspaceLimits.canGenerate
+                ? workspaceLimits.usagePercent >= 80 ? 'text-amber-300' : 'text-zinc-300'
+                : 'text-red-300'
+            }`}>
+              Créditos do mês: {formatCreditValue(workspaceLimits.usedCredits)}/{formatCreditValue(workspaceLimits.monthlyPostCredits)} ({workspaceLimits.usagePercent}%)
+            </p>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Plano {workspaceLimits.planLabel}. Restantes: {workspaceLimits.remainingCredits}.
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {TEMPLATES.filter(t => t.available).map((t) => {
+            const icon = t.layout === 'split' ? '⚡' : '📚'
+            const hint = getTemplateHint(t.id)
+            return (
+              <button
+                key={t.id}
+                onClick={() => handleTemplateSelect(t.id, t.name)}
+                className="text-left rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 hover:border-zinc-700 hover:bg-zinc-800/50 transition-all duration-150"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base leading-none">{icon}</span>
+                      <span className="text-sm font-semibold text-zinc-100">{t.name}</span>
+                    </div>
+                    <p className="text-xs text-zinc-500 leading-relaxed">{t.description}</p>
+                  </div>
+                  <span className="text-[10px] text-zinc-600 whitespace-nowrap">{t.slideCount} slides</span>
+                </div>
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {t.tags.slice(0, 3).map(tag => (
+                      <span key={tag} className="px-2 py-1 rounded-md bg-zinc-800 text-[10px] text-zinc-400">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="text-[11px] text-violet-400 font-medium">{hint}</span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   // ── Discovery ─────────────────────────────────────────────────────────────
   return (
     <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-zinc-100">Gerar Carrossel</h1>
-        <p className="text-sm text-zinc-500 mt-1">Escolha um tema viral ou escreva o seu próprio</p>
-      </div>
-
-      {/* Seletor de formato */}
-      <div>
-        <p className="text-xs text-zinc-500 mb-3">Formato do carrossel</p>
-        <div className="grid grid-cols-2 gap-3">
-          {TEMPLATES.filter(t => t.available).map(t => {
-            const isActive = activeTemplateId === t.id
-            const icon = t.layout === 'split' ? '⚡' : '📚'
-            const hint = t.layout === 'split'
-              ? 'Dois lados · Provocativo · Alto engajamento'
-              : 'Educativo · Constrói autoridade · Hook poderoso'
-            return (
-              <button
-                key={t.id}
-                onClick={() => {
-                  setActiveTemplateId(t.id)
-                  setActiveTemplateName(t.name)
-                  const preset = TEMPLATE_PRESETS[t.id]
-                  if (preset) {
-                    setTextLength(preset.textLength)
-                    setUseFixedSlides(preset.useFixedSlides)
-                  }
-                }}
-                className={cn(
-                  'text-left rounded-xl border p-4 transition-all duration-150',
-                  isActive
-                    ? 'border-violet-500/60 bg-violet-500/10 ring-1 ring-violet-500/30'
-                    : 'border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-800/50'
-                )}
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base leading-none">{icon}</span>
-                    <span className={cn('text-sm font-semibold', isActive ? 'text-violet-200' : 'text-zinc-200')}>
-                      {t.name}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-zinc-600 flex-shrink-0 mt-0.5">{t.slideCount} slides</span>
-                </div>
-                <p className="text-xs text-zinc-500 leading-relaxed">{hint}</p>
-                {isActive && (
-                  <div className="mt-2.5 flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />
-                    <span className="text-[10px] text-violet-400 font-medium">Selecionado</span>
-                  </div>
-                )}
-              </button>
-            )
-          })}
+        <button
+          onClick={() => setStage('template')}
+          className="mb-4 inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 px-3 py-1.5 text-xs text-zinc-500 hover:border-zinc-700 hover:text-zinc-200 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Trocar template
+        </button>
+        <h1 className="text-xl font-semibold text-zinc-100">{activeTemplateName}</h1>
+        <p className="text-sm text-zinc-500 mt-1">Escolha um tema viral ou escreva o seu próprio para este template.</p>
+        <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5">
+          <span className="text-xs font-medium text-violet-300">{activeTemplateName}</span>
+          <span className="text-[11px] text-violet-400">{getTemplateHint(activeTemplateId)}</span>
         </div>
       </div>
 
@@ -1148,7 +1461,11 @@ No text, no typography, no captions.`
       </div>
 
       {/* Topic Discovery */}
-      <TopicDiscovery niche={niche} templateId={activeTemplateId} onSelect={handleGenerate} />
+      <TopicDiscovery
+        niche={niche}
+        templateId={activeTemplateId}
+        onSelect={activeTemplateId === 'positivo-negativo' ? handleDiscoverAngles : handleGenerate}
+      />
     </div>
   )
 }

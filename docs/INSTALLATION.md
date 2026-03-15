@@ -2,7 +2,7 @@
 
 > Para instalar uma nova instância do sistema do zero.
 > Inclui configuração do Supabase, variáveis de ambiente e primeiro acesso.
-> Versão: 2.1 — 2026-03-07
+> Versão: 2.2 — 2026-03-15
 
 ---
 
@@ -217,6 +217,21 @@ npm run dev
 5. Clique em `Novo` para abrir o modal de experts já cadastrados no DNA e selecione um.
 6. Envie as fotos e use `Voltar` para retornar à lista quando necessário.
 
+### Fluxo operacional do dashboard
+
+Depois que houver carrosséis gerados, o workspace pode operar tudo em `/dashboard`:
+
+1. Abrir o carrossel individual em `/dashboard/[id]`
+2. Publicar usando imagens já persistidas quando existirem
+3. Repostar um carrossel publicado
+4. Abrir o link direto do post no Instagram
+5. Excluir somente do sistema
+6. Excluir somente do Instagram
+7. Excluir de ambos
+8. Selecionar múltiplos itens no dashboard para exclusão em lote
+
+> Essas ações não exigem nova configuração do Supabase além do setup padrão deste guia.
+
 ---
 
 ## Passo 8 — Configurar publicação agendada (opcional)
@@ -288,6 +303,7 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 - [ ] Owner definido via SQL (`UPDATE profiles SET role = 'owner'`)
 - [ ] Chaves de IA configuradas em `/admin/settings`
 - [ ] Validar visão owner em `/admin` e `/admin/carousels`
+- [ ] Validar `/dashboard` com repost, abrir post e exclusão em lote
 
 ### Para geração de conteúdo
 
@@ -308,6 +324,7 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 - [ ] Conta Meta Developer configurada
 - [ ] `Instagram Account ID` configurado em `/expert/dna`
 - [ ] `Meta Access Token` configurado em `/expert/dna` (ou fallback no `.env.local`)
+- [ ] Validar também `Repostar`, `Abrir post` e `Excluir IG` em `/dashboard`
 
 ### Para agendamento
 
@@ -319,6 +336,24 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 ---
 
 ## Troubleshooting
+
+### Preciso rodar algo novo no Supabase após essas correções?
+
+Não, desde que a instância já tenha sido provisionada conforme este guia.
+
+Estas mudanças foram apenas em aplicação:
+
+- correção de fluxo duplicado do template `X vs Y`
+- persistência correta das imagens do carrossel
+- endpoint operacional `/api/carousels/actions`
+- ações de repost/exclusão/link direto no `/dashboard`
+
+Só será necessário mexer no Supabase novamente se a nova instância ainda não tiver:
+
+- schema `supabase-schema.sql` aplicado
+- bucket `carousel-images`
+- bucket `expert-photos`
+- credenciais Meta válidas por expert ou via `.env.local`
 
 ### Login não funciona
 - Verifique `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` no `.env.local`

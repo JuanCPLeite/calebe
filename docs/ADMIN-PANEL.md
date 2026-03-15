@@ -2,7 +2,7 @@
 
 > Acesso exclusivo do owner da plataforma (role = 'owner').
 > Rota: `/admin`
-> Versão: 1.1 — 2026-03-07
+> Versão: 1.2 — 2026-03-15
 
 ---
 
@@ -51,6 +51,7 @@ O painel admin é a central de operação do SaaS. O owner vê dados de toda a p
 - [x] UI `/admin/costs` com custo total, top workspaces, top usuários e modelos mais caros
 - [x] Workspace `/team` exibe limites de membros/créditos e bloqueia convite ao atingir limite
 - [x] Workspace `/dashboard` exibe alerta de risco/esgotamento de créditos para upgrade
+- [x] Workspace `/dashboard` ganhou ações operacionais: repost, abrir post, excluir do sistema, excluir do Instagram e exclusão em lote
 - [x] `/admin/carousels` com soft delete e restauração (auditoria preservada)
 - [ ] Refinos finais de UX nas telas admin (próximo foco: selector de workspace no header)
 

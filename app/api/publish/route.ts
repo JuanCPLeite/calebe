@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getExpertForContext } from '@/lib/expert-config'
 import { publishCarousel } from '@/lib/instagram'
+import { getInstagramPermalink } from '@/lib/instagram'
 import { createClient } from '@/lib/supabase/server'
 import { getWorkspaceContext } from '@/lib/workspace'
 import { log } from '@/lib/logger'
@@ -82,6 +83,7 @@ export async function POST(req: NextRequest) {
       imageUrls,
       caption,
     })
+    const permalink = await getInstagramPermalink(postId, metaToken).catch(() => null)
 
     if (carouselId) {
       await supabase
@@ -113,7 +115,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       postId,
-      url: `https://www.instagram.com/${expert.handle.replace('@', '')}/`,
+      ig_post_id: postId,
+      permalink,
+      url: permalink || `https://www.instagram.com/${expert.handle.replace('@', '')}/`,
     })
   } catch (err: any) {
     console.error('[publish]', err.message)

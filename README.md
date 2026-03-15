@@ -40,7 +40,7 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 
 ---
 
-## Estado atual (07/03/2026)
+## Estado atual (15/03/2026)
 
 ### Implementado
 - Auth Supabase (rotas privadas + callback)
@@ -51,7 +51,8 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Publicação no Instagram via Meta Graph API
 - Agendamento com cron nativo Supabase
 - Agendamento validado com Edge Function `publish-scheduled` usando credenciais Meta em `experts` (com fallback env)
-- Dashboard: lista/grid, filtros, métricas, thumbnails ao vivo, duplicar, excluir
+- Dashboard: lista/grid, filtros, métricas, thumbnails ao vivo, duplicar, repostar, link direto do post e excluir
+- Dashboard: seleção múltipla para excluir em lote do sistema, do Instagram ou de ambos
 - Admin owner: visão global de postagens em `/admin/carousels` com ações operacionais
 - Admin owner: gestão de tipos de plano em `/admin/plans` (planos customizados + limite de experts)
 - Planos agora suportam também `memberLimit` e `monthlyPostCredits`
@@ -81,6 +82,9 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - `/generate` mostra aviso prévio de créditos via `/api/workspace/limits`
 - exclusão de carrossel não reduz histórico de uso/custo já registrado em `usage_events`
 - cron/publicação ignoram carrosséis excluídos logicamente
+- fluxo `X vs Y` não duplica mais inserts em `carousels`
+- fluxo `X vs Y` persiste imagens com o `carouselId` real antes da navegação para o dashboard
+- publicação reutiliza URLs já persistidas quando disponíveis, reduzindo upload redundante
 
 ### Roadmap
 Ver `ROADMAP.md` para o plano completo.
@@ -95,6 +99,26 @@ cp .env.example .env.local   # preencher com chaves do Supabase
 npm run dev
 # http://localhost:8080
 ```
+
+### Mudanças recentes: preciso rodar algo no Supabase?
+
+Não para este pacote de correções.
+
+- Não há nova migration SQL
+- Não há novo bucket
+- Não há nova Edge Function
+- Não há novo secret obrigatório
+
+Se a instância já foi provisionada com `supabase-schema.sql` e já possui os buckets `carousel-images` e `expert-photos`, não é necessário executar nada extra no Supabase para:
+
+- correção do template `X vs Y`
+- repost/exclusão/link direto no dashboard
+- exclusão em lote no dashboard
+
+O pré-requisito operacional continua sendo o mesmo para ações do Instagram:
+
+- `ig_account_id` e `ig_access_token` válidos no expert, ou fallback via `.env.local`
+- imagens persistidas no bucket `carousel-images`
 
 ## Fluxo recomendado de Expert (importante)
 

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { CarouselPreview, type Slide, type ExpertInfo } from '@/components/generate/carousel-preview'
 import {
   ArrowLeft, Send, Loader2, ExternalLink,
-  Calendar, Check, X,
+  Calendar, Check, X, RotateCcw, Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -31,6 +31,8 @@ export default function CarouselDetailPage() {
   const [generatingImages, setGeneratingImages] = useState(false)
   const [imageProgress, setImageProgress] = useState<Record<number, 'loading' | 'done' | 'error'>>({})
   const [publishing, setPublishing]       = useState(false)
+  const [acting, setActing]               = useState<string | null>(null)
+  const [permalink, setPermalink]         = useState<string>('')
   const [scheduledAt, setScheduledAt]     = useState('')
   const [showScheduler, setShowScheduler] = useState(false)
   const [scheduling, setScheduling]       = useState(false)
@@ -349,31 +351,90 @@ export default function CarouselDetailPage() {
 
     setPublishing(true)
     try {
-      const sessionId = `carousel-${id}`
-      const saveRes  = await fetch('/api/save-images', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slides: toPublish.map(s => ({ num: s.num, dataUrl: s.cardPath || s.imagePath })),
-          sessionId,
-        }),
-      })
-      const saveData = await saveRes.json()
-      if (saveData.error) throw new Error(saveData.error)
+      const existingUrls = toPublish
+        .map((slide) => slide.cardPath || slide.imagePath || '')
+        .filter((value) => value && !value.startsWith('data:'))
+
+      const imageUrls = existingUrls.length === toPublish.length
+        ? existingUrls
+        : await (async () => {
+            const sessionId = `carousel-${id}`
+            const saveRes  = await fetch('/api/save-images', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                slides: toPublish.map(s => ({ num: s.num, dataUrl: s.cardPath || s.imagePath })),
+                sessionId,
+              }),
+            })
+            const saveData = await saveRes.json()
+            if (saveData.error) throw new Error(saveData.error)
+            return saveData.urls as string[]
+          })()
 
       const pubRes  = await fetch('/api/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrls: saveData.urls, caption, carouselId: id }),
+        body: JSON.stringify({ imageUrls, caption, carouselId: id }),
       })
       const pubData = await pubRes.json()
       if (pubData.error) throw new Error(pubData.error)
 
-      setCarousel((prev: any) => ({ ...prev, ig_post_id: pubData.ig_post_id || 'published' }))
+      setPermalink(pubData.permalink || pubData.url || '')
+      setCarousel((prev: any) => ({
+        ...prev,
+        ig_post_id: pubData.ig_post_id || pubData.postId || prev?.ig_post_id || null,
+        published_at: new Date().toISOString(),
+      }))
     } catch (err: any) {
       alert(`Erro ao publicar: ${err.message}`)
     } finally {
       setPublishing(false)
+    }
+  }
+
+  async function handleCarouselAction(action: 'repost' | 'delete_instagram' | 'delete_system' | 'delete_both' | 'get_permalink') {
+    setActing(action)
+    try {
+      const res = await fetch('/api/carousels/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [id], action }),
+      })
+      const data = await res.json()
+      const result = Array.isArray(data.results) ? data.results[0] : null
+      if (!res.ok && res.status !== 207) throw new Error(data.error || 'Falha ao executar ação')
+      if (!result?.ok) throw new Error(result?.error || 'Falha ao executar ação')
+
+      if (action === 'get_permalink') {
+        const url = result.permalink || permalink
+        if (url) {
+          setPermalink(url)
+          window.open(url, '_blank', 'noopener,noreferrer')
+        }
+        return
+      }
+
+      if (action === 'repost') {
+        if (result?.permalink) {
+          setPermalink(result.permalink as string)
+          window.open(result.permalink as string, '_blank', 'noopener,noreferrer')
+        }
+        router.push('/dashboard')
+        return
+      }
+
+      if (action === 'delete_instagram') {
+        setPermalink('')
+        setCarousel((prev: any) => ({ ...prev, ig_post_id: null, published_at: null }))
+        return
+      }
+
+      router.push('/dashboard')
+    } catch (err: any) {
+      alert(err.message || 'Falha ao executar ação')
+    } finally {
+      setActing(null)
     }
   }
 
@@ -433,13 +494,54 @@ export default function CarouselDetailPage() {
             <ArrowLeft className="w-4 h-4 mr-1.5" /> Dashboard
           </Button>
           <h1 className="text-sm font-medium text-zinc-300 flex-1 truncate">{carousel.topic}</h1>
-          {carousel.ig_post_id && carousel.ig_post_id !== 'published' && (
-            <a href={`https://www.instagram.com/p/${carousel.ig_post_id}/`} target="_blank" rel="noopener noreferrer">
-              <Button size="sm" className="bg-green-600 hover:bg-green-500 text-white gap-1.5">
-                <ExternalLink className="w-3.5 h-3.5" /> Ver no Instagram
-              </Button>
-            </a>
-          )}
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-zinc-700 text-zinc-200 gap-1.5"
+              onClick={() => handleCarouselAction('repost')}
+              disabled={acting !== null}
+            >
+              {acting === 'repost' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+              Repostar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-zinc-700 text-zinc-200 gap-1.5"
+              onClick={() => handleCarouselAction('get_permalink')}
+              disabled={acting !== null}
+            >
+              {acting === 'get_permalink' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5" />}
+              Abrir post
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-900 text-amber-300 gap-1.5"
+              onClick={() => {
+                if (!confirm('Remover este post apenas do Instagram?')) return
+                handleCarouselAction('delete_instagram')
+              }}
+              disabled={acting !== null}
+            >
+              {acting === 'delete_instagram' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              Excluir IG
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-red-900 text-red-300 gap-1.5"
+              onClick={() => {
+                if (!confirm('Excluir do sistema e também remover do Instagram?')) return
+                handleCarouselAction('delete_both')
+              }}
+              disabled={acting !== null}
+            >
+              {acting === 'delete_both' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              Excluir ambos
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           {slides.map((s, i) => (
@@ -469,6 +571,31 @@ export default function CarouselDetailPage() {
         </button>
         <div className="w-px h-5 bg-zinc-800 flex-shrink-0" />
         <h1 className="text-sm font-medium text-zinc-400 flex-1 truncate min-w-0">{carousel.topic}</h1>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-zinc-700 text-zinc-200 gap-1.5 h-8"
+            onClick={() => handleCarouselAction('repost')}
+            disabled={acting !== null}
+          >
+            {acting === 'repost' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+            Repostar
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-red-900 text-red-300 gap-1.5 h-8"
+            onClick={() => {
+              if (!confirm('Excluir este carrossel do sistema?')) return
+              handleCarouselAction('delete_system')
+            }}
+            disabled={acting !== null}
+          >
+            {acting === 'delete_system' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+            Excluir
+          </Button>
+        </div>
 
         {/* Agendador */}
         <div className="relative flex-shrink-0">

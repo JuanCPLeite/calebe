@@ -54,6 +54,35 @@ function graphGet(path: string, token: string): Promise<any> {
   })
 }
 
+function graphDelete(path: string, token: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: GRAPH_BASE,
+      path: `/${API_VERSION}/${path}?access_token=${encodeURIComponent(token)}`,
+      method: 'DELETE',
+      timeout: 15000,
+    }, (res) => {
+      let data = ''
+      res.on('data', (d) => { data += d })
+      res.on('end', () => {
+        if (!data) {
+          resolve({ success: true })
+          return
+        }
+        try {
+          const json = JSON.parse(data)
+          if (json.error) reject(new Error(`Graph API: ${json.error.message}`))
+          else resolve(json)
+        } catch (e: any) {
+          reject(new Error(`Parse error: ${e.message}`))
+        }
+      })
+    })
+    req.on('error', reject)
+    req.end()
+  })
+}
+
 /** Aguarda o container do carrossel estar pronto (polling) em vez de sleep fixo */
 async function waitForCarouselReady(
   mediaId: string,
@@ -105,4 +134,15 @@ export async function publishCarousel(opts: PublishCarouselOpts): Promise<string
   }, token)
 
   return result.id
+}
+
+export async function deleteInstagramMedia(mediaId: string, token: string): Promise<void> {
+  await graphDelete(mediaId, token)
+}
+
+export async function getInstagramPermalink(mediaId: string, token: string): Promise<string | null> {
+  const result = await graphGet(`${mediaId}?fields=permalink`, token)
+  return typeof result?.permalink === 'string' && result.permalink.trim()
+    ? result.permalink
+    : null
 }
