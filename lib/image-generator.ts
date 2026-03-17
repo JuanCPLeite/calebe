@@ -1,8 +1,8 @@
 import https from 'https'
 
 const GEMINI_MODELS = [
-  'gemini-2.5-flash-image',
   'gemini-3-pro-image-preview',
+  'gemini-2.5-flash-image',
   'gemini-2.0-flash-exp-image-generation',
 ]
 const GOOGLE_HOST = 'generativelanguage.googleapis.com'
@@ -60,8 +60,8 @@ function callGeminiApi(
   const body = JSON.stringify({
     contents: [{ parts }],
     generationConfig: {
-      responseModalities: ['IMAGE'],
-      imageConfig: { aspectRatio, imageSize: '2K' },
+      response_modalities: ['IMAGE'],
+      imageConfig: { aspect_ratio: aspectRatio, image_size: '2K' },
     },
   })
 

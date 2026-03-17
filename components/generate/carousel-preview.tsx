@@ -224,7 +224,19 @@ export function CarouselPreview({
 
   const isReordered = slides.some((s, i) => s.num !== i + 1)
 
-  function isSplitSlide(s: Slide) { return !!s.layout?.startsWith('split') }
+  function isSplitSlide(s: Slide) {
+    return !!s.layout?.startsWith('split') || 'esquerda' in s || 'labelEsquerda' in s
+  }
+
+  /** Retorna o índice 1-based do slide entre os split-content (undefined se não for content) */
+  function contentIndexFor(idx: number): number | undefined {
+    if (slides[idx]?.layout !== 'split-content') return undefined
+    let count = 0
+    for (let i = 0; i < idx; i++) {
+      if (slides[i].layout === 'split-content') count++
+    }
+    return count + 1
+  }
 
   // Dados do slide ativo
   const slide        = slides[activeSlide]
@@ -273,9 +285,18 @@ export function CarouselPreview({
                     isDragOver ? 'ring-2 ring-violet-400 scale-105' : '',
                     isDragging ? 'opacity-20 scale-95' : '',
                   )}
-                  style={{ width: 68, height: 85, background: '#fff', flexShrink: 0 }}
+                  style={{ width: 68, height: 85, background: isSplitSlide(s) ? '#0c0c0c' : '#fff', flexShrink: 0 }}
                 >
-                  {s.cardPath
+                  {isSplitSlide(s) ? (
+                      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                        <SplitCard
+                          slide={s as SplitSlide}
+                          accentColor={expert.highlightColor}
+                          displayWidth={68}
+                          contentIndex={contentIndexFor(i)}
+                        />
+                      </div>
+                    ) : s.cardPath
                     // eslint-disable-next-line @next/next/no-img-element
                     ? <img src={s.cardPath} className="absolute inset-0 w-full h-full object-cover" alt="" />
                     : (
@@ -411,7 +432,12 @@ export function CarouselPreview({
               {activeSlide > 0 ? (
                 <div className="rounded-xl overflow-hidden cursor-pointer border border-zinc-800/40">
                   {isSplitSlide(slides[activeSlide - 1]) ? (
-                    <SplitCard slide={slides[activeSlide - 1] as SplitSlide} accentColor={expert.highlightColor} displayWidth={200} />
+                    <SplitCard
+                      slide={slides[activeSlide - 1] as SplitSlide}
+                      accentColor={expert.highlightColor}
+                      displayWidth={200}
+                      contentIndex={contentIndexFor(activeSlide - 1)}
+                    />
                   ) : (
                     <FrankCard
                       text={slides[activeSlide - 1].text}
@@ -443,7 +469,18 @@ export function CarouselPreview({
             >
               <div className="relative flex justify-center" style={{ background: isSplitSlide(slide) ? '#0c0c0c' : '#fff' }}>
                 {isSplitSlide(slide) ? (
-                  <SplitCard slide={slide as SplitSlide} accentColor={expert.highlightColor} displayWidth={PREVIEW_W} />
+                  <SplitCard
+                    slide={slide as SplitSlide}
+                    accentColor={expert.highlightColor}
+                    displayWidth={PREVIEW_W}
+                    contentIndex={contentIndexFor(activeSlide)}
+                    onCoverTitleChange={slide.layout === 'split-cover'
+                      ? text => updateSlide(activeSlide, { text })
+                      : undefined}
+                    onCoverSubtitleChange={slide.layout === 'split-cover'
+                      ? text => updateSlide(activeSlide, { subtitulo: text })
+                      : undefined}
+                  />
                 ) : (
                   <FrankCard
                     text={slide.text}
@@ -483,7 +520,12 @@ export function CarouselPreview({
               {activeSlide < slides.length - 1 ? (
                 <div className="rounded-xl overflow-hidden cursor-pointer border border-zinc-800/40">
                   {isSplitSlide(slides[activeSlide + 1]) ? (
-                    <SplitCard slide={slides[activeSlide + 1] as SplitSlide} accentColor={expert.highlightColor} displayWidth={200} />
+                    <SplitCard
+                      slide={slides[activeSlide + 1] as SplitSlide}
+                      accentColor={expert.highlightColor}
+                      displayWidth={200}
+                      contentIndex={contentIndexFor(activeSlide + 1)}
+                    />
                   ) : (
                     <FrankCard
                       text={slides[activeSlide + 1].text}

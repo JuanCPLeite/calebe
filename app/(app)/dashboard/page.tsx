@@ -266,7 +266,7 @@ export default function DashboardPage() {
     setSelectedIds((prev) => prev.filter((id) => filtered.some((item) => item.id === id)))
   }, [filtered])
 
-  async function runCarouselAction(ids: string[], action: 'duplicate' | 'repost' | 'get_permalink' | 'delete_system' | 'delete_instagram' | 'delete_both') {
+  async function runCarouselAction(ids: string[], action: 'duplicate' | 'repost' | 'get_permalink' | 'delete_system') {
     const res = await fetch('/api/carousels/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -284,14 +284,6 @@ export default function DashboardPage() {
       return next
     })
     setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)))
-  }
-
-  function updateCarousel(id: string, patch: Partial<Carousel>) {
-    setCarousels((prev) => {
-      const next = prev.map((item) => item.id === id ? { ...item, ...patch } : item)
-      setStats(computeStats(next))
-      return next
-    })
   }
 
   async function handleDelete(e: React.MouseEvent, id: string) {
@@ -326,6 +318,7 @@ export default function DashboardPage() {
 
   async function handleRepost(e: React.MouseEvent, c: Carousel) {
     e.stopPropagation()
+    if (!c.ig_post_id) return
     setReposting(c.id)
     try {
       const results = await runCarouselAction([c.id], 'repost')
@@ -358,27 +351,15 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleBulkDelete(action: 'delete_system' | 'delete_instagram' | 'delete_both') {
+  async function handleBulkDelete(action: 'delete_system') {
     if (!selectedIds.length) return
-    const labels: Record<typeof action, string> = {
-      delete_system: 'Excluir os selecionados do sistema?',
-      delete_instagram: 'Remover os selecionados do Instagram?',
-      delete_both: 'Excluir os selecionados do sistema e do Instagram?',
-    }
-    if (!confirm(labels[action])) return
+    if (!confirm('Ocultar/excluir os selecionados do sistema?')) return
 
     setBulkAction(action)
     try {
       const results = await runCarouselAction(selectedIds, action)
       const successIds = results.filter((item: any) => item.ok).map((item: any) => item.id as string)
-      if (action === 'delete_instagram') {
-        for (const id of successIds) {
-          updateCarousel(id, { ig_post_id: null, published_at: null })
-        }
-        setSelectedIds((prev) => prev.filter((id) => !successIds.includes(id)))
-      } else {
-        removeCarouselsFromState(successIds)
-      }
+      removeCarouselsFromState(successIds)
     } finally {
       setBulkAction(null)
     }
@@ -417,16 +398,18 @@ export default function DashboardPage() {
             {openingLink === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5" />}
           </button>
         )}
-        <button
-          onClick={e => handleRepost(e, c)}
-          disabled={reposting === c.id}
-          title="Repostar"
-          className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-40 transition-colors"
-        >
-          {reposting === c.id
-            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            : <RotateCcw className="w-3.5 h-3.5" />}
-        </button>
+        {c.ig_post_id && (
+          <button
+            onClick={e => handleRepost(e, c)}
+            disabled={reposting === c.id}
+            title="Repostar"
+            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-40 transition-colors"
+          >
+            {reposting === c.id
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <RotateCcw className="w-3.5 h-3.5" />}
+          </button>
+        )}
         <button
           onClick={(e) => {
             e.stopPropagation()
@@ -600,25 +583,11 @@ export default function DashboardPage() {
             <>
               <span className="text-xs text-zinc-500">{selectedIds.length} selecionados</span>
               <button
-                onClick={() => handleBulkDelete('delete_instagram')}
-                disabled={bulkAction !== null}
-                className="rounded-lg border border-amber-900/60 bg-amber-950/20 px-3 py-1.5 text-xs text-amber-300 disabled:opacity-50"
-              >
-                {bulkAction === 'delete_instagram' ? 'Processando...' : 'Excluir Instagram'}
-              </button>
-              <button
                 onClick={() => handleBulkDelete('delete_system')}
                 disabled={bulkAction !== null}
                 className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-200 disabled:opacity-50"
               >
-                {bulkAction === 'delete_system' ? 'Processando...' : 'Excluir sistema'}
-              </button>
-              <button
-                onClick={() => handleBulkDelete('delete_both')}
-                disabled={bulkAction !== null}
-                className="rounded-lg border border-red-900/60 bg-red-950/20 px-3 py-1.5 text-xs text-red-300 disabled:opacity-50"
-              >
-                {bulkAction === 'delete_both' ? 'Processando...' : 'Excluir ambos'}
+                {bulkAction === 'delete_system' ? 'Processando...' : 'Excluir do sistema'}
               </button>
             </>
           )}
@@ -783,16 +752,18 @@ export default function DashboardPage() {
                     >
                       {selectedIds.includes(c.id) ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
                     </button>
-                    <button
-                      onClick={e => handleRepost(e, c)}
-                      disabled={reposting === c.id}
-                      title="Repostar"
-                      className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-900/90 text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors shadow"
-                    >
-                      {reposting === c.id
-                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        : <RotateCcw className="w-3.5 h-3.5" />}
-                    </button>
+                    {c.ig_post_id && (
+                      <button
+                        onClick={e => handleRepost(e, c)}
+                        disabled={reposting === c.id}
+                        title="Repostar"
+                        className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-900/90 text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors shadow"
+                      >
+                        {reposting === c.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <RotateCcw className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
                     <button
                       onClick={e => handleDuplicate(e, c)}
                       disabled={duplicating === c.id}

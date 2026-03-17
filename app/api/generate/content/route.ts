@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'Não autenticado' }), { status: 401 })
   }
 
-  const { topic, hook, splitTitle, splitSubtitle, textLength, useFixedSlides, templateId, providerId, model } = await req.json()
+  const { topic, hook, splitTitle, splitSubtitle, textLength, contentStyle, useFixedSlides, templateId, providerId, model } = await req.json()
   if (!topic) {
     return new Response(JSON.stringify({ error: 'topic obrigatório' }), { status: 400 })
   }
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
   }
 
   const resolvedTemplateId = templateId || 'frank-costa-10'
-  const contentOptions = { textLength, useFixedSlides: useFixedSlides !== false }
+  const contentOptions = { textLength, contentStyle, useFixedSlides: useFixedSlides !== false }
   const startTime = Date.now()
 
   const encoder = new TextEncoder()

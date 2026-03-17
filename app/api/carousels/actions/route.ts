@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertWorkspaceBudgetAvailable } from '@/lib/cost-guardrails'
 import { assertWorkspaceCreditsAvailable } from '@/lib/credit-limits'
-import { deleteInstagramMedia, getInstagramPermalink, publishCarousel } from '@/lib/instagram'
+import { getInstagramPermalink, publishCarousel } from '@/lib/instagram'
 import { getExpertForContext, toExpertConfig } from '@/lib/expert-config'
 import { recordUsageEvent } from '@/lib/usage-events'
 
@@ -28,18 +28,18 @@ type Action =
   | 'repost'
   | 'get_permalink'
   | 'delete_system'
-  | 'delete_instagram'
-  | 'delete_both'
 
 function isValidAction(value: unknown): value is Action {
   return (
     value === 'duplicate' ||
     value === 'repost' ||
     value === 'get_permalink' ||
-    value === 'delete_system' ||
-    value === 'delete_instagram' ||
-    value === 'delete_both'
+    value === 'delete_system'
   )
+}
+
+function isPublishedCarousel(carousel: CarouselRow): boolean {
+  return Boolean(carousel.ig_post_id)
 }
 
 function asArray(value: unknown): string[] {
@@ -180,52 +180,17 @@ export async function POST(req: NextRequest) {
         }
 
         if (action === 'get_permalink') {
-          if (!carousel.ig_post_id) throw new Error('Carrossel ainda não foi publicado')
+          if (!isPublishedCarousel(carousel)) throw new Error('Link do Instagram só existe para carrossel publicado')
+          const igPostId = carousel.ig_post_id as string
           const expert = await resolveExpertToken(user.id, carousel)
           const token = expert?.igAccessToken || process.env.META_GRAPH_API_TOKEN || process.env.IG_TOKEN || ''
           if (!token) throw new Error('Token da Meta não configurado')
-          const permalink = await getInstagramPermalink(carousel.ig_post_id, token)
+          const permalink = await getInstagramPermalink(igPostId, token)
           results.push({
             id: carousel.id,
             ok: true,
-            permalink: permalink || `https://www.instagram.com/p/${carousel.ig_post_id}/`,
+            permalink: permalink || `https://www.instagram.com/p/${igPostId}/`,
           })
-          continue
-        }
-
-        if (action === 'delete_instagram' || action === 'delete_both') {
-          if (carousel.ig_post_id) {
-            const expert = await resolveExpertToken(user.id, carousel)
-            const token = expert?.igAccessToken || process.env.META_GRAPH_API_TOKEN || process.env.IG_TOKEN || ''
-            if (!token) throw new Error('Token da Meta não configurado')
-            await deleteInstagramMedia(carousel.ig_post_id, token)
-          }
-
-          const updatePayload: Record<string, unknown> = {
-            ig_post_id: null,
-            published_at: null,
-          }
-
-          if (action === 'delete_both') {
-            updatePayload.deleted_at = new Date().toISOString()
-            updatePayload.deleted_by = user.id
-            updatePayload.deleted_reason = 'user_delete_both'
-            updatePayload.scheduled_at = null
-          }
-
-          const { error: updateError } = await admin
-            .from('carousels')
-            .update(updatePayload)
-            .eq('id', carousel.id)
-            .eq('user_id', user.id)
-
-          if (updateError) throw new Error(updateError.message || 'Falha ao atualizar carrossel após exclusão no Instagram')
-
-          if (action === 'delete_both') {
-            await removeStoragePaths(getStoragePaths(carousel.slides))
-          }
-
-          results.push({ id: carousel.id, ok: true })
           continue
         }
 
@@ -236,7 +201,7 @@ export async function POST(req: NextRequest) {
             .update({
               deleted_at: new Date().toISOString(),
               deleted_by: user.id,
-              deleted_reason: 'user_delete_system',
+              deleted_reason: isPublishedCarousel(carousel) ? 'user_hide_published_system' : 'user_delete_system',
               scheduled_at: null,
             })
             .eq('id', carousel.id)
@@ -248,6 +213,9 @@ export async function POST(req: NextRequest) {
         }
 
         if (action === 'repost') {
+          if (!isPublishedCarousel(carousel)) {
+            throw new Error('Repostar só está disponível para carrossel já publicado')
+          }
           if (!carousel.caption) throw new Error('Carrossel sem legenda para repost')
           const workspaceId = carousel.workspace_id || ''
           if (workspaceId) {

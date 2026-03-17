@@ -3,6 +3,11 @@ import https from 'https'
 const GRAPH_BASE  = 'graph.facebook.com'
 const API_VERSION = 'v21.0'
 
+function buildGraphPath(path: string, token: string): string {
+  const separator = path.includes('?') ? '&' : '?'
+  return `/${API_VERSION}/${path}${separator}access_token=${encodeURIComponent(token)}`
+}
+
 function graphPost(path: string, body: object, token: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify({ ...body, access_token: token })
@@ -38,7 +43,7 @@ function graphGet(path: string, token: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const req = https.request({
       hostname: GRAPH_BASE,
-      path:     `/${API_VERSION}/${path}?access_token=${encodeURIComponent(token)}`,
+      path:     buildGraphPath(path, token),
       method:   'GET',
       timeout:  15000,
     }, (res) => {
@@ -58,7 +63,7 @@ function graphDelete(path: string, token: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const req = https.request({
       hostname: GRAPH_BASE,
-      path: `/${API_VERSION}/${path}?access_token=${encodeURIComponent(token)}`,
+      path: buildGraphPath(path, token),
       method: 'DELETE',
       timeout: 15000,
     }, (res) => {
@@ -107,6 +112,16 @@ export interface PublishCarouselOpts {
   caption:   string
 }
 
+export interface InstagramMediaSummary {
+  id: string
+  permalink: string | null
+  likeCount: number
+  commentsCount: number
+  mediaType: string
+  mediaProductType: string
+  timestamp: string | null
+}
+
 export async function publishCarousel(opts: PublishCarouselOpts): Promise<string> {
   const { accountId, token, imageUrls, caption } = opts
 
@@ -145,4 +160,42 @@ export async function getInstagramPermalink(mediaId: string, token: string): Pro
   return typeof result?.permalink === 'string' && result.permalink.trim()
     ? result.permalink
     : null
+}
+
+export async function getInstagramMediaSummary(mediaId: string, token: string): Promise<InstagramMediaSummary> {
+  const result = await graphGet(
+    `${mediaId}?fields=id,permalink,like_count,comments_count,media_type,media_product_type,timestamp`,
+    token
+  )
+
+  return {
+    id: String(result?.id || mediaId),
+    permalink: typeof result?.permalink === 'string' ? result.permalink : null,
+    likeCount: Number(result?.like_count || 0),
+    commentsCount: Number(result?.comments_count || 0),
+    mediaType: String(result?.media_type || ''),
+    mediaProductType: String(result?.media_product_type || ''),
+    timestamp: typeof result?.timestamp === 'string' ? result.timestamp : null,
+  }
+}
+
+export async function getInstagramMediaInsights(
+  mediaId: string,
+  token: string,
+  metrics: string[] = ['views', 'reach', 'saved', 'shares', 'total_interactions']
+): Promise<Record<string, number | null>> {
+  const result: Record<string, number | null> = {}
+
+  for (const metric of metrics) {
+    try {
+      const response = await graphGet(`${mediaId}/insights?metric=${encodeURIComponent(metric)}`, token)
+      const item = Array.isArray(response?.data) ? response.data[0] : null
+      const value = Array.isArray(item?.values) ? item.values[0]?.value : item?.value
+      result[metric] = typeof value === 'number' ? value : value == null ? null : Number(value)
+    } catch {
+      result[metric] = null
+    }
+  }
+
+  return result
 }

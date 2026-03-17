@@ -404,6 +404,36 @@ create index if not exists usage_events_user_idx
 create index if not exists usage_events_provider_model_idx
   on usage_events (provider, model, created_at desc);
 
+-- snapshots de métricas de posts publicados no Instagram
+create table if not exists carousel_metrics_snapshots (
+  id                 uuid primary key default gen_random_uuid(),
+  carousel_id        uuid not null references carousels(id) on delete cascade,
+  user_id            uuid not null references auth.users(id) on delete cascade,
+  workspace_id       uuid references workspaces(id) on delete cascade,
+  ig_post_id         text not null,
+  permalink          text default '',
+  media_type         text default '',
+  media_product_type text default '',
+  post_timestamp     timestamptz,
+  like_count         integer not null default 0,
+  comments_count     integer not null default 0,
+  views_count        integer,
+  reach_count        integer,
+  saved_count        integer,
+  shares_count       integer,
+  total_interactions integer,
+  metrics_json       jsonb not null default '{}'::jsonb,
+  synced_at          timestamptz not null default now(),
+  created_at         timestamptz not null default now()
+);
+
+create index if not exists carousel_metrics_snapshots_carousel_idx
+  on carousel_metrics_snapshots (carousel_id, synced_at desc);
+create index if not exists carousel_metrics_snapshots_workspace_idx
+  on carousel_metrics_snapshots (workspace_id, synced_at desc);
+create index if not exists carousel_metrics_snapshots_post_idx
+  on carousel_metrics_snapshots (ig_post_id, synced_at desc);
+
 -- Custo diário real por provider (fonte externa de billing) + câmbio para BRL
 create table if not exists provider_daily_costs (
   id              uuid        primary key default gen_random_uuid(),
@@ -552,6 +582,7 @@ alter table system_logs       enable row level security;
 alter table provider_price_catalog enable row level security;
 alter table usage_events      enable row level security;
 alter table provider_daily_costs enable row level security;
+alter table carousel_metrics_snapshots enable row level security;
 
 -- workspaces: owner vê tudo; membros veem o seu
 drop policy if exists "select workspaces" on workspaces;
@@ -622,6 +653,15 @@ create policy "read usage events" on usage_events for select
 using (
   is_owner()
   or workspace_id = current_workspace_id()
+);
+
+-- carousel_metrics_snapshots: owner ve tudo; admin/member ve o proprio workspace (somente leitura)
+drop policy if exists "read carousel metrics snapshots" on carousel_metrics_snapshots;
+create policy "read carousel metrics snapshots" on carousel_metrics_snapshots for select
+using (
+  is_owner()
+  or workspace_id = current_workspace_id()
+  or user_id = auth.uid()
 );
 
 -- provider_daily_costs: owner consulta. Escrita via service_role.

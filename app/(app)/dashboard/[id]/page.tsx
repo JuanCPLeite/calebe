@@ -18,6 +18,18 @@ const DEFAULT_EXPERT: ExpertInfo = {
   highlightColor: '#9B59FF',
 }
 
+interface MetricsSnapshot {
+  synced_at: string
+  permalink?: string
+  like_count: number
+  comments_count: number
+  views_count: number | null
+  reach_count: number | null
+  saved_count: number | null
+  shares_count: number | null
+  total_interactions: number | null
+}
+
 export default function CarouselDetailPage() {
   const { id }   = useParams<{ id: string }>()
   const router   = useRouter()
@@ -33,6 +45,8 @@ export default function CarouselDetailPage() {
   const [publishing, setPublishing]       = useState(false)
   const [acting, setActing]               = useState<string | null>(null)
   const [permalink, setPermalink]         = useState<string>('')
+  const [metrics, setMetrics]             = useState<MetricsSnapshot | null>(null)
+  const [metricsLoading, setMetricsLoading] = useState(false)
   const [scheduledAt, setScheduledAt]     = useState('')
   const [showScheduler, setShowScheduler] = useState(false)
   const [scheduling, setScheduling]       = useState(false)
@@ -210,6 +224,24 @@ export default function CarouselDetailPage() {
     load()
   }, [id])
 
+  useEffect(() => {
+    async function loadMetrics() {
+      setMetricsLoading(true)
+      try {
+        const res = await fetch(`/api/carousels/${id}/metrics`)
+        const data = await res.json()
+        if (res.ok) {
+          setMetrics((data.latest as MetricsSnapshot | null) || null)
+          if (!permalink && data.latest?.permalink) setPermalink(data.latest.permalink)
+        }
+      } finally {
+        setMetricsLoading(false)
+      }
+    }
+
+    loadMetrics()
+  }, [id])
+
   // Auto-save com debounce de 1.5s (somente rascunhos)
   useEffect(() => {
     if (!carousel || carousel.ig_post_id || loading) return
@@ -267,6 +299,141 @@ export default function CarouselDetailPage() {
 
   // ── Geração de imagem para um slide ───────────────────────────────────────
   async function generateOneSlide(slide: Slide) {
+
+    // ── Helpers internos para slides split ────────────────────────────────────
+    async function uploadSplitImage(slideNum: number, dataUrl: string): Promise<string> {
+      const imageBase64 = dataUrl.replace(/^data:[^;]+;base64,/, '')
+      const storagePath = await uploadBgImageToStorage(slideNum, imageBase64)
+      if (!storagePath) return dataUrl
+      const { data: signed } = await supabase.storage
+        .from('carousel-images')
+        .createSignedUrl(storagePath, 60 * 60 * 24 * 365)
+      return signed?.signedUrl || dataUrl
+    }
+
+    async function renderSplitCardDataUrl(targetSlide: Slide, imageDataUrl?: string): Promise<string> {
+      const imageBase64 = imageDataUrl?.startsWith('data:')
+        ? imageDataUrl.replace(/^data:[^;]+;base64,/, '')
+        : undefined
+      const imageUrl = imageDataUrl && !imageDataUrl.startsWith('data:')
+        ? imageDataUrl
+        : targetSlide.imagePath && !targetSlide.imagePath.startsWith('data:')
+          ? targetSlide.imagePath
+          : undefined
+
+      let contentIndex: number | undefined
+      if (targetSlide.layout === 'split-content') {
+        let count = 0
+        for (const s of slides) {
+          if (s.layout === 'split-content') count++
+          if (s.num === targetSlide.num) { contentIndex = count; break }
+        }
+      }
+
+      const res = await fetch('/api/render/card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          template: 'split',
+          slide: {
+            layout: targetSlide.layout,
+            text: targetSlide.text,
+            subtitulo: targetSlide.subtitulo,
+            esquerda: targetSlide.esquerda,
+            direita: targetSlide.direita,
+            labelEsquerda: targetSlide.labelEsquerda,
+            labelDireita: targetSlide.labelDireita,
+            subtexto: targetSlide.subtexto,
+            hashtags: targetSlide.hashtags,
+          },
+          accentColor: expert.highlightColor,
+          contentIndex,
+          imageBase64,
+          imageUrl,
+        }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      return `data:image/png;base64,${data.cardBase64}`
+    }
+
+    // ── Split-cover ────────────────────────────────────────────────────────────
+    if (slide.layout === 'split-cover') {
+      const basePrompt = slide.imagePrompt
+      if (!basePrompt) return
+      const prompt = [
+        `cinematic portrait background related to: ${basePrompt}.`,
+        'vertical composition, full frame subject, dark moody atmosphere, warm amber tones, photorealistic.',
+        'clean background with no signage.',
+        'STRICT RULE: no text, no letters, no words, no logos, no watermarks anywhere.',
+      ].join(' ')
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
+      try {
+        const res = await fetch('/api/generate/images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slideNum: slide.num, imagePrompt: prompt, noExpertPhoto: true, aspectRatio: '4:5' }),
+        })
+        const imgData = await res.json()
+        if (imgData.error) throw new Error(imgData.error)
+        const persisted = await uploadSplitImage(slide.num, imgData.dataUrl)
+        const splitCardDataUrl = await renderSplitCardDataUrl({ ...slide, imagePath: persisted }, imgData.dataUrl)
+        const stored = await uploadCardToStorage(slide.num, splitCardDataUrl.replace(/^data:image\/png;base64,/, ''))
+        setSlides(prev => prev.map(s => s.num === slide.num
+          ? { ...s, imagePath: persisted, cardPath: stored?.url || splitCardDataUrl, cardStoragePath: stored?.path }
+          : s))
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
+      } catch (err) {
+        console.error(`Erro capa split ${slide.num}:`, err)
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'error' }))
+      }
+      return
+    }
+
+    // ── Split-content ──────────────────────────────────────────────────────────
+    if (slide.layout === 'split-content') {
+      const prompt = slide.imagePrompt || `Single illustration with a vertical split-screen composition showing two contrasting situations of the SAME professional.\n\nLeft side: ${(slide.esquerda || '').replace(/\*\*/g, '').slice(0, 120)}.\n\nRight side: ${(slide.direita || '').replace(/\*\*/g, '').slice(0, 120)}.\n\nBoth scenes exist inside the SAME image, divided vertically. The same character appears on both sides. No text, no typography.`
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
+      try {
+        const res = await fetch('/api/generate/images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slideNum: slide.num, imagePrompt: prompt, noExpertPhoto: true, aspectRatio: '4:5' }),
+        })
+        const imgData = await res.json()
+        if (imgData.error) throw new Error(imgData.error)
+        const persisted = await uploadSplitImage(slide.num, imgData.dataUrl)
+        const splitCardDataUrl = await renderSplitCardDataUrl({ ...slide, imagePath: persisted }, imgData.dataUrl)
+        const stored = await uploadCardToStorage(slide.num, splitCardDataUrl.replace(/^data:image\/png;base64,/, ''))
+        setSlides(prev => prev.map(s => s.num === slide.num
+          ? { ...s, imagePath: persisted, cardPath: stored?.url || splitCardDataUrl, cardStoragePath: stored?.path }
+          : s))
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
+      } catch (err) {
+        console.error(`Erro split-content ${slide.num}:`, err)
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'error' }))
+      }
+      return
+    }
+
+    // ── Split-CTA ──────────────────────────────────────────────────────────────
+    if (slide.layout === 'split-cta') {
+      setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
+      try {
+        const splitCardDataUrl = await renderSplitCardDataUrl(slide)
+        const stored = await uploadCardToStorage(slide.num, splitCardDataUrl.replace(/^data:image\/png;base64,/, ''))
+        setSlides(prev => prev.map(s => s.num === slide.num
+          ? { ...s, cardPath: stored?.url || splitCardDataUrl, cardStoragePath: stored?.path }
+          : s))
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'done' }))
+      } catch (err) {
+        console.error(`Erro split-cta ${slide.num}:`, err)
+        setImageProgress(prev => ({ ...prev, [slide.num]: 'error' }))
+      }
+      return
+    }
+
+    // ── Frank / demais slides: fluxo original ──────────────────────────────────
     const imagePrompt = slide.imagePrompt || FALLBACK_IMAGE_PROMPTS[slide.type]
     if (!imagePrompt) return
     setImageProgress(prev => ({ ...prev, [slide.num]: 'loading' }))
@@ -304,8 +471,8 @@ export default function CarouselDetailPage() {
             imagePosition:      slide.imagePosition      ?? 'bottom',
             imageObjectX:       slide.imageObjectX       ?? 50,
             imageObjectY:       slide.imageObjectY       ?? 50,
-          fontSize:           slide.fontSize,
-          highlightEnabled:   slide.highlightEnabled !== false,
+            fontSize:           slide.fontSize,
+            highlightEnabled:   slide.highlightEnabled !== false,
           }),
         }),
         uploadBgImageToStorage(slide.num, imageBase64),
@@ -393,7 +560,7 @@ export default function CarouselDetailPage() {
     }
   }
 
-  async function handleCarouselAction(action: 'repost' | 'delete_instagram' | 'delete_system' | 'delete_both' | 'get_permalink') {
+  async function handleCarouselAction(action: 'repost' | 'delete_system' | 'get_permalink') {
     setActing(action)
     try {
       const res = await fetch('/api/carousels/actions', {
@@ -424,17 +591,26 @@ export default function CarouselDetailPage() {
         return
       }
 
-      if (action === 'delete_instagram') {
-        setPermalink('')
-        setCarousel((prev: any) => ({ ...prev, ig_post_id: null, published_at: null }))
-        return
-      }
-
       router.push('/dashboard')
     } catch (err: any) {
       alert(err.message || 'Falha ao executar ação')
     } finally {
       setActing(null)
+    }
+  }
+
+  async function handleSyncMetrics() {
+    setMetricsLoading(true)
+    try {
+      const res = await fetch(`/api/carousels/${id}/metrics`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Falha ao atualizar métricas')
+      setMetrics((data.snapshot as MetricsSnapshot) || null)
+      if (data.snapshot?.permalink) setPermalink(data.snapshot.permalink)
+    } catch (err: any) {
+      alert(err.message || 'Falha ao atualizar métricas')
+    } finally {
+      setMetricsLoading(false)
     }
   }
 
@@ -484,6 +660,14 @@ export default function CarouselDetailPage() {
 
   const isPublished  = !!carousel.ig_post_id
   const imagesReady  = slides.length > 0 && slides.every(s => imageProgress[s.num] === 'done')
+  const metricItems = [
+    { label: 'Curtidas', value: metrics?.like_count ?? 0 },
+    { label: 'Comentários', value: metrics?.comments_count ?? 0 },
+    { label: 'Views', value: metrics?.views_count ?? '—' },
+    { label: 'Reach', value: metrics?.reach_count ?? '—' },
+    { label: 'Salvos', value: metrics?.saved_count ?? '—' },
+    { label: 'Compart.', value: metrics?.shares_count ?? '—' },
+  ]
 
   // ── View-only: carrossel publicado ───────────────────────────────────────
   if (isPublished) {
@@ -518,29 +702,45 @@ export default function CarouselDetailPage() {
             <Button
               size="sm"
               variant="outline"
-              className="border-amber-900 text-amber-300 gap-1.5"
+              className="border-red-900 text-red-300 gap-1.5"
               onClick={() => {
-                if (!confirm('Remover este post apenas do Instagram?')) return
-                handleCarouselAction('delete_instagram')
+                if (!confirm('Ocultar este carrossel do sistema? O post continuará existindo no Instagram.')) return
+                handleCarouselAction('delete_system')
               }}
               disabled={acting !== null}
             >
-              {acting === 'delete_instagram' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-              Excluir IG
+              {acting === 'delete_system' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              Ocultar no sistema
             </Button>
+          </div>
+        </div>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-zinc-100">Métricas do post</p>
+              <p className="text-xs text-zinc-500">
+                {metrics?.synced_at
+                  ? `Última atualização: ${new Date(metrics.synced_at).toLocaleString('pt-BR')}`
+                  : 'Nenhum snapshot salvo ainda'}
+              </p>
+            </div>
             <Button
               size="sm"
               variant="outline"
-              className="border-red-900 text-red-300 gap-1.5"
-              onClick={() => {
-                if (!confirm('Excluir do sistema e também remover do Instagram?')) return
-                handleCarouselAction('delete_both')
-              }}
-              disabled={acting !== null}
+              className="border-zinc-700 text-zinc-200"
+              onClick={handleSyncMetrics}
+              disabled={metricsLoading}
             >
-              {acting === 'delete_both' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-              Excluir ambos
+              {metricsLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Atualizar agora'}
             </Button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {metricItems.map((item) => (
+              <div key={item.label} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2">
+                <p className="text-[11px] text-zinc-500">{item.label}</p>
+                <p className="text-lg font-semibold text-zinc-100">{item.value}</p>
+              </div>
+            ))}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -572,16 +772,6 @@ export default function CarouselDetailPage() {
         <div className="w-px h-5 bg-zinc-800 flex-shrink-0" />
         <h1 className="text-sm font-medium text-zinc-400 flex-1 truncate min-w-0">{carousel.topic}</h1>
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-zinc-700 text-zinc-200 gap-1.5 h-8"
-            onClick={() => handleCarouselAction('repost')}
-            disabled={acting !== null}
-          >
-            {acting === 'repost' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-            Repostar
-          </Button>
           <Button
             size="sm"
             variant="outline"

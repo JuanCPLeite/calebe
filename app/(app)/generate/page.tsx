@@ -117,6 +117,7 @@ export default function GeneratePage() {
   const [carouselId, setCarouselId]       = useState<string | null>(null)
   const [userId, setUserId]               = useState<string | null>(null)
   const [textLength, setTextLength]       = useState<'short' | 'medium' | 'long'>('medium')
+  const [contentStyle, setContentStyle]   = useState<'text' | 'question'>('text')
   const [useFixedSlides, setUseFixedSlides] = useState(true)
   const [activeTemplateName, setActiveTemplateName] = useState<string>('Brand Equity')
   const [activeTemplateId, setActiveTemplateId]     = useState<string>('frank-costa-10')
@@ -413,6 +414,7 @@ export default function GeneratePage() {
           splitTitle: resolvedSplitTitle || undefined,
           splitSubtitle: resolvedSplitSubtitle || undefined,
           textLength,
+          contentStyle,
           useFixedSlides,
           templateId: activeTemplateId,
           providerId: selectedProviderId,
@@ -1101,10 +1103,12 @@ No text, no typography, no captions.`
             <ArrowLeft className="w-3.5 h-3.5" />
             Voltar
           </button>
-          <h1 className="text-xl font-semibold text-zinc-100">Escolha o ângulo</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Tema: <span className="text-zinc-300">{pendingAngleTopic?.topic.title}</span>
-          </p>
+          <div>
+            <h1 className="text-xl font-semibold text-zinc-100">Escolha o ângulo</h1>
+            <p className="text-sm text-zinc-500 mt-1">
+              Tema: <span className="text-zinc-300">{pendingAngleTopic?.topic.title}</span>
+            </p>
+          </div>
         </div>
 
         {loadingAngles ? (
@@ -1114,6 +1118,22 @@ No text, no typography, no captions.`
           </div>
         ) : (
           <div className="space-y-3">
+            <button
+              onClick={() => pendingAngleTopic && handleGenerate(pendingAngleTopic.topic, pendingAngleTopic.hook)}
+              className="w-full text-left rounded-xl border border-violet-600/50 bg-violet-950/30 p-4 hover:border-violet-500 hover:bg-violet-950/50 transition-all group"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 rounded-full bg-violet-600/30 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-violet-600/50 transition-colors">
+                  <Sparkles className="w-3 h-3 text-violet-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-violet-100 leading-snug">Usar o tema original</p>
+                  <p className="text-xs text-violet-400 mt-0.5">Gerar sem adaptar o ângulo</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-violet-600 flex-shrink-0 mt-1 group-hover:text-violet-300 transition-colors" />
+              </div>
+            </button>
+
             {angleOptions.map((angle, i) => (
               <button
                 key={i}
@@ -1352,22 +1372,41 @@ No text, no typography, no captions.`
 
       {/* Opções de geração */}
       <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">Texto:</span>
-          <div className="flex rounded-lg bg-zinc-800 p-0.5 gap-0.5">
-            {(['short', 'medium', 'long'] as const).map(opt => (
-              <button
-                key={opt}
-                onClick={() => setTextLength(opt)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                  textLength === opt ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-300'
-                }`}
-              >
-                {opt === 'short' ? 'Curto' : opt === 'medium' ? 'Médio' : 'Longo'}
-              </button>
-            ))}
+        {activeTemplateId === 'positivo-negativo' ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500">Formato:</span>
+            <div className="flex rounded-lg bg-zinc-800 p-0.5 gap-0.5">
+              {(['text', 'question'] as const).map(opt => (
+                <button
+                  key={opt}
+                  onClick={() => setContentStyle(opt)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    contentStyle === opt ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-300'
+                  }`}
+                >
+                  {opt === 'text' ? 'Texto' : 'Pergunta'}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500">Texto:</span>
+            <div className="flex rounded-lg bg-zinc-800 p-0.5 gap-0.5">
+              {(['short', 'medium', 'long'] as const).map(opt => (
+                <button
+                  key={opt}
+                  onClick={() => setTextLength(opt)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    textLength === opt ? 'bg-zinc-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-300'
+                  }`}
+                >
+                  {opt === 'short' ? 'Curto' : opt === 'medium' ? 'Médio' : 'Longo'}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {activeTemplateId === 'frank-costa-10' && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-zinc-500">Slides 5 e 10:</span>

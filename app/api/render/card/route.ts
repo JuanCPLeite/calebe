@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { renderCardToPng } from '@/lib/card-renderer'
+import { renderSplitCardToPng } from '@/lib/split-card-renderer'
 import { createClient } from '@/lib/supabase/server'
 import { getActiveExpertRow } from '@/lib/expert-config'
 
@@ -26,8 +27,10 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const {
+      template = 'frank',
       text,
       imageBase64,
+      imageUrl,
       imageMime = 'jpeg',
       format = 'portrait',
       showHeader = true,
@@ -37,7 +40,28 @@ export async function POST(req: NextRequest) {
       imageObjectY,
       fontSize,
       highlightEnabled,
+      slide,
+      accentColor,
+      contentIndex,
     } = body
+
+    if (template === 'split') {
+      if (!slide?.layout || typeof slide.text !== 'string') {
+        return NextResponse.json({ error: 'slide split invalido' }, { status: 400 })
+      }
+
+      const pngBuffer = await renderSplitCardToPng({
+        slide,
+        accentColor: typeof accentColor === 'string' ? accentColor : undefined,
+        contentIndex: typeof contentIndex === 'number' ? contentIndex : undefined,
+        imageBase64: typeof imageBase64 === 'string' ? imageBase64 : undefined,
+        imageMime: typeof imageMime === 'string' ? imageMime : undefined,
+        imageUrl: typeof imageUrl === 'string' ? imageUrl : undefined,
+      })
+
+      const cardBase64 = pngBuffer.toString('base64')
+      return NextResponse.json({ cardBase64, mimeType: 'image/png' })
+    }
 
     // Dados do expert — busca do DB se autenticado
     let authorName    = 'Expert'

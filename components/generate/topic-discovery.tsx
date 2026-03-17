@@ -435,6 +435,7 @@ export function TopicDiscovery({ niche, templateId, onSelect }: TopicDiscoveryPr
                 topics={topics}
                 loading={loading}
                 hasMore={hasMore}
+                templateId={templateId}
                 onSelect={onSelect}
                 onLoadMore={handleLoadMore}
               />

@@ -24,6 +24,7 @@ export interface CarouselContent {
 //
 export interface ContentOptions {
   textLength?: 'short' | 'medium' | 'long'
+  contentStyle?: 'text' | 'question'
   useFixedSlides?: boolean
 }
 
@@ -289,31 +290,57 @@ export async function generateCarouselContent(
 
 // ─── Template Split ("X vs Y") ───────────────────────────────────────────────
 
-export function buildSplitSystemPrompt(expert: ExpertConfig): string {
+export function buildSplitSystemPrompt(expert: ExpertConfig, options: ContentOptions = {}): string {
   const now = new Date()
   const currentDate = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+  const isQuestion = options.contentStyle === 'question'
+
+  const contentStyleRules = isQuestion
+    ? `FORMATO DE CONTEÚDO — PERGUNTA:
+- Cada campo "esquerda" e "direita" deve ser UMA PERGUNTA curta e direta (máximo 2 frases)
+- A pergunta do lado esquerdo evoca a dor, o erro, a situação ruim (ex: "Você ainda perde horas fazendo isso manualmente?")
+- A pergunta do lado direito provoca reflexão sobre a solução, o ganho, o resultado positivo (ex: "E se em 10 minutos você já tivesse tudo pronto com IA?")
+- Tom: provocativo, pessoal, que faz o leitor pensar "isso sou eu"
+- Use **negrito** nas palavras-chave das perguntas`
+    : `FORMATO DE CONTEÚDO — TEXTO:
+- Cada campo "esquerda" e "direita" deve ser uma afirmação curta e direta (máximo 2-3 frases)
+- Use **negrito** com duplo asterisco para palavras-chave
+- Tom: direto, assertivo, provocativo`
+
   return `Você é um especialista em conteúdo viral para Instagram no formato carrossel comparativo "X vs Y".
 DATA ATUAL: ${currentDate}
 
-Você cria conteúdo para: ${expert.displayName} — especialista em ${expert.niche}.
-${expert.bioShort}
+Você cria análises comparativas com dois lados — negativo e positivo — sobre QUALQUER tema, título ou discussão fornecido. O conteúdo é sempre baseado exclusivamente no TEMA específico do usuário.
 
 REGRAS DE COPYWRITING:
 1. Títulos de slide SEMPRE em CAIXA ALTA
-2. Máximo 2-3 frases por lado, diretas e impactantes
-3. Use **negrito** com duplo asterisco para palavras-chave
-4. Tom: direto, assertivo, provocativo — sem rodeios
-5. Lado esquerdo: mostra a DOR, a abordagem errada/negativa, a consequência ruim
-6. Lado direito: mostra a SOLUÇÃO, a atitude correta, o resultado positivo
-7. Gere entre 8 e 10 slides de conteúdo (além da capa e CTA = 10-12 total)
-8. Progressão de intensidade: começa leve, termina com as situações mais impactantes
-9. CTA final DEVE provocar comentários, marcações ou compartilhamentos
-10. Conteúdo deve ser PRÁTICO e ESPECÍFICO — situações reais, não generalidades
+2. Tom: direto, assertivo, provocativo — sem rodeios
+3. Lado esquerdo: mostra a DOR, a abordagem errada/negativa, a consequência ruim
+4. Lado direito: mostra a SOLUÇÃO, a atitude correta, o resultado positivo
+5. Gere EXATAMENTE 9 slides de conteúdo (além da capa = 10 total)
+6. Progressão de intensidade: começa leve, termina com as situações mais impactantes
+7. NÃO há slide de CTA — a pergunta provocativa e o call-to-action vão APENAS na legenda (caption)
+8. Conteúdo deve ser PRÁTICO e ESPECÍFICO — situações reais do TEMA escolhido, não generalidades
+
+${contentStyleRules}
+
+ESTRUTURA OBRIGATÓRIA (exatamente 10 slides):
+- num 0: split-cover (capa)
+- num 1 até num 9: split-content (9 slides comparativos)
+- NÃO gere slide split-cta — a pergunta vai na legenda
+
+A LEGENDA (caption) DEVE incluir:
+- Pergunta provocativa que gere comentários (ex: "Qual lado você é?")
+- CTA para salvar ou marcar alguém
+- Emojis e quebras visuais (.)
+- 5-7 hashtags relevantes ao tema
+
+REGRA CRÍTICA DE JSON: dentro de qualquer campo de texto, NUNCA use aspas duplas ("). Use aspas simples (') ou reescreva sem aspas. Isso é obrigatório para não quebrar o JSON.
 
 Retorne APENAS JSON válido, sem markdown, sem backticks:
 {
   "topic": "tema real do carrossel",
-  "caption": "Legenda do Instagram com emojis, quebras visuais e 5-7 hashtags relevantes ao nicho",
+  "caption": "Pergunta provocativa que gera comentários + CTA salvar/marcar alguém + quebras visuais . + 5-7 hashtags relevantes",
   "slides": [
     {
       "num": 0,
@@ -321,8 +348,8 @@ Retorne APENAS JSON válido, sem markdown, sem backticks:
       "layout": "split-cover",
       "text": "TÍTULO X VS. Y (ex: LÍDER BONZINHO VS. LÍDER HUMANO)",
       "subtitulo": "Frase curta que gera curiosidade — use **negrito** nas palavras de maior impacto",
-      "labelEsquerda": "Nome do perfil negativo (ex: Líder Bonzinho)",
-      "labelDireita": "Nome do perfil positivo (ex: Líder Humano)",
+      "labelEsquerda": "Nome do lado negativo (ex: Líder Bonzinho)",
+      "labelDireita": "Nome do lado positivo (ex: Líder Humano)",
       "imagePrompt": "cinematic portrait of a professional person related to the topic, moody dark atmosphere, warm amber bokeh background, dramatic lighting, photorealistic, vertical composition 4:5, no text, no letters, no logos, no watermark"
     },
     {
@@ -332,37 +359,49 @@ Retorne APENAS JSON válido, sem markdown, sem backticks:
       "text": "SITUAÇÃO ESPECÍFICA EM CAIXA ALTA",
       "esquerda": "Texto do lado negativo com **palavras-chave** em negrito. Máximo 3 frases.",
       "direita": "Texto do lado positivo com **palavras-chave** em negrito. Máximo 3 frases.",
-      "labelEsquerda": "Nome do perfil negativo",
-      "labelDireita": "Nome do perfil positivo",
-      "imagePrompt": "vertical split-screen semi-realistic business illustration: LEFT HALF shows the SAME professional person in a negative scenario (stressed/overwhelmed), RIGHT HALF shows the SAME professional person in a positive scenario (confident/assertive), matching face/hair/clothing on both sides, at least one visible person in each side, full-height subjects, 4:5 vertical frame, no text, no letters, no logos, no watermark"
+      "labelEsquerda": "Nome do lado negativo",
+      "labelDireita": "Nome do lado positivo",
+      "imagePrompt": "vertical split-screen semi-realistic illustration: LEFT HALF shows a person in a negative scenario (stressed/overwhelmed) related to the topic, RIGHT HALF shows the SAME person in a positive scenario (confident/assertive), matching face/hair/clothing on both sides, full-height subjects, 4:5 vertical frame, no text, no letters, no logos, no watermark"
     },
     {
-      "num": 11,
-      "type": "cta-final",
-      "layout": "split-cta",
-      "text": "PERGUNTA PROVOCATIVA EM CAIXA ALTA?",
-      "subtexto": "Call-to-action: marque alguém que precisa ver isso. Salve para reler quando precisar.",
-      "hashtags": "#hashtag1 #hashtag2 #hashtag3",
-      "imagePrompt": ""
+      "num": 9,
+      "type": "content",
+      "layout": "split-content",
+      "text": "SITUAÇÃO FINAL EM CAIXA ALTA",
+      "esquerda": "Texto do lado negativo. Máximo 3 frases.",
+      "direita": "Texto do lado positivo. Máximo 3 frases.",
+      "labelEsquerda": "Nome do lado negativo",
+      "labelDireita": "Nome do lado positivo",
+      "imagePrompt": "vertical split-screen semi-realistic illustration: same format as slides anteriores"
     }
   ]
 }`
 }
 
-export function buildSplitUserPrompt(topic: string, splitTitle?: string, splitSubtitle?: string): string {
+export function buildSplitUserPrompt(topic: string, splitTitle?: string, splitSubtitle?: string, options: ContentOptions = {}): string {
   const chosenSplitTitle = (splitTitle || '').trim()
   const chosenSplitSubtitle = (splitSubtitle || '').trim()
+  const isQuestion = options.contentStyle === 'question'
+
+  const styleNote = isQuestion
+    ? `\nFORMATO DOS SLIDES: use PERGUNTAS nos campos "esquerda" e "direita" de cada slide de conteúdo — não afirmações. Cada pergunta deve ser curta, provocativa e fazer o leitor se identificar com a situação.`
+    : ''
+
   return `Crie um carrossel comparativo "X vs Y" sobre o tema: "${topic}"
 
 ${chosenSplitTitle ? `CONTRASTE OBRIGATÓRIO PARA A CAPA:
-- use exatamente este título principal: "${chosenSplitTitle}"` : ''}
+- use exatamente este título principal: "${chosenSplitTitle}"
+- não resuma, não reescreva, não substitua por outro contraste
+- preserve em CAIXA ALTA e mantenha " VS. " exatamente como enviado` : ''}
 ${chosenSplitSubtitle ? `- use esta linha de apoio/pergunta na capa: "${chosenSplitSubtitle}"` : ''}
 
-O carrossel deve ter:
-- Capa com título impactante mostrando o contraste dos dois perfis
-- 8 a 10 slides de conteúdo (situações práticas, específicas e progressivas)
-- Slide final de CTA que provoque comentários e marcações
+O carrossel DEVE ter EXATAMENTE 10 slides:
+- num 0: capa (split-cover) com título impactante mostrando o contraste
+- num 1 até num 9: EXATAMENTE 9 slides de conteúdo (split-content) com situações práticas e progressivas
+- NÃO gere slide split-cta — a pergunta provocativa e o CTA vão APENAS na legenda (caption)
 
-IMPORTANTE: cada situação deve ser ESPECÍFICA e PRÁTICA.
-Evite generalidades — mostre cenas concretas e reconhecíveis do dia a dia.`
+IMPORTANTE: cada situação deve ser ESPECÍFICA e PRÁTICA sobre o tema "${topic}".
+Evite generalidades — mostre cenas concretas e reconhecíveis do dia a dia deste tema específico.
+O conteúdo não deve mencionar outros assuntos além do tema fornecido.
+A legenda DEVE incluir uma pergunta que gere comentários + CTA para salvar/marcar alguém.${styleNote}`
 }

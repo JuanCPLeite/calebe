@@ -198,16 +198,18 @@ export async function* generateWithTemplate({
   const isSplit = templateId === 'positivo-negativo'
   const vars = buildVars(expert, topic, hook, contentOptions)
 
-  const systemPrompt = systemTemplate
+  // Split template: sempre usa o prompt hardcoded para garantir estrutura correta
+  // (splitTitle, slideCount e estrutura não são suportados pelo template Supabase)
+  const systemPrompt = (systemTemplate && !isSplit)
     ? interpolate(systemTemplate, vars)
     : isSplit
-      ? buildSplitSystemPrompt(expert)
+      ? buildSplitSystemPrompt(expert, contentOptions)
       : buildSystemPrompt(expert, contentOptions)
 
-  const userPrompt = userTemplate
+  const userPrompt = (userTemplate && !isSplit)
     ? interpolate(userTemplate, vars)
     : isSplit
-      ? buildSplitUserPrompt(topic, splitTitle || hook, splitSubtitle)
+      ? buildSplitUserPrompt(topic, splitTitle || hook, splitSubtitle, contentOptions)
       : buildUserPrompt(topic, hook, contentOptions)
 
   const isFrankTemplate = templateId === 'frank-costa-10'

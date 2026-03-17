@@ -30,6 +30,19 @@ interface TopicCardProps {
   onSelect: (topic: Topic, hook: string) => void
 }
 
+function normalizeSplitTitle(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+vs\.?\s+/gi, ' VS. ')
+    .toUpperCase()
+}
+
+function splitContrast(value: string): { labelEsquerda: string; labelDireita: string } {
+  const normalized = normalizeSplitTitle(value)
+  const [labelEsquerda = '', labelDireita = ''] = normalized.split(' VS. ')
+  return { labelEsquerda, labelDireita }
+}
+
 export function TopicCard({ topic, rank, templateId, onSelect }: TopicCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [selectedAngle, setSelectedAngle] = useState(0)
@@ -44,13 +57,13 @@ export function TopicCard({ topic, rank, templateId, onSelect }: TopicCardProps)
   const currentHook = allAngles[selectedAngle]?.hook ?? topic.hook
 
   const allSplitTitles = [
-    ...(topic.splitTitle ? [{ labelEsquerda: topic.splitTitle.split(' VS. ')[0] ?? '', labelDireita: topic.splitTitle.split(' VS. ')[1] ?? '' }] : []),
+    ...(topic.splitTitle ? [splitContrast(topic.splitTitle)] : []),
     ...(topic.splitAltTitles || []),
-  ]
+  ].map((entry) => splitContrast(`${entry.labelEsquerda} VS. ${entry.labelDireita}`))
   const currentSplitTitle = allSplitTitles[selectedSplitTitle]
   const currentSplitFull = currentSplitTitle
-    ? `${currentSplitTitle.labelEsquerda} VS. ${currentSplitTitle.labelDireita}`
-    : topic.splitTitle ?? topic.title
+    ? normalizeSplitTitle(`${currentSplitTitle.labelEsquerda} VS. ${currentSplitTitle.labelDireita}`)
+    : normalizeSplitTitle(topic.splitTitle ?? topic.title)
 
   const scoreColor =
     topic.viralScore >= 80 ? 'text-orange-400' :
@@ -84,7 +97,11 @@ export function TopicCard({ topic, rank, templateId, onSelect }: TopicCardProps)
 
         {/* Title + stats */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-zinc-100 truncate">{topic.title}</p>
+          <p className="text-sm font-medium text-zinc-100 truncate">
+            {isSplit && currentSplitTitle
+              ? <><span>{currentSplitTitle.labelEsquerda}</span><span className="text-violet-400 font-black mx-1.5">VS.</span><span>{currentSplitTitle.labelDireita}</span></>
+              : topic.title}
+          </p>
           <div className="flex items-center gap-3 mt-0.5">
             <span className="text-xs text-green-400 flex items-center gap-0.5">
               <TrendingUp className="w-3 h-3" /> {topic.growth}
@@ -168,7 +185,7 @@ export function TopicCard({ topic, rank, templateId, onSelect }: TopicCardProps)
                             : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100'
                         )}
                       >
-                        {t.labelEsquerda} vs {t.labelDireita}
+                        {normalizeSplitTitle(`${t.labelEsquerda} VS. ${t.labelDireita}`)}
                       </button>
                     ))}
                   </div>
