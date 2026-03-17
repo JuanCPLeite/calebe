@@ -51,8 +51,9 @@ Tokens de IA são da plataforma — usuários apenas escolhem o modelo.
 - Publicação no Instagram via Meta Graph API
 - Agendamento com cron nativo Supabase
 - Agendamento validado com Edge Function `publish-scheduled` usando credenciais Meta em `experts` (com fallback env)
-- Dashboard: lista/grid, filtros, métricas, thumbnails ao vivo, duplicar, repostar, link direto do post e excluir
-- Dashboard: seleção múltipla para excluir em lote do sistema, do Instagram ou de ambos
+- Dashboard: lista/grid, filtros, métricas, thumbnails ao vivo, duplicar, repostar, link direto do post e ocultar/excluir do sistema
+- Dashboard: seleção múltipla para ocultar/excluir em lote no sistema
+- Dashboard de detalhe agora mostra snapshots de métricas do Instagram com atualização manual
 - Admin owner: visão global de postagens em `/admin/carousels` com ações operacionais
 - Admin owner: gestão de tipos de plano em `/admin/plans` (planos customizados + limite de experts)
 - Planos agora suportam também `memberLimit` e `monthlyPostCredits`
@@ -104,7 +105,7 @@ npm run dev
 
 Não para este pacote de correções.
 
-- Não há nova migration SQL
+- É necessário reaplicar `supabase-schema.sql` para criar `carousel_metrics_snapshots`
 - Não há novo bucket
 - Não há nova Edge Function
 - Não há novo secret obrigatório
@@ -112,13 +113,15 @@ Não para este pacote de correções.
 Se a instância já foi provisionada com `supabase-schema.sql` e já possui os buckets `carousel-images` e `expert-photos`, não é necessário executar nada extra no Supabase para:
 
 - correção do template `X vs Y`
-- repost/exclusão/link direto no dashboard
+- repost/ocultação no sistema/link direto no dashboard
 - exclusão em lote no dashboard
+- snapshots de métricas do Instagram
 
 O pré-requisito operacional continua sendo o mesmo para ações do Instagram:
 
 - `ig_account_id` e `ig_access_token` válidos no expert, ou fallback via `.env.local`
 - imagens persistidas no bucket `carousel-images`
+- para atualização automática das métricas, configurar também o cron `sync-instagram-metrics`
 
 ## Fluxo recomendado de Expert (importante)
 
@@ -138,13 +141,15 @@ O pré-requisito operacional continua sendo o mesmo para ações do Instagram:
 
 | Documento | Descrição |
 |-----------|-----------|
-| `docs/INSTALLATION.md` | Guia completo de instalação do zero |
+| `docs/INSTALLATION.md` | Guia completo de instalação do zero (inclui Meta, Google Cloud, Playwright) |
+| `docs/EXPERT-DNA-GUIDE.md` | Como configurar o expert DNA: campos, exemplos, fotos de referência |
 | `docs/MULTI-TENANT-ARCHITECTURE.md` | Arquitetura multi-tenant: roles, workspaces, RLS |
 | `docs/ADMIN-PANEL.md` | Especificação do painel de administração |
 | `docs/COST-INTELLIGENCE.md` | Estratégia de custos, créditos e telemetria de uso |
 | `docs/SYSTEM-LOGS.md` | Sistema de logs: eventos, queries, retenção |
 | `docs/CONTENT-HUB-ARCHITECTURE.md` | Content Hub: plataformas, formatos, template engine |
+| `docs/SUPABASE_SETUP.md` | Setup Supabase via CLI |
+| `docs/SUPABASE_SETUP_DASHBOARD_ONLY.md` | Setup Supabase sem terminal (sem CLI) |
 | `ROADMAP.md` | Fases de implementação passadas e futuras |
-| `SUPABASE_SETUP_DASHBOARD_ONLY.md` | Setup do Supabase sem terminal |
 | `supabase-schema.sql` | Schema completo do banco (fonte única da verdade) |
 | `.env.example` | Template de variáveis de ambiente comentado |

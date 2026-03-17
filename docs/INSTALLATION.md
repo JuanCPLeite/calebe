@@ -36,6 +36,10 @@ cd carousel-studio
 npm install
 ```
 
+> O `npm install` executa automaticamente `postinstall`, que baixa o browser Chromium do Playwright.
+> Este browser é usado pelo card renderer para gerar os PNGs dos cards.
+> Se quiser instalar manualmente: `npx playwright install chromium --with-deps`
+
 ---
 
 ## Passo 2 — Criar projeto no Supabase
@@ -225,12 +229,20 @@ Depois que houver carrosséis gerados, o workspace pode operar tudo em `/dashboa
 2. Publicar usando imagens já persistidas quando existirem
 3. Repostar um carrossel publicado
 4. Abrir o link direto do post no Instagram
-5. Excluir somente do sistema
-6. Excluir somente do Instagram
-7. Excluir de ambos
-8. Selecionar múltiplos itens no dashboard para exclusão em lote
+5. Ocultar/excluir do sistema
+6. Selecionar múltiplos itens no dashboard para exclusão em lote no sistema
 
 > Essas ações não exigem nova configuração do Supabase além do setup padrão deste guia.
+
+### Métricas de posts no Instagram
+
+O detalhe do carrossel publicado em `/dashboard/[id]` agora pode:
+
+1. Exibir o último snapshot salvo de métricas
+2. Atualizar métricas manualmente
+3. Consumir snapshots automáticos via cron
+
+Para isso, a instância precisa ter a tabela `carousel_metrics_snapshots`, criada ao reaplicar `supabase-schema.sql`.
 
 ---
 
@@ -279,6 +291,25 @@ SELECT cron.schedule(
 
 Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`.
 
+### Cron opcional para métricas do Instagram
+
+Se quiser manter snapshots atualizados automaticamente, crie também um cron para:
+
+```sql
+SELECT cron.schedule(
+  'sync-instagram-metrics',
+  '*/30 * * * *',
+  $$
+  SELECT net.http_get(
+    url     := 'https://<APP_DOMAIN>/api/cron/sync-instagram-metrics',
+    headers := '{"x-cron-secret": "<CRON_SECRET>"}'::jsonb
+  );
+  $$
+);
+```
+
+Substitua `<APP_DOMAIN>` pelo domínio do app.
+
 ---
 
 ## Passo 9 — Deploy em produção (Vercel)
@@ -292,11 +323,122 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 
 ---
 
+## Passo 9.1 — Configurar publicação no Instagram (Meta Graph API)
+
+Para publicar carrosséis no Instagram, a conta precisa ser **Business** ou **Creator** e estar conectada a uma **Página do Facebook**.
+
+### Criar o app Meta
+
+1. Acesse [developers.facebook.com](https://developers.facebook.com) e faça login
+2. Clique em **My Apps** > **Create App**
+3. Selecione **Other** > **Business**
+4. Preencha nome e e-mail de contato > **Create App**
+
+### Adicionar produto Instagram
+
+1. No painel do app, clique em **Add Products**
+2. Encontre **Instagram Graph API** > **Set Up**
+
+### Permissões necessárias
+
+Na seção **App Review** > **Permissions**, solicite:
+
+| Permissão | Para quê |
+|-----------|----------|
+| `instagram_basic` | Ler dados da conta |
+| `instagram_content_publish` | Publicar posts |
+| `pages_show_list` | Listar páginas do Facebook |
+| `pages_read_engagement` | Ler métricas |
+
+> Em desenvolvimento, as permissões funcionam sem aprovação para o usuário admin do app.
+> Para produção com múltiplos usuários, é necessário passar pelo App Review da Meta.
+
+### Obter o Access Token
+
+**Opção A — Token de usuário de longa duração (60 dias):**
+
+1. Acesse [Graph API Explorer](https://developers.facebook.com/tools/explorer/)
+2. Selecione seu app
+3. Em **Permissions**, adicione: `instagram_basic`, `instagram_content_publish`
+4. Clique em **Generate Access Token** e autorize
+5. Copie o token de curta duração
+6. Converta para longa duração (60 dias):
+
+```bash
+curl "https://graph.facebook.com/v18.0/oauth/access_token?grant_type=fb_exchange_token&client_id=<APP_ID>&client_secret=<APP_SECRET>&fb_exchange_token=<SHORT_TOKEN>"
+```
+
+**Opção B — Token de Sistema (nunca expira, recomendado para produção):**
+
+1. No [Business Manager](https://business.facebook.com), acesse **Configurações do Negócio**
+2. **Usuários** > **Usuários do Sistema** > **Adicionar**
+3. Nomeie o usuário do sistema, role: **Admin**
+4. Clique em **Gerar novo token** > selecione o app > marque as permissões
+5. Copie o token — ele não expira
+
+### Obter o Instagram Account ID
+
+```bash
+curl "https://graph.facebook.com/v18.0/me/accounts?access_token=<TOKEN>"
+# Retorna as páginas. Copie o id da página.
+
+curl "https://graph.facebook.com/v18.0/<PAGE_ID>?fields=instagram_business_account&access_token=<TOKEN>"
+# Retorna o instagram_business_account.id — este é o Instagram Account ID
+```
+
+### Configurar no sistema
+
+Em `/expert/dna`, preencha:
+- **Instagram Account ID** — o `id` do `instagram_business_account` acima
+- **Meta Access Token** — o token de longa duração ou de sistema
+
+---
+
+## Passo 9.2 — Configurar geração de imagens (Google Gemini + Imagen 3)
+
+### Criar projeto no Google Cloud
+
+1. Acesse [console.cloud.google.com](https://console.cloud.google.com)
+2. Crie um novo projeto (ex: `carousel-studio`)
+3. Ative o **billing** no projeto (necessário para Imagen 3)
+   - Menu > **Faturamento** > **Vincular conta de faturamento**
+
+### Ativar a API
+
+1. Menu > **APIs e Serviços** > **Biblioteca**
+2. Pesquise **Vertex AI API** > **Ativar**
+
+### Obter a chave de API
+
+1. Menu > **APIs e Serviços** > **Credenciais**
+2. **Criar credenciais** > **Chave de API**
+3. Copie a chave gerada
+4. (Recomendado) Restrinja a chave para a API do Vertex AI
+
+### Modelos usados
+
+| Modelo | Para quê | Billing |
+|--------|----------|---------|
+| `gemini-2.0-flash` | Geração de imagens rápidas | ~$0.039/imagem |
+| `imagen-3.0-generate-002` | Imagens de alta qualidade | ~$0.04/imagem |
+
+### Configurar no sistema
+
+Em `/admin/settings` (como owner), insira a **Google Key** no campo correspondente e clique em **Testar conexão**.
+
+> Se a geração de imagens falhar, verifique:
+> - Billing ativo no projeto Google Cloud
+> - Vertex AI API habilitada
+> - A chave tem permissão para `aiplatform.googleapis.com`
+
+---
+
 ## Checklist de Instalação
 
 ### Obrigatório para funcionar
 
 - [ ] Schema executado no Supabase (sem erros)
+- [ ] Se estiver atualizando uma instância existente, reaplicar `supabase-schema.sql`
 - [ ] `.env.local` preenchido com URL e keys do Supabase
 - [ ] `npm run dev` rodando sem erros
 - [ ] Login funcionando
@@ -308,23 +450,32 @@ Substituir `<PROJECT_REF>` (Settings > General > Reference ID) e `<CRON_SECRET>`
 ### Para geração de conteúdo
 
 - [ ] Chave Anthropic configurada no admin
-- [ ] Expert DNA configurado pelo cliente (nome, nicho, CTA)
+- [ ] Expert DNA configurado: `display_name`, `handle`, `niche`, `bio_short`, `product_name`, `product_cta`
+- [ ] Slides fixos preenchidos: `author_slide_template` (slide 5) e `cta_final_template` (slide 10)
 - [ ] Expert ativo selecionado no header (quando houver múltiplos experts)
-- [ ] Se houver múltiplos experts, gerenciar a troca no próprio `DNA Expert` (lista de experts)
-- [ ] Em `DNA Expert`, selecionar um expert da lista para abrir/editar os dados
+- [ ] Ver guia completo em `docs/EXPERT-DNA-GUIDE.md`
 
 ### Para geração de imagens
 
-- [ ] Chave Google Gemini configurada no admin
+- [ ] Projeto Google Cloud criado com billing ativo
+- [ ] Vertex AI API habilitada no projeto
+- [ ] Chave de API Google obtida em APIs e Serviços > Credenciais
+- [ ] Chave Google configurada em `/admin/settings`
 - [ ] O expert já foi salvo em `/expert/dna` antes de usar `/expert/photos`
 - [ ] Em `/expert/photos`, usar o modal `Novo` para escolher qual expert criado no DNA terá as fotos vinculadas
+- [ ] Ver guia completo em `docs/INSTALLATION.md` — Passo 9.2
 
 ### Para publicação no Instagram
 
-- [ ] Conta Meta Developer configurada
+- [ ] App Meta criado em developers.facebook.com
+- [ ] Permissões `instagram_basic` e `instagram_content_publish` configuradas
+- [ ] Access Token obtido (longa duração ou token de sistema)
+- [ ] `Instagram Account ID` obtido via Graph API Explorer
 - [ ] `Instagram Account ID` configurado em `/expert/dna`
 - [ ] `Meta Access Token` configurado em `/expert/dna` (ou fallback no `.env.local`)
-- [ ] Validar também `Repostar`, `Abrir post` e `Excluir IG` em `/dashboard`
+- [ ] Ver guia completo em `docs/INSTALLATION.md` — Passo 9.1
+- [ ] Validar também `Repostar`, `Abrir post` e ocultação no sistema em `/dashboard`
+- [ ] Validar `Atualizar agora` nas métricas em `/dashboard/[id]`
 
 ### Para agendamento
 
@@ -346,7 +497,8 @@ Estas mudanças foram apenas em aplicação:
 - correção de fluxo duplicado do template `X vs Y`
 - persistência correta das imagens do carrossel
 - endpoint operacional `/api/carousels/actions`
-- ações de repost/exclusão/link direto no `/dashboard`
+- ações de repost/ocultação no sistema/link direto no `/dashboard`
+- snapshots de métricas via `carousel_metrics_snapshots`
 
 Só será necessário mexer no Supabase novamente se a nova instância ainda não tiver:
 
@@ -398,14 +550,17 @@ Só será necessário mexer no Supabase novamente se a nova instância ainda nã
 
 ```
 supabase-schema.sql                 ← Schema completo (fonte única da verdade)
+middleware.ts                       ← Auth middleware (proteção de rotas, redirects)
 .env.example                        ← Template de variáveis de ambiente
 docs/
   INSTALLATION.md                   ← Este arquivo
+  EXPERT-DNA-GUIDE.md               ← Como configurar o expert DNA (campos, exemplos, fotos)
   MULTI-TENANT-ARCHITECTURE.md      ← Arquitetura multi-tenant detalhada
   ADMIN-PANEL.md                    ← Especificação do painel admin
   SYSTEM-LOGS.md                    ← Sistema de logs
   CONTENT-HUB-ARCHITECTURE.md       ← Arquitetura do Content Hub
+  SUPABASE_SETUP.md                 ← Setup Supabase via CLI
+  SUPABASE_SETUP_DASHBOARD_ONLY.md  ← Setup Supabase sem terminal
 ROADMAP.md                          ← Fases de implementação
 README.md                           ← Visão geral do produto
-SUPABASE_SETUP_DASHBOARD_ONLY.md    ← Guia Supabase sem terminal
 ```

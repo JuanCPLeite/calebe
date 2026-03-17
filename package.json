@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 8080",
     "lint": "tsc --noEmit",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "npx playwright install chromium --with-deps"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

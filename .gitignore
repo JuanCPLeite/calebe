@@ -45,3 +45,6 @@ next-env.d.ts
 
 # supabase local cli cache
 /supabase/.temp/
+
+# claude code local settings
+/.claude/
