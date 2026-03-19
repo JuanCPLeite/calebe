@@ -1,8 +1,7 @@
 # Guia de Instalação Completo — Carousel Studio SaaS
 
 > Para instalar uma nova instância do sistema do zero.
-> Inclui configuração do Supabase, variáveis de ambiente e primeiro acesso.
-> Versão: 2.2 — 2026-03-15
+> Inclui configuração do Supabase, OAuth Google, variáveis de ambiente e primeiro acesso.
 
 ---
 
@@ -51,7 +50,51 @@ npm install
 
 ---
 
-## Passo 3 — Configurar o banco (schema completo)
+## Passo 3 — Configurar autenticação (Google OAuth)
+
+O sistema usa **Supabase Auth com Google OAuth** como provedor de login. Configure antes de rodar o app.
+
+### 3.1 — Criar credenciais OAuth no Google Cloud
+
+1. Acesse [console.cloud.google.com](https://console.cloud.google.com) e faça login
+2. Crie ou selecione um projeto (pode ser o mesmo do Gemini, se já tiver)
+3. Menu > **APIs e Serviços** > **Tela de permissão OAuth**
+   - Tipo de usuário: **Externo**
+   - Preencha: nome do app, e-mail de suporte, e-mail do desenvolvedor
+   - Salve e continue (escopos e usuários de teste são opcionais em dev)
+4. Menu > **APIs e Serviços** > **Credenciais**
+   - Clique em **Criar credenciais** > **ID do cliente OAuth**
+   - Tipo de aplicativo: **Aplicativo da Web**
+   - Nome: `Carousel Studio`
+   - **Origens JavaScript autorizadas**: adicione
+     - `http://localhost:8080` (para dev)
+     - `https://seudominio.com` (para produção)
+   - **URIs de redirecionamento autorizados**: adicione
+     - `https://<SEU_PROJECT_REF>.supabase.co/auth/v1/callback`
+5. Clique em **Criar** — anote o **Client ID** e **Client Secret**
+
+> O `<SEU_PROJECT_REF>` está em: Supabase Dashboard > Project Settings > General > Reference ID
+
+### 3.2 — Habilitar Google como provedor no Supabase
+
+1. No Supabase Dashboard, acesse **Authentication** > **Providers**
+2. Localize **Google** e clique em **Enable**
+3. Preencha:
+   - **Client ID**: o Client ID do Google Cloud (Passo 3.1)
+   - **Client Secret**: o Client Secret do Google Cloud (Passo 3.1)
+4. Clique em **Save**
+
+### 3.3 — Configurar URL de callback no app
+
+No Supabase Dashboard, acesse **Authentication** > **URL Configuration**:
+- **Site URL**: `http://localhost:8080` (dev) ou `https://seudominio.com` (produção)
+- **Redirect URLs**: adicione `http://localhost:8080/auth/callback` e `https://seudominio.com/auth/callback`
+
+> Em produção, atualize o Site URL para o domínio real antes do deploy.
+
+---
+
+## Passo 4 — Configurar o banco (schema completo)
 
 1. No Supabase Dashboard, abra **SQL Editor**
 2. Clique em **New query**
@@ -73,7 +116,7 @@ O schema cria automaticamente:
 
 ---
 
-## Passo 4 — Configurar as variáveis de ambiente
+## Passo 5 — Configurar as variáveis de ambiente
 
 Copie o template:
 
@@ -104,7 +147,7 @@ Onde encontrar as chaves do Supabase:
 
 ---
 
-## Passo 5 — Definir o owner da plataforma
+## Passo 6 — Definir o owner da plataforma
 
 Com o schema atual, o **primeiro usuário cadastrado** vira `owner` automaticamente.
 Ainda assim, mantenha o SQL abaixo como fallback operacional:
@@ -188,7 +231,7 @@ WHERE id = (
 
 ---
 
-## Passo 6 — Configurar chaves de IA no painel admin
+## Passo 7 — Configurar chaves de IA no painel admin
 
 1. Faça login no app com a conta owner
 2. Acesse `/admin/settings`
@@ -205,7 +248,7 @@ WHERE id = (
 
 ---
 
-## Passo 7 — Rodar em desenvolvimento
+## Passo 8 — Rodar em desenvolvimento
 
 ```bash
 npm run dev
@@ -246,7 +289,7 @@ Para isso, a instância precisa ter a tabela `carousel_metrics_snapshots`, criad
 
 ---
 
-## Passo 8 — Configurar publicação agendada (opcional)
+## Passo 9 — Configurar publicação agendada (opcional)
 
 Necessário para o recurso de agendamento de posts funcionar em produção.
 
@@ -312,7 +355,7 @@ Substitua `<APP_DOMAIN>` pelo domínio do app.
 
 ---
 
-## Passo 9 — Deploy em produção (Vercel)
+## Passo 10 — Deploy em produção (Vercel)
 
 1. Faça push do código para o GitHub
 2. No [vercel.com](https://vercel.com), importe o repositório
@@ -323,7 +366,7 @@ Substitua `<APP_DOMAIN>` pelo domínio do app.
 
 ---
 
-## Passo 9.1 — Configurar publicação no Instagram (Meta Graph API)
+## Passo 10.1 — Configurar publicação no Instagram (Meta Graph API)
 
 Para publicar carrosséis no Instagram, a conta precisa ser **Business** ou **Creator** e estar conectada a uma **Página do Facebook**.
 
@@ -394,7 +437,7 @@ Em `/expert/dna`, preencha:
 
 ---
 
-## Passo 9.2 — Configurar geração de imagens (Google Gemini + Imagen 3)
+## Passo 10.2 — Configurar geração de imagens (Google Gemini + Imagen 3)
 
 ### Criar projeto no Google Cloud
 
@@ -435,80 +478,66 @@ Em `/admin/settings` (como owner), insira a **Google Key** no campo corresponden
 
 ## Checklist de Instalação
 
-### Obrigatório para funcionar
+### Base — obrigatório para o app funcionar
 
-- [ ] Schema executado no Supabase (sem erros)
-- [ ] Se estiver atualizando uma instância existente, reaplicar `supabase-schema.sql`
+- [ ] Projeto Supabase criado e provisionado
+- [ ] Schema executado no Supabase (`supabase-schema.sql`) sem erros
+- [ ] Google OAuth configurado no Google Cloud Console (Client ID + Secret)
+- [ ] Provider Google habilitado no Supabase > Authentication > Providers
+- [ ] Site URL e Redirect URLs configurados no Supabase > Authentication > URL Configuration
 - [ ] `.env.local` preenchido com URL e keys do Supabase
-- [ ] `npm run dev` rodando sem erros
-- [ ] Login funcionando
+- [ ] `npm install` executado (baixa Playwright/Chromium automaticamente)
+- [ ] `npm run dev` rodando sem erros em `http://localhost:8080`
+- [ ] Login com Google funcionando
 - [ ] Owner definido via SQL (`UPDATE profiles SET role = 'owner'`)
 - [ ] Chaves de IA configuradas em `/admin/settings`
 - [ ] Validar visão owner em `/admin` e `/admin/carousels`
-- [ ] Validar `/dashboard` com repost, abrir post e exclusão em lote
 
-### Para geração de conteúdo
+### Para geração de conteúdo (Claude)
 
-- [ ] Chave Anthropic configurada no admin
+- [ ] Chave Anthropic configurada no admin (via `/admin/settings`)
 - [ ] Expert DNA configurado: `display_name`, `handle`, `niche`, `bio_short`, `product_name`, `product_cta`
 - [ ] Slides fixos preenchidos: `author_slide_template` (slide 5) e `cta_final_template` (slide 10)
 - [ ] Expert ativo selecionado no header (quando houver múltiplos experts)
 - [ ] Ver guia completo em `docs/EXPERT-DNA-GUIDE.md`
 
-### Para geração de imagens
+### Para geração de imagens (Google Gemini)
 
 - [ ] Projeto Google Cloud criado com billing ativo
 - [ ] Vertex AI API habilitada no projeto
 - [ ] Chave de API Google obtida em APIs e Serviços > Credenciais
-- [ ] Chave Google configurada em `/admin/settings`
-- [ ] O expert já foi salvo em `/expert/dna` antes de usar `/expert/photos`
-- [ ] Em `/expert/photos`, usar o modal `Novo` para escolher qual expert criado no DNA terá as fotos vinculadas
-- [ ] Ver guia completo em `docs/INSTALLATION.md` — Passo 9.2
+- [ ] Chave Google configurada em `/admin/settings` e testada
+- [ ] Expert salvo em `/expert/dna` antes de usar `/expert/photos`
+- [ ] Fotos de referência carregadas em `/expert/photos`
+- [ ] Ver `docs/INSTALLATION.md` — Passo 10.2 para configuração detalhada
 
 ### Para publicação no Instagram
 
 - [ ] App Meta criado em developers.facebook.com
 - [ ] Permissões `instagram_basic` e `instagram_content_publish` configuradas
-- [ ] Access Token obtido (longa duração ou token de sistema)
+- [ ] Access Token obtido (longa duração ou token de sistema — ver Passo 10.1)
 - [ ] `Instagram Account ID` obtido via Graph API Explorer
-- [ ] `Instagram Account ID` configurado em `/expert/dna`
-- [ ] `Meta Access Token` configurado em `/expert/dna` (ou fallback no `.env.local`)
-- [ ] Ver guia completo em `docs/INSTALLATION.md` — Passo 9.1
-- [ ] Validar também `Repostar`, `Abrir post` e ocultação no sistema em `/dashboard`
+- [ ] `Instagram Account ID` e `Meta Access Token` configurados em `/expert/dna`
+- [ ] Validar `Repostar`, `Abrir post` e ocultação no `/dashboard`
 - [ ] Validar `Atualizar agora` nas métricas em `/dashboard/[id]`
 
-### Para agendamento
+### Para publicação agendada (pg_cron + Edge Function)
 
-- [ ] Edge Function `publish-scheduled` deployada
-- [ ] Secrets `CRON_SECRET` e `SERVICE_ROLE_KEY` na function
-- [ ] `pg_net` e `pg_cron` habilitados
-- [ ] Cron job criado e verificado
+- [ ] Edge Function `publish-scheduled` criada e deployada no Supabase
+- [ ] Secrets `CRON_SECRET` e `SERVICE_ROLE_KEY` configurados na Edge Function
+- [ ] Extensões `pg_net` e `pg_cron` habilitadas
+- [ ] Cron job criado via `cron.schedule(...)` e verificado
+- [ ] Teste manual da function retornando `{ "processed": 0 }` (sem erros)
 
 ---
 
 ## Troubleshooting
 
-### Preciso rodar algo novo no Supabase após essas correções?
-
-Não, desde que a instância já tenha sido provisionada conforme este guia.
-
-Estas mudanças foram apenas em aplicação:
-
-- correção de fluxo duplicado do template `X vs Y`
-- persistência correta das imagens do carrossel
-- endpoint operacional `/api/carousels/actions`
-- ações de repost/ocultação no sistema/link direto no `/dashboard`
-- snapshots de métricas via `carousel_metrics_snapshots`
-
-Só será necessário mexer no Supabase novamente se a nova instância ainda não tiver:
-
-- schema `supabase-schema.sql` aplicado
-- bucket `carousel-images`
-- bucket `expert-photos`
-- credenciais Meta válidas por expert ou via `.env.local`
-
-### Login não funciona
+### Login não funciona com Google
 - Verifique `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` no `.env.local`
+- Confirme que o provider Google está habilitado em Supabase > Authentication > Providers
+- Confirme que o Client ID e Client Secret do Google Cloud estão corretos
+- Confirme que o URI de redirecionamento `https://<PROJECT_REF>.supabase.co/auth/v1/callback` está na lista de URIs autorizados no Google Cloud Console
 - Confirme que o schema foi executado (tabela `profiles` existe)
 
 ### "Perfil de expert não encontrado"
@@ -549,18 +578,22 @@ Só será necessário mexer no Supabase novamente se a nova instância ainda nã
 ## Estrutura de Arquivos Relevantes
 
 ```
-supabase-schema.sql                 ← Schema completo (fonte única da verdade)
-middleware.ts                       ← Auth middleware (proteção de rotas, redirects)
-.env.example                        ← Template de variáveis de ambiente
+NOVA-INSTANCIA.md                   ← Checklist rápido para nova instância (começo aqui)
+supabase-schema.sql                 ← Schema completo (fonte única da verdade do banco)
+middleware.ts                       ← Auth middleware (proteção de rotas + role-based access)
+.env.example                        ← Template comentado de todas as variáveis de ambiente
 docs/
-  INSTALLATION.md                   ← Este arquivo
+  INSTALLATION.md                   ← Este arquivo (guia detalhado completo)
   EXPERT-DNA-GUIDE.md               ← Como configurar o expert DNA (campos, exemplos, fotos)
-  MULTI-TENANT-ARCHITECTURE.md      ← Arquitetura multi-tenant detalhada
+  MULTI-TENANT-ARCHITECTURE.md      ← Arquitetura multi-tenant detalhada (roles, workspaces, RLS)
   ADMIN-PANEL.md                    ← Especificação do painel admin
-  SYSTEM-LOGS.md                    ← Sistema de logs
-  CONTENT-HUB-ARCHITECTURE.md       ← Arquitetura do Content Hub
-  SUPABASE_SETUP.md                 ← Setup Supabase via CLI
-  SUPABASE_SETUP_DASHBOARD_ONLY.md  ← Setup Supabase sem terminal
-ROADMAP.md                          ← Fases de implementação
-README.md                           ← Visão geral do produto
+  COST-INTELLIGENCE.md              ← Custos, créditos e telemetria de uso
+  SYSTEM-LOGS.md                    ← Sistema de logs: eventos, queries, retenção
+  CONTENT-HUB-ARCHITECTURE.md       ← Content Hub: plataformas, formatos, template engine
+  SUPABASE_SETUP_DASHBOARD_ONLY.md  ← Setup Supabase sem terminal (alternativa)
+ROADMAP.md                          ← Fases de implementação (passadas e futuras)
+README.md                           ← Visão geral do produto e links
+supabase/
+  functions/
+    publish-scheduled/index.ts      ← Edge Function para agendamento de posts
 ```
